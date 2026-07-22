@@ -1,5 +1,41 @@
 # Superdev Release Notes
 
+## v6.2.0 (2026-07-22)
+
+First divergence from the upstream superpowers 6.1.1 fork.
+
+### Rich Design Artifacts (brainstorming)
+
+- **Two-pass design docs against a real template.** `design-doc-template.md` is new and
+  normative: numbered design-independent requirements (R#), decisions (D#) with
+  alternatives/reasoning/revisit-when hooks, assumptions (A#), a not-doing ledger, a
+  drift protocol, and the narrative rule — every design area opens with a sentence
+  naming its role in the §3 through-line and cites the R#/D# it serves. Pass 1 writes
+  the shape; pass 2 the enrichment (the part that makes the doc consultable when
+  implementation drifts).
+- **Decision log as a first-class artifact.** `decision-log-template.md`: an append-only
+  `<topic>-decisions.md` companion file created BEFORE the first brainstorm question and
+  written at the moment each fork resolves — through brainstorm, spec, plan, and build.
+  writing-plans (plan-header link + planning forks), executing-plans (build forks), and
+  subagent-driven-development (orchestrator owns the log; implementers must report any
+  deviation, even under DONE) all append to it.
+- **Spec reviewer actually dispatched.** The reviewer prompt existed upstream but nothing
+  invoked it; it is now a required checklist step, reads spec + decision log, and blocks
+  on narrative islands, broken R#/D# traces, and reasoning-free decisions.
+
+### New Skills
+
+- **self-brainstorming** — questioner↔responder Workflow loop for brainstorming without a
+  human respondent: evidence-tiered answers (EVIDENCE/REASONED/ASSUMPTION), script-enforced
+  provisional-on-assumption locking, saturation contract, same two artifacts, hard human
+  ratification gate.
+- **self-improvement** — diagnoses a failed skill run by mapping the information flow
+  (upstream callers, subagent enter/return contracts, downstream consumers), classifies
+  the bottleneck (prompt / orchestrator / parent-skill / return-contract / context-doc /
+  missing subagent), plans the smallest fix at that boundary, and applies it only behind
+  an operator approval gate — then version-bumps, updates the installed snapshot, and
+  verifies the change is live.
+
 ## v6.1.1 (2026-07-02)
 
 ### Codex
