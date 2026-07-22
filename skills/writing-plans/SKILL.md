@@ -66,6 +66,9 @@ independently testable deliverable.
 
 **Tech Stack:** [Key technologies/libraries]
 
+**Spec:** [path to the design doc] · **Decision log:** [path to the spec's companion
+decisions file — every planning and build fork appends there]
+
 ## Global Constraints
 
 [The spec's project-wide requirements — version floors, dependency limits,
@@ -152,6 +155,18 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+
+## Decision Logging (planning forks)
+
+Planning surfaces forks the spec didn't settle — a library choice, a sequencing
+trade-off, an interface detail the design left open. Do not resolve these silently
+inside a task description: append each one to the work stream's decision log (the
+spec's companion `-decisions.md` file, next D#, `phase: plan`, per
+`skills/brainstorming/decision-log-template.md`) with options, reasoning, and a
+revisit-when hook. If a fork contradicts a spec D#, that is the spec's §9 drift
+protocol — check the D#'s revisit-when trigger and amend the spec's decision status,
+don't quietly plan around it. A plan whose choices are all traceable to the spec or
+the log is re-plannable months later; one with silent choices is not.
 
 ## Execution Handoff
 

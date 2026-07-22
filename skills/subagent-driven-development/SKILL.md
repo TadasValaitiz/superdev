@@ -147,6 +147,19 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
+## Decision Logging (build forks)
+
+You, the orchestrator, own the work stream's decision log during implementation (the
+plan header names it — the spec's companion `-decisions.md` file). Whenever a task
+resolves a fork the plan didn't settle, or deviates from the plan/spec — an implementer
+reports DONE_WITH_CONCERNS with an approach swap, a BLOCKED resolution changes an
+interface, a reviewer finding forces a design change — append a D# entry (`phase:
+build`, per `skills/brainstorming/decision-log-template.md`) in the same bookkeeping
+message as your ledger update: trigger, options, why, revisit-when. If a spec D# is
+affected, run the spec's §9 drift protocol (supersede its status — never silently
+diverge from the spec). Implementer subagents don't write the log; they report
+deviations in their status and you distill them — one log, one author, no interleaving.
+
 ## Handling Reviewer ⚠️ Items
 
 The task reviewer may report "⚠️ Cannot verify from diff" items — requirements

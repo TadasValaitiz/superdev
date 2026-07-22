@@ -22,38 +22,44 @@ Every project goes through this process. A todo list, a single-function utility,
 You MUST create a task for each of these items and complete them in order:
 
 1. **Explore project context** — check files, docs, recent commits
-2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
+3. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
+4. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+5. **Propose 2-3 approaches** — with trade-offs and your recommendation
+6. **Present design** — in sections scaled to their complexity, get user approval after each section
+7. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below)
+8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+9. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log and checks narrative continuity and traceability; fix blocking issues, re-dispatch once
+10. **User reviews written spec** — ask user to review the spec file before proceeding
+11. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
 ```dot
 digraph brainstorming {
     "Explore project context" [shape=box];
-    "Ask clarifying questions" [shape=box];
+    "Start decision log" [shape=box];
+    "Ask clarifying questions\n(log each resolved fork)" [shape=box];
     "Propose 2-3 approaches" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
+    "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
+    "Dispatch spec reviewer\n(narrative + traceability)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
-    "Explore project context" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
+    "Explore project context" -> "Start decision log";
+    "Start decision log" -> "Ask clarifying questions\n(log each resolved fork)";
+    "Ask clarifying questions\n(log each resolved fork)" -> "Propose 2-3 approaches";
     "Propose 2-3 approaches" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
+    "User approves design?" -> "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [label="yes"];
+    "Write design doc\n(pass 1: shape,\npass 2: enrichment)" -> "Spec self-review\n(fix inline)";
+    "Spec self-review\n(fix inline)" -> "Dispatch spec reviewer\n(narrative + traceability)";
+    "Dispatch spec reviewer\n(narrative + traceability)" -> "User reviews spec?";
+    "User reviews spec?" -> "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [label="changes requested"];
     "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
 }
 ```
@@ -99,14 +105,39 @@ digraph brainstorming {
 - Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
+## Decision Logging
+
+The decision log (`docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md`, from
+`skills/brainstorming/decision-log-template.md`) is created BEFORE the first clarifying
+question and appended to for the life of the work stream — brainstorm, spec, plan, and
+build all write to the same file.
+
+- **Capture at the moment of decision.** When a dialogue fork resolves (the user picks an
+  approach, rejects an option, states a constraint that closes a door), append the D#
+  entry THEN — trigger, options with gains/sacrifices, why, revisit-when. Do not batch
+  and reconstruct at the end; reconstructed reasoning is thinner than live reasoning.
+- **Rejected paths are entries too.** "We considered X and declined because Y" is
+  precisely what someone needs months later when X gets re-proposed.
+- The spec's §5 Decisions section is the distilled subset of this log — same D-numbers,
+  shorter entries, with the log holding the full trail.
+
 ## After the Design
 
-**Documentation:**
+**Two-Pass Authoring** (per `skills/brainstorming/design-doc-template.md`):
 
-- Write the validated design (spec) to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md`
+- Write the design doc to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
+- **Pass 1 — the shape:** problem & intent (§1), approach narrative (§3), design areas
+  (§4), testing (§8). This is the draft you validated section-by-section with the user.
+- **Pass 2 — the enrichment:** re-read the dialogue and the decision log, then add
+  everything that governs the design without being the design: requirements extracted
+  into §2 (numbered, sourced, with acceptance signals), decisions distilled into §5
+  (with reasoning and revisit-when hooks), assumptions into §6, declined scope into §7 —
+  and write the narrative link-sentence that opens every §4 area, citing the R#/D# each
+  area serves. Pass 2 is NOT optional polish: it is what makes the doc consultable when
+  implementation details drift during the build (§9 drift protocol).
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- Commit the design document and the decision log to git
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
@@ -115,8 +146,13 @@ After writing the spec document, look at it with fresh eyes:
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
+5. **Trace check:** Does every §4 area cite R#/D#? Does every must-R# have a serving area?
 
-Fix any issues inline. No need to re-review — just fix and move on.
+Fix any issues inline, then dispatch the spec reviewer subagent
+(`skills/brainstorming/spec-document-reviewer-prompt.md`) — it reads the spec AND the
+decision log, and is specifically charged with catching narrative gaps (scattered,
+unconnected areas) and broken traceability that you, as the author, are least able to
+see. Fix blocking issues, re-dispatch once to confirm.
 
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:

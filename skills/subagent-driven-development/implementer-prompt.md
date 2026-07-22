@@ -136,4 +136,10 @@ Subagent (general-purpose):
     Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
     Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
     information that wasn't provided. Never silently produce work you're unsure about.
+
+    If you deviated from the task's stated approach in ANY way (different interface,
+    substituted dependency, dropped or added a step), name the deviation and why in
+    your report — even under DONE. The controller records it in the work stream's
+    decision log; an unreported deviation is invisible there and will read as
+    unexplained drift later.
 ```
