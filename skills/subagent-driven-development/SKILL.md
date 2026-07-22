@@ -36,6 +36,11 @@ digraph when_to_use {
 }
 ```
 
+**This skill is the DEFAULT execution route** — writing-plans hands off here without
+asking. executing-plans covers exactly two cases: the plan header says
+`Execution: inline` (trivial plan: 1-2 tasks, no substantive design), or the operator
+explicitly takes the plan to a separate/parallel session.
+
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
 - Fresh subagent per task (no context pollution)

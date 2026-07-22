@@ -1,5 +1,28 @@
 # Superdev Release Notes
 
+## v6.3.0 (2026-07-22)
+
+### Plans Get the Narrative Treatment; SDD Becomes the Default
+
+- **Subagent-driven development is now the default execution route.** writing-plans no
+  longer asks "Which approach?" — it announces and proceeds to SDD. The inline
+  exception (executing-plans) applies only when the plan is 1-2 tasks with no
+  interface handoffs AND has no substantive design doc behind it; the call is made at
+  plan time and recorded in a new `Execution:` header field, which the plan header's
+  agentic-workers line and executing-plans' own redirect note both honor. Separate-
+  session execution remains operator-initiated only.
+- **Plans carry a Through-Line.** New required section after Global Constraints: the
+  build story in prose — why this order, which tasks are load-bearing, which are
+  flexible — plus explicit drift direction (Through-Line → spec D# revisit-when →
+  decision log → update downstream Consumes/Produces) so a mid-build deviation has a
+  consult path instead of local improvisation.
+- **Every task opens with a Role-in-the-build line** tracing to spec R#/D#. Because
+  SDD's brief files carry the full task text, the role line crosses the subagent
+  boundary automatically; the implementer prompt's Context slot now instructs pasting
+  the Through-Line as the rest of the big picture.
+- **Plan self-review and the plan reviewer** gain narrative/trace/drift categories —
+  a task list wearing prose is now a finding.
+
 ## v6.2.1 (2026-07-22)
 
 - self-improvement: document that `claude plugin update` needs the full

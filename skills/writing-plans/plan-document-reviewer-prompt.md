@@ -23,12 +23,17 @@ Subagent (general-purpose):
     | Spec Alignment | Plan covers spec requirements, no major scope creep |
     | Task Decomposition | Tasks have clear boundaries, steps are actionable |
     | Buildability | Could an engineer follow this plan without getting stuck? |
+    | Through-Line | The plan has a real build narrative: ordering justified, load-bearing tasks named, drift direction stated. A task list wearing prose — or a missing Through-Line — is a finding. |
+    | Role & Trace | Every task opens with a Role-in-the-build line tracing to spec R#/D#. A task whose Role line can't be written honestly is scope creep or wrong decomposition. |
+    | Drift Direction | If an implementer hits a wall mid-task, does the plan tell them where to look (Through-Line → spec D# revisit-when → decision log) and what must be updated downstream (Consumes/Produces)? |
 
     ## Calibration
 
     **Only flag issues that would cause real problems during implementation.**
-    An implementer building the wrong thing or getting stuck is an issue.
-    Minor wording, stylistic preferences, and "nice to have" suggestions are not.
+    An implementer building the wrong thing or getting stuck is an issue — and so
+    is one who, when reality diverges, has no plan-level guidance and improvises
+    locally. Minor wording, stylistic preferences, and "nice to have" suggestions
+    are not issues.
 
     Approve unless there are serious gaps — missing requirements from the spec,
     contradictory steps, placeholder content, or tasks so vague they can't be acted on.

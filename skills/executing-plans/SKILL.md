@@ -11,7 +11,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Superdev works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (Claude Code, Codex CLI, Codex App, and Copilot CLI all qualify; see the per-platform tool refs in `../using-superdev/references/`). If subagents are available, use superdev:subagent-driven-development instead of this skill.
+**Note:** Tell your human partner that Superdev works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (Claude Code, Codex CLI, Codex App, and Copilot CLI all qualify; see the per-platform tool refs in `../using-superdev/references/`). If subagents are available, use superdev:subagent-driven-development instead of this skill — it is the default execution route. When subagents ARE available, this skill has exactly two legitimate uses: the plan header says `Execution: inline` (trivial plan per writing-plans' inline exception), or the operator deliberately chose separate-session execution.
 
 ## The Process
 

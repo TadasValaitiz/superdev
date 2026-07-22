@@ -58,13 +58,17 @@ independently testable deliverable.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superdev:subagent-driven-development (recommended) or superdev:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superdev:subagent-driven-development — the DEFAULT execution route — to implement this plan task-by-task. Use superdev:executing-plans only if the Execution field below says `inline`, or you are deliberately executing in a separate session. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
 **Architecture:** [2-3 sentences about approach]
 
 **Tech Stack:** [Key technologies/libraries]
+
+**Execution:** subagent-driven | inline — decided at plan time per the Execution
+Handoff rule (inline ONLY when the plan is 1-2 tasks with no interface handoffs AND
+no substantive design doc behind it)
 
 **Spec:** [path to the design doc] · **Decision log:** [path to the spec's companion
 decisions file — every planning and build fork appends there]
@@ -76,6 +80,23 @@ naming and copy rules, platform requirements — one line each, with exact
 values copied verbatim from the spec. Every task's requirements implicitly
 include this section.]
 
+## The Through-Line
+
+[The build story, in prose — not bullets, not a restated task list: how the
+tasks compose into the goal, why the order is what it is, which tasks are
+LOAD-BEARING (their Produces interfaces anchor everything downstream) and
+which are flexible in implementation detail. A reader should understand the
+whole build from this section before opening any task. If you cannot write
+this section, the decomposition is wrong — fix the tasks, not the prose.]
+
+**When reality diverges from a task** (an interface won't hold, a dependency
+misbehaves, a step is impossible as written): don't patch locally and press on.
+Re-read this section to see what the deviation threatens, check the governing
+D#'s revisit-when hook in the spec, append the fork to the decision log
+(phase: build), and update the DOWNSTREAM tasks' Consumes/Produces blocks
+before continuing. A deviation whose through-line still holds is a re-plan;
+one that breaks it goes back to the human.
+
 ---
 ```
 
@@ -83,6 +104,12 @@ include this section.]
 
 ````markdown
 ### Task N: [Component Name]
+
+**Role in the build:** [One sentence: what this task contributes to the
+Through-Line and which spec R#/D# it implements. This line travels into the
+implementer subagent's brief with the task text — it is the only big picture
+that subagent gets, so make it carry weight. If a task has no honest Role
+line, it doesn't belong in the plan.]
 
 **Files:**
 - Create: `exact/path/to/file.py`
@@ -154,6 +181,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
+**4. Narrative & trace:** Does the Through-Line explain the task ordering and name the load-bearing tasks — or is it a bare task list wearing prose? Does every task's Role line trace to a spec R#/D#? Would an implementer hitting a wall mid-task know where to look (Through-Line → spec D# revisit-when → decision log)?
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Decision Logging (planning forks)
@@ -170,20 +199,24 @@ the log is re-plannable months later; one with silent choices is not.
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+**Subagent-driven development is the DEFAULT — do not ask which approach.** After
+saving the plan, announce and proceed:
 
-**"Plan complete and saved to `docs/superdev/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/superdev/plans/<filename>.md`. Proceeding with subagent-driven development."**
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
 - **REQUIRED SUB-SKILL:** Use superdev:subagent-driven-development
 - Fresh subagent per task + two-stage review
 
-**If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use superdev:executing-plans
-- Batch execution with checkpoints for review
+**The inline exception** — use executing-plans instead ONLY when BOTH hold, judged at
+plan time and recorded in the plan header's `Execution:` field:
+
+1. The plan is super small: 1-2 tasks with no interface handoffs between them
+2. There is no substance in the design document behind it (no design doc at all, or a
+   few-sentence one with no numbered decisions)
+
+Then: **REQUIRED SUB-SKILL:** Use superdev:executing-plans (inline, batch execution).
+
+The operator overrides either direction with a word — an explicit request beats the
+rule. A separate/parallel-session execution (the operator takes the plan to another
+session) also uses executing-plans; that is session topology, not plan size, and it is
+always the operator's call, never offered proactively.

@@ -17,7 +17,11 @@ Subagent (general-purpose):
 
     ## Context
 
-    [Scene-setting: where this fits, dependencies, architectural context]
+    [Scene-setting: paste the plan's Through-Line section (or its load-bearing
+    gist) here, plus any task-specific dependencies. The subagent sees nothing
+    of the plan except its brief and this block — the task's Role-in-the-build
+    line arrives inside the brief's task text; this block supplies the rest of
+    the big picture.]
 
     ## Before You Begin
 
