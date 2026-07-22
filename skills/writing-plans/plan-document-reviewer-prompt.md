@@ -26,6 +26,8 @@ Subagent (general-purpose):
     | Through-Line | The plan has a real build narrative: ordering justified, load-bearing tasks named, drift direction stated. A task list wearing prose — or a missing Through-Line — is a finding. |
     | Role & Trace | Every task opens with a Role-in-the-build line tracing to spec R#/D#. A task whose Role line can't be written honestly is scope creep or wrong decomposition. |
     | Drift Direction | If an implementer hits a wall mid-task, does the plan tell them where to look (Through-Line → spec D# revisit-when → decision log) and what must be updated downstream (Consumes/Produces)? |
+    | Goals & Acceptance | Every G# is a measurable OUTCOME with an exact verify command (an activity — "improve X", "refactor Y" — is a finding); every must-R# from the spec appears as a G#. |
+    | Context Flow | The Context pack lists every artifact that exists (spec, decision log, domain section, CLI surface); every task's Read-first points at specific anchors, not whole documents or nothing. |
 
     ## Calibration
 

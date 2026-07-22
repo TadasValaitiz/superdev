@@ -70,8 +70,11 @@ independently testable deliverable.
 Handoff rule (inline ONLY when the plan is 1-2 tasks with no interface handoffs AND
 no substantive design doc behind it)
 
-**Spec:** [path to the design doc] · **Decision log:** [path to the spec's companion
-decisions file — every planning and build fork appends there]
+**Context pack** — the artifacts downstream workers read; list every path that exists:
+- Spec: [design doc] · Decision log: [companion -decisions.md]
+- Domain model: [design doc §N, if the spec has one]
+- CLI surface: [companion -cli-surface.md, if commands change]
+- Prior art: [related specs/plans a worker might need]
 
 ## Global Constraints
 
@@ -102,6 +105,20 @@ D#'s revisit-when hook in the spec, append the fork to the decision log
 before continuing. A deviation whose through-line still holds is a re-plan;
 one that breaks it goes back to the human.
 
+## Goals & Acceptance
+
+[The measurable finish line — what reviewers cross-check as a CHECKLIST, so a
+long technical plan cannot lose its purpose in the task weeds. One row per
+goal, each traceable to a spec acceptance signal and verifiable by a command:]
+
+| # | Goal (measurable) | From | Verify with |
+|---|---|---|---|
+| G1 | [observable outcome, not activity — "st order place refuses stale prices with reason code PRICE_STALE", never "improve order safety"] | R# | `[exact command + expected output]` |
+
+[Every must-R# in the spec appears here. The task reviewer checks tasks against
+these; the FINAL whole-branch review walks this table row by row and reports
+each G# as met/unmet with the verify command's actual output.]
+
 ---
 ```
 
@@ -115,6 +132,11 @@ Through-Line and which spec R#/D# it implements. This line travels into the
 implementer subagent's brief with the task text — it is the only big picture
 that subagent gets, so make it carry weight. If a task has no honest Role
 line, it doesn't belong in the plan.]
+
+**Read first:** [The Context-pack sections THIS task's implementer must read
+before coding — specific anchors, not whole documents: "spec §4.2", "domain
+model N.3 delta ledger rows for OrderSpec", "CLI surface family 1 table".
+Subagents have Read — point them at the truth instead of paraphrasing it.]
 
 **Files:**
 - Create: `exact/path/to/file.py`
@@ -187,6 +209,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
 **4. Narrative & trace:** Does the Through-Line explain the task ordering and name the load-bearing tasks — or is it a bare task list wearing prose? Does every task's Role line trace to a spec R#/D#? Would an implementer hitting a wall mid-task know where to look (Through-Line → spec D# revisit-when → decision log)?
+
+**5. Goals & context flow:** Is every Goals & Acceptance row measurable with a verify command (an outcome, not an activity)? Does every must-R# appear as a G#? Does every task carry a Read-first line pointing at real Context-pack anchors — and does the Context pack list every artifact that exists (domain section, CLI surface)?
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 

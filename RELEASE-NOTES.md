@@ -1,5 +1,32 @@
 # Superdev Release Notes
 
+## v6.5.0 (2026-07-22)
+
+### Context Downstream, Domain & CLI Companions, Measurable Goals
+
+- **Orchestrator context now has a mandated channel downstream.** The implementer
+  prompt's Context slot becomes three required parts: big picture (Through-Line),
+  Read-first anchors (point subagents at artifact sections — they have Read), and the
+  ORCHESTRATOR KNOWLEDGE DUMP: brainstorm nuances, noticed discrepancies, rejected
+  approaches, settling naming — written even when it feels obvious, with an explicit
+  "nothing beyond the artifacts" when empty. Plans gain a header Context pack (all
+  artifact paths) and a per-task Read-first line.
+- **New companion templates (modeled on the operator's regime-domain/cli-surface
+  exemplars):** `domain-design-template.md` — required design-doc section when domain
+  objects change: classDiagram with role stereotypes, naming DISCREPANCY TABLE, the
+  add/remove/rename DELTA LEDGER (before → after, invariants added/removed), invariants
+  with enforcers, CLI↔domain mapping (Command models are domain objects).
+  `cli-surface-template.md` — required separate file when commands change: family
+  tables with exhaustive args → Pydantic Command models, READ/FILTER/RECORD gates,
+  NEW/KEEP/REWORK/RENAMED status, composition rationale (1 vs 2 vs 3 commands,
+  human-in-the-loop between, pipes), operator workflow SEQUENCES with error-recovery
+  paths, docs-to-update checklist, delta summary.
+- **Plans gain Goals & Acceptance:** measurable outcome rows (G#) traceable to spec
+  R#s, each with an exact verify command; the final whole-branch review walks the
+  table row by row and a branch with unmet G#s does not proceed to finishing. Plan
+  self-review and reviewer prompt check goals measurability and context flow.
+- self-brainstorming synthesis produces the conditional companions too.
+
 ## v6.4.1 (2026-07-22)
 
 - Fast-lane bias made explicit (operator directive): testing-lanes.md gains "The bias:

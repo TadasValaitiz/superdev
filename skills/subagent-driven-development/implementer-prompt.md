@@ -17,11 +17,21 @@ Subagent (general-purpose):
 
     ## Context
 
-    [Scene-setting: paste the plan's Through-Line section (or its load-bearing
-    gist) here, plus any task-specific dependencies. The subagent sees nothing
-    of the plan except its brief and this block — the task's Role-in-the-build
-    line arrives inside the brief's task text; this block supplies the rest of
-    the big picture.]
+    [Three parts — this block is the ONLY channel your knowledge crosses into
+    the subagent; it sees nothing of the plan or the brainstorm conversation:
+
+    1. THE BIG PICTURE: paste the plan's Through-Line section (or its
+       load-bearing gist), plus task-specific dependencies.
+    2. READ FIRST: the task's Read-first anchors from the plan, verbatim —
+       spec §s, domain-model delta rows, CLI surface family tables. The
+       subagent has Read; pointing at the truth beats paraphrasing it.
+    3. ORCHESTRATOR KNOWLEDGE DUMP: everything YOU know that bears on this
+       task and is written nowhere the subagent will look — nuances from the
+       brainstorm, discrepancies you noticed, approaches that were tried and
+       rejected (and why), naming decisions still settling, adjacent work in
+       flight. Write it even if it feels obvious; unshared context is the #1
+       cause of subagents building the wrong thing. If this part is empty,
+       say "nothing beyond the artifacts" explicitly — silence is ambiguous.]
 
     ## Before You Begin
 

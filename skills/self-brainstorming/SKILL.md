@@ -79,7 +79,10 @@ The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/
   `skills/brainstorming/design-doc-template.md`: numbered requirements (R#), narrative
   through-line with link-sentences, decisions (D#) with reasoning and revisit-when
   hooks, assumptions (A#), not-doing ledger, drift protocol. Header states
-  `Origin: self-brainstorm run <id>`.
+  `Origin: self-brainstorm run <id>`. The conditional companions apply here too:
+  domain-touching work gets the Domain model section (`domain-design-template.md`);
+  CLI-touching work gets the separate `…-cli-surface.md` (`cli-surface-template.md`) —
+  the synthesis stage writes them from the ledger like everything else.
 - **Decision log** — same directory, `-decisions.md` suffix, per
   `skills/brainstorming/decision-log-template.md`. Every lock becomes a D# entry
   stamped with the round that produced it; rejected options and reversed locks stay in

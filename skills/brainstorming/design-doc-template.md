@@ -59,6 +59,13 @@ This section is the connective tissue reviewers check the rest of the doc agains
 
 One subsection per area. Each area MUST open with its narrative link-sentence.
 
+> **Conditional sections:** if the work touches domain objects, one of these areas is
+> the **Domain model** section per `domain-design-template.md` (diagram, naming
+> discrepancy table, add/remove delta ledger, invariants with enforcers, CLI↔domain
+> mapping). If CLI commands are added/changed, the separate companion
+> `…-cli-surface.md` (per `cli-surface-template.md`) is required and linked in the
+> header.
+
 ### 4.x <Area>
 
 <Link-sentence: the role this area plays in the §3 story.>

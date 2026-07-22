@@ -285,7 +285,7 @@ a ledger file, not only in todos.
 
 - [implementer-prompt.md](implementer-prompt.md) - Dispatch implementer subagent
 - [task-reviewer-prompt.md](task-reviewer-prompt.md) - Dispatch task reviewer subagent (spec compliance + code quality)
-- Final whole-branch review: use superdev:requesting-code-review's [code-reviewer.md](../requesting-code-review/code-reviewer.md)
+- Final whole-branch review: use superdev:requesting-code-review's [code-reviewer.md](../requesting-code-review/code-reviewer.md) — and include the plan's **Goals & Acceptance table** in the reviewer's prompt with the instruction to walk it row by row, running each G#'s verify command and reporting met/unmet with actual output. A branch with unmet G#s does not proceed to finishing.
 
 ## Example Workflow
 
