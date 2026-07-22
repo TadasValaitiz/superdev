@@ -1,5 +1,12 @@
 # Superdev Release Notes
 
+## v6.4.1 (2026-07-22)
+
+- Fast-lane bias made explicit (operator directive): testing-lanes.md gains "The bias:
+  prefer the faster lane" (match the lane to the claim: change works = focused, commit
+  safe = fast, branch may merge = full); one-line reinforcements in TDD's Test Lanes
+  section and verification-before-completion's test-evidence pattern.
+
 ## v6.4.0 (2026-07-22)
 
 ### Testing Lanes: fast everywhere, full once

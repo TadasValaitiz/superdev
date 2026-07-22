@@ -80,6 +80,10 @@ Skip any step = lying, not verifying
 ✅ [Run test command] [See: 34/34 pass] "All tests pass"
 ❌ "Should pass now" / "Looks correct"
 ```
+The lane must match the claim (test-driven-development/testing-lanes.md): "this
+commit is safe" = fast suite evidence; "all tests pass / ready to merge" = full
+suite evidence — and prefer the faster lane whenever it covers the claim you're
+actually making.
 
 **Regression tests (TDD Red-Green):**
 ```

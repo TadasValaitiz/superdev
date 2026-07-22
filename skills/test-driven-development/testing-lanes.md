@@ -4,6 +4,15 @@ The canon for which tests run when. Every superdev skill that runs tests points 
 if another skill's wording ever disagrees with this file, this file wins and the
 disagreement is a bug (route it through superdev:self-improvement).
 
+## The bias: prefer the faster lane
+
+At any moment, run the CHEAPEST test that answers the question in front of you:
+the focused test while iterating, the fast suite at a commit, the full suite only
+when facing the finishing gate. A heavier lane than the moment demands adds latency,
+not safety — the gates exist precisely so you never need to buy reassurance by
+over-running. Match the lane to the claim you're about to make: "this change works"
+= focused; "this commit is safe" = fast; "this branch may merge" = full.
+
 ## The taxonomy — three names, one equation
 
 **fast + slow = full.**

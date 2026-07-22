@@ -360,8 +360,10 @@ The red-green loop runs FOCUSED tests. Suites run at gates, and the lane rules l
 [testing-lanes.md](testing-lanes.md): **fast suite** (everything not marked slow — the
 budgeted development lane) gates every commit; **full suite** (fast + slow = everything)
 runs at exactly one place, the finishing gate. Projects declare their two lane commands
-in a CLAUDE.md `Test lanes` block; plans carry them in Global Constraints. If you're
-about to run "all the tests" anywhere other than the finishing gate, read that file first.
+in a CLAUDE.md `Test lanes` block; plans carry them in Global Constraints. **Bias:
+prefer the faster lane** — run the cheapest test that answers the question in front of
+you; heavier lanes belong to their gates. If you're about to run "all the tests"
+anywhere other than the finishing gate, read that file first.
 
 ## Testing Anti-Patterns
 
