@@ -15,12 +15,15 @@ Guide completion of development work by presenting clear options and handling ch
 
 ## The Process
 
-### Step 1: Verify Tests
+### Step 1: Verify Tests — the FULL-SUITE gate
 
-**Before presenting options, verify tests pass:**
+**This is the ONLY full-suite gate in the development flow** (every commit gate runs
+the fast suite; see test-driven-development/testing-lanes.md). Before presenting
+options, run the project's FULL suite — fast + slow, everything:
 
 ```bash
-# Run project's test suite
+# The project's FULL suite — use the command declared in the project
+# CLAUDE.md "Test lanes" block (or the plan's Global Constraints), e.g.:
 npm test / cargo test / pytest / go test ./...
 ```
 

@@ -48,8 +48,11 @@ Subagent (general-purpose):
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It's always OK to pause and clarify. Don't guess or make assumptions.
 
-    While iterating, run the focused test for what you're changing; run the
-    full suite once before committing, not after every edit.
+    While iterating, run the focused test for what you're changing. Before EVERY
+    commit, run the project's FAST suite (the lane commands are in the plan's
+    Global Constraints; taxonomy: test-driven-development/testing-lanes.md) —
+    not after every edit, and never the full suite: the full suite runs only at
+    the finishing gate, after all tasks.
 
     ## Code Organization
 

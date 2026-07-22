@@ -1,5 +1,26 @@
 # Superdev Release Notes
 
+## v6.4.0 (2026-07-22)
+
+### Testing Lanes: fast everywhere, full once
+
+- **New canon: `test-driven-development/testing-lanes.md`.** Taxonomy fast/slow/full
+  (fast + slow = full), exclusion-by-default membership (unmarked = fast; slow = per-test
+  budget breach or categorically slow), a declared fast-suite BUDGET, the CLAUDE.md
+  `Test lanes` declaration block, the detect/absent fallbacks, and per-ecosystem marking
+  conventions.
+- **The gate map (operator-ratified 2026-07-22): the fast suite gates EVERY commit and
+  parallel-agent integration; the FULL suite runs at exactly one place — the finishing
+  gate.** Mid-plan checkpoints and slow-coverage escalation triggers were considered and
+  rejected (recorded in the canon's not-doing block with the reconsider trigger).
+- **Pointer sweep:** TDD SKILL.md (new Test Lanes section), SDD implementer prompt
+  (fast before every commit, never full), finishing-a-development-branch (Step 1 is THE
+  full-suite gate), dispatching-parallel-agents (integration = fast), writing-plans
+  (Global Constraints gains a REQUIRED Test lanes line so lane commands cross the
+  subagent boundary in every plan), executing-plans (fast before every commit), and the
+  design-doc template §8 (new tests declare their lane; the fast budget is a design
+  constraint).
+
 ## v6.3.0 (2026-07-22)
 
 ### Plans Get the Narrative Treatment; SDD Becomes the Default

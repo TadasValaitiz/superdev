@@ -80,6 +80,11 @@ naming and copy rules, platform requirements — one line each, with exact
 values copied verbatim from the spec. Every task's requirements implicitly
 include this section.]
 
+**Test lanes** (REQUIRED line — copied from the project CLAUDE.md `Test lanes`
+block, or detected per test-driven-development/testing-lanes.md):
+fast: `<command>` · full: `<command>`. Every commit gate runs FAST; the full
+suite runs ONLY at the finishing gate.
+
 ## The Through-Line
 
 [The build story, in prose — not bullets, not a restated task list: how the

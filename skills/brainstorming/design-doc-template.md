@@ -103,7 +103,10 @@ from "discovering" an idea that was already weighed and rejected.
 ## 8. Testing & validation
 
 How we'll know it works: test approach per area, and an acceptance mapping — every
-must-R# names the test/probe/measurement that will demonstrate it.
+must-R# names the test/probe/measurement that will demonstrate it. State which lane
+new tests land in (fast by default; slow only when categorically necessary — see
+test-driven-development/testing-lanes.md): the fast-suite budget is a design
+constraint on test design, not an afterthought.
 
 ## 9. Drift protocol
 
