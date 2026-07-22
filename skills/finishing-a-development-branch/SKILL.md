@@ -9,7 +9,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
+**Core principle:** Verify tests → Deviation audit → Detect environment → Present options → Execute choice → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -40,7 +40,27 @@ Stop. Don't proceed to Step 2.
 
 **If tests pass:** Continue to Step 2.
 
-### Step 2: Detect Environment
+### Step 2: Deviation Audit — surface the drift before the merge decision
+
+Dispatch the deviation-auditor subagent per
+[deviation-auditor-prompt.md](deviation-auditor-prompt.md). It cross-checks the
+original docs (spec, domain delta ledger, CLI surface), the code (branch diff), the
+decision log, the implementer reports/progress ledger, and any other Context-pack
+artifact — and returns a divergence table.
+
+- **BLOCKERS (unlogged deviations):** treat exactly like failing tests — stop. Log
+  the deviation (D#, phase: build, amend the governing spec sections) or revert it.
+  Re-run the audit once. Cannot proceed to options with an unlogged deviation.
+- **doc-stale rows:** amend the named doc sections on the branch NOW — the merge
+  carries the docs; merging stale docs manufactures the next false diagnosis.
+- **CLEAN or logged-clean:** proceed — and include the audit table in the Step 5
+  options message, so the human chooses with the drift in view, not just the green.
+
+No spec/plan exists (ad-hoc branch)? Skip, and say "no deviation audit — no
+spec/plan on this branch" in the options message. Never fabricate an audit.
+
+
+### Step 3: Detect Environment
 
 **Determine workspace state before presenting options:**
 
@@ -54,10 +74,10 @@ This determines which menu to show and how cleanup works:
 | State | Menu | Cleanup |
 |-------|------|---------|
 | `GIT_DIR == GIT_COMMON` (normal repo) | Standard 4 options | No worktree to clean up |
-| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 6) |
+| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 7) |
 | `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No cleanup (externally managed) |
 
-### Step 3: Determine Base Branch
+### Step 4: Determine Base Branch
 
 ```bash
 # Try common base branches
@@ -66,7 +86,7 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 
 Or ask: "This branch split from main - is that correct?"
 
-### Step 4: Present Options
+### Step 5: Present Options
 
 **Normal repo and named-branch worktree — present exactly these 4 options:**
 
@@ -95,7 +115,7 @@ Which option?
 
 **Don't add explanation** - keep options concise.
 
-### Step 5: Execute Choice
+### Step 6: Execute Choice
 
 #### Option 1: Merge Locally
 
@@ -112,10 +132,10 @@ git merge <feature-branch>
 # Verify tests on merged result
 <test command>
 
-# Only after merge succeeds: cleanup worktree (Step 6), then delete branch
+# Only after merge succeeds: cleanup worktree (Step 7), then delete branch
 ```
 
-Then: Cleanup worktree (Step 6), then delete branch:
+Then: Cleanup worktree (Step 7), then delete branch:
 
 ```bash
 git branch -d <feature-branch>
@@ -156,12 +176,12 @@ MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-tople
 cd "$MAIN_ROOT"
 ```
 
-Then: Cleanup worktree (Step 6), then force-delete branch:
+Then: Cleanup worktree (Step 7), then force-delete branch:
 ```bash
 git branch -D <feature-branch>
 ```
 
-### Step 6: Cleanup Workspace
+### Step 7: Cleanup Workspace
 
 **Only runs for Options 1 and 4.** Options 2 and 3 always preserve the worktree.
 
@@ -227,6 +247,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Never:**
 - Proceed with failing tests
+- Present merge options with an UNLOGGED deviation (audit blocker = failing test)
 - Merge without verifying tests on result
 - Delete work without confirmation
 - Force-push without explicit request
@@ -236,6 +257,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Always:**
 - Verify tests before offering options
+- Run the deviation audit after tests, before options — and show its table with the options
 - Detect environment before presenting menu
 - Present exactly 4 options (or 3 for detached HEAD)
 - Get typed confirmation for Option 4

@@ -18,6 +18,8 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
   planning forks the spec didn't settle (phase: plan), build-time deviations and
   drift-protocol outcomes (phase: build).
 - **Real timestamps** from the clock (`date -u +%Y-%m-%dT%H:%M:%SZ`), never estimated.
+- **Enforced at the merge gate:** the finishing skill's deviation audit cross-checks
+  code, reports, and docs against this log — an unlogged deviation blocks the merge.
 
 ---
 

@@ -164,6 +164,9 @@ message as your ledger update: trigger, options, why, revisit-when. If a spec D#
 affected, run the spec's §9 drift protocol (supersede its status — never silently
 diverge from the spec). Implementer subagents don't write the log; they report
 deviations in their status and you distill them — one log, one author, no interleaving.
+This is audited: the finishing gate's deviation-audit subagent cross-checks implementer
+reports against the decision log — a deviation you failed to distill surfaces there as
+a merge BLOCKER, so log at task completion, not "later".
 
 ## Handling Reviewer ⚠️ Items
 

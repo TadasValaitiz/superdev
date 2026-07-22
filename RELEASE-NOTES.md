@@ -1,5 +1,27 @@
 # Superdev Release Notes
 
+## v6.6.0 (2026-07-22)
+
+### Deviation Audit at the Merge Gate
+
+- **New subagent: the deviation auditor** (`finishing-a-development-branch/
+  deviation-auditor-prompt.md`), dispatched as the finishing gate's new Step 2 —
+  after the full suite passes, before merge options are presented. Fresh eyes
+  cross-check five sources: original docs vs code (spec areas, domain delta ledger,
+  CLI surface tables vs the branch diff), implementer reports vs the decision log
+  (every named deviation has a build-phase D#?), the log vs the spec (D# statuses
+  flipped, sections amended?), plan Consumes/Produces vs built interfaces, and any
+  other Context-pack artifact. Returns a divergence table classed logged-clean /
+  doc-stale / BLOCKER (unlogged) / doc-only.
+- **Blocker semantics = failing test:** unlogged deviations stop the gate — log the
+  D# and amend the spec, or revert the deviation; doc-stale rows are amended on the
+  branch BEFORE merge (merging stale docs manufactures the next false diagnosis);
+  clean/logged tables are presented WITH the merge options so the human decides with
+  the drift in view. Ad-hoc branches without spec/plan skip honestly.
+- SDD's decision-logging section and the decision-log template now name the audit as
+  the enforcement — closing the previously unaudited link between "implementer
+  reported a deviation" and "a D# actually landed in the log".
+
 ## v6.5.0 (2026-07-22)
 
 ### Context Downstream, Domain & CLI Companions, Measurable Goals
