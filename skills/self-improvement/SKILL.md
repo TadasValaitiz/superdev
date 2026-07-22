@@ -107,7 +107,9 @@ the installed snapshot under `~/.claude/plugins/cache/`, it is overwritten on up
    log; future diagnoses will grep it.
 4. Commit (conventional message; the diff should contain only approved files + version
    manifests + notes).
-5. **Reinstall the snapshot:** `claude plugin update <plugin>` — Claude Code installs
+5. **Reinstall the snapshot:** `claude plugin update <plugin>@<marketplace>` (the bare
+   plugin name may not resolve — MEASURED 2026-07-22: `update superdev` failed,
+   `update superdev@superdev-dev` succeeded) — Claude Code installs
    plugins as versioned snapshots in its cache; source edits are INVISIBLE until this
    runs and the version changed (verified 2026-07-22: an unbumped edit never reaches
    the cache). Confirm with `claude plugin list` / the install record that the new

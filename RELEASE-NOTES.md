@@ -1,5 +1,10 @@
 # Superdev Release Notes
 
+## v6.2.1 (2026-07-22)
+
+- self-improvement: document that `claude plugin update` needs the full
+  `<plugin>@<marketplace>` id (bare name failed on first live run).
+
 ## v6.2.0 (2026-07-22)
 
 First divergence from the upstream superpowers 6.1.1 fork.
