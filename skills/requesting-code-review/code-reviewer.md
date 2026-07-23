@@ -36,6 +36,14 @@ Subagent (general-purpose):
 
     ## What to Check
 
+    **Use-case cross-check (against the anchor):**
+    For each Use Case (UC#) and acceptance hint (AH#) the plan discharges (anchor
+    design doc §3/§9), confirm the branch actually contains a correct, complete code
+    path that realizes it — not "a function exists" but "the end-to-end journey is
+    built." A UC# with no realizing path, or one wired only partway, is the highest-
+    severity finding here: it is the needle a long branch hides. Report each discharged
+    UC#/AH# as realized / partial / missing, with file:line.
+
     **Plan alignment:**
     - Does the implementation match the plan / requirements?
     - Are deviations justified improvements, or problematic departures?
@@ -103,6 +111,10 @@ Subagent (general-purpose):
 
     ### Recommendations
     [Improvements for code quality, architecture, or process]
+
+    ### Use-Case Cross-Check
+    [Per discharged UC#/AH#: realized | partial | missing — with file:line. This table
+    is load-bearing: a "missing" or "partial" here blocks merge regardless of code quality.]
 
     ### Assessment
 

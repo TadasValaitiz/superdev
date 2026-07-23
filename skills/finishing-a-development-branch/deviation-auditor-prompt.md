@@ -2,8 +2,9 @@
 
 Dispatch this subagent at the finishing gate (Step 2), after the full suite passes and
 BEFORE presenting merge options. Fresh eyes, no attachment to the branch: its job is to
-surface every place reality and the documents disagree — so the human chooses merge
-having seen the drift, not just the green.
+surface every place reality and the documents disagree, AND to prove the anchor's
+acceptance bar with receipts — so the human chooses merge having seen the drift and the
+proof, not just the green.
 
 If the branch has no spec/plan (ad-hoc work), skip the audit and say so in the
 options message — never fake an audit over artifacts that don't exist.
@@ -13,21 +14,40 @@ Subagent (general-purpose):
   description: "Deviation audit: docs vs code vs logs vs reports"
   prompt: |
     You are a deviation auditor. The branch is about to be offered for merge. Your
-    job is to find every discrepancy between what the documents say and what was
-    actually built, and to verify every deviation that happened is LOGGED. You are
-    not reviewing code quality (already done) and not walking the Goals table
-    (the final reviewer did) — you audit AGREEMENT between artifacts and reality.
+    job has two halves: (A) find every discrepancy between what the documents say and
+    what was built, and verify every deviation is LOGGED; (B) prove the anchor's
+    acceptance bar with receipts. You are not reviewing code quality (already done) —
+    you audit AGREEMENT between artifacts and reality, and you DEMONSTRATE the done bar.
+
+    **Mode:** [autonomous | human-in-loop — from the plan header. Governs how unmet
+    hints route: autonomous → each becomes an owned backlog item; human-in-loop → they
+    become a pushback package to the operator.]
 
     **Inputs:**
-    - Spec: [SPEC_PATH] (+ domain model section if present)
+    - Anchor (design doc): [SPEC_PATH] — §3 Use cases (UC#), §9 Acceptance hints (AH#),
+      + domain model section if present
     - CLI surface doc: [CLI_SURFACE_PATH or "none"]
-    - Plan: [PLAN_PATH]
+    - Plan: [PLAN_PATH] (names which UC#/AH# it discharges)
     - Decision log: [DECISION_LOG_PATH]
     - Implementer reports & progress ledger: [REPORTS_DIR, e.g. .superdev/sdd/]
     - Branch diff: git diff [BASE]..HEAD (run it yourself; read the code where
       the diff alone is ambiguous)
 
-    ## Cross-checks (all five, in this order)
+    ## Part B — Acceptance cross-check (do this FIRST; it is the done bar)
+
+    For each UC#/AH# the plan discharges, produce ONE RECEIPT: run the capability on the
+    most realistic substrate available and capture it — a LIVE ARC transcript (the
+    end-to-end journey the use case describes, command + output + exit code), a test
+    name + output, or a file:line. Demonstrate, never assert from the task history.
+    State the honesty tier of every number (a fixture demo proves mechanism, not edge —
+    say so). A hint you cannot answer with a receipt is NAMED, never papered over, and
+    routed by Mode:
+    - **autonomous:** draft an owned backlog item (names the UC#/AH# it discharges, what
+      remains, why) — the controller files it; the branch may still close.
+    - **human-in-loop:** add it to the pushback package for the operator; do not present
+      merge as clean.
+
+    ## Part A — Cross-checks (all five, in this order)
 
     1. **Original docs vs code** — spec design areas, domain delta ledger rows
        (N.3), and CLI surface family tables vs the actual diff: anything built
@@ -53,7 +73,19 @@ Subagent (general-purpose):
 
     ## Output format
 
-    ## Deviation Audit
+    ## Acceptance Cross-Check (Part B)
+
+    **Done-bar status:** ALL-ANSWERED | UNMET (<n>)
+
+    | UC#/AH# | Receipt (live-arc transcript / test+output / file:line) | Tier | Answered? |
+    |---------|----------------------------------------------------------|------|-----------|
+    | UC1 / AH3 | `st order place …` → fill, exit 0 (transcript) | fixture | yes |
+    | AH5 | — could not demonstrate: <why> | — | NO → routed (see below) |
+
+    **Unmet hints (if any):** each with its Mode routing — [autonomous: backlog item
+    drafted, names UC#/AH#] or [human-in-loop: in pushback package].
+
+    ## Deviation Audit (Part A)
 
     **Status:** CLEAN | LOGGED-DEVIATIONS (<n>) | BLOCKERS (<n> unlogged)
 
@@ -68,10 +100,16 @@ Subagent (general-purpose):
 ```
 
 **Handling the result (the finishing skill's contract):**
+- **Unmet acceptance hint:** not a hard stop by itself — routed by Mode. Autonomous:
+  the controller files the drafted backlog item (owned, referencing the UC#/AH#) and
+  the branch may close with the gap recorded. Human-in-loop: the pushback package goes
+  to the operator BEFORE merge — a materially unmet done bar is the operator's call, not
+  the controller's. Either way the unmet hint is NAMED in the options message, never
+  silently merged as done.
 - **BLOCKER (unlogged deviation):** stop — same severity as a failing test. Either log
   it now (D#, phase: build, and amend the governing spec sections) or revert the
   deviation. Re-run the audit once after fixing.
 - **doc-stale:** amend the named doc sections on the branch before merging — the merge
   carries the docs with it; merging stale docs manufactures the next false diagnosis.
-- **logged-clean / CLEAN:** proceed — and present the audit table WITH the merge
-  options, so the human decides with the drift in view.
+- **logged-clean / CLEAN + all hints answered:** proceed — present BOTH tables WITH the
+  merge options, so the human decides with the drift and the receipts in view.

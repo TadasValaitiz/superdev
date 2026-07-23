@@ -40,13 +40,21 @@ Stop. Don't proceed to Step 2.
 
 **If tests pass:** Continue to Step 2.
 
-### Step 2: Deviation Audit — surface the drift before the merge decision
+### Step 2: Deviation & Acceptance Audit — prove the done bar before the merge decision
 
 Dispatch the deviation-auditor subagent per
-[deviation-auditor-prompt.md](deviation-auditor-prompt.md). It cross-checks the
-original docs (spec, domain delta ledger, CLI surface), the code (branch diff), the
-decision log, the implementer reports/progress ledger, and any other Context-pack
-artifact — and returns a divergence table.
+[deviation-auditor-prompt.md](deviation-auditor-prompt.md), passing the plan's **Mode**
+(autonomous | human-in-loop). It does two things: (B) proves each discharged anchor Use
+Case / acceptance hint (UC#/AH#) with a RECEIPT — a live-arc transcript on the real
+surface, a test+output, or a file:line — and names any it can't; (A) cross-checks the
+original docs (anchor, domain delta ledger, CLI surface), the code, the decision log,
+the reports, and any other Context-pack artifact. It returns an acceptance table + a
+divergence table.
+
+- **UNMET acceptance hint:** routed by Mode — autonomous files the drafted owned
+  backlog item (referencing the UC#/AH#) and the branch may close with the gap named;
+  human-in-loop surfaces the pushback package to the operator BEFORE options. Either
+  way the unmet hint is named in the options message, never silently merged as done.
 
 - **BLOCKERS (unlogged deviations):** treat exactly like failing tests — stop. Log
   the deviation (D#, phase: build, amend the governing spec sections) or revert it.

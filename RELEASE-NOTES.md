@@ -1,5 +1,37 @@
 # Superdev Release Notes
 
+## v6.9.0 (2026-07-23)
+
+### The Anchor + Use-Case Cross-Check (goal preservation through delivery)
+
+Borrowed from a production use-case-cross-check protocol; the other half of the
+capture/cross-check loop (we had capture; this adds the proof-at-the-gate).
+
+- **The design doc becomes the anchor** — one file holds idea, context, requirements,
+  USE CASES (new §3, UC# in the operator's own terms), reasoning, and ACCEPTANCE (§9,
+  moved in from the plan). §1/§2/§3 + §9 hints are the frozen anchor region.
+- **Acceptance = hints + receipts** (replaces the plan's Goals table). A hint is a
+  capability that must be demonstrable, in operator language, NOT a pinned command
+  (concrete criteria written before code over-specify and get renegotiated quietly, or
+  pass vacuously). The receipt — one re-runnable piece of evidence — is filled at the
+  gate when the real surface exists. Acceptance now lives in ONE place, not split
+  across spec and plan.
+- **Soften-but-own** (operator rule): the anchor bends but never silently. Autonomous
+  mode → an unmet requirement/hint becomes an owned backlog item (naming the UC#/AH#)
+  and the branch closes; human-in-loop mode → large deviation pushes back to the
+  operator before finishing. New plan `Mode:` field carries this to the gate.
+- **Orphaned plan reviewer wired in** — it existed but nothing dispatched it (same bug
+  the spec reviewer had). writing-plans now REQUIRES the plan-reviewer subagent after
+  self-review; it checks acceptance coverage (every discharged UC#/AH# has tasks that
+  produce a receipt).
+- **Reviews 5 & 6 upgraded into the use-case cross-check:** the final code reviewer
+  reports each discharged UC#/AH# realized/partial/missing at code level (missing =
+  merge blocker); the finishing-gate auditor proves each with a RECEIPT — a live-arc
+  transcript on the real surface — and routes any unmet hint by Mode. Design doc
+  renumbered (§3 use cases inserted, §8 testing → §9 acceptance, drift → §10);
+  spec/plan reviewers, decision-log template, self-brainstorming synthesis, and section
+  cross-refs all reconciled.
+
 ## v6.8.0 (2026-07-23)
 
 ### Parallel Execution Mode (multi-milestone plans)

@@ -35,7 +35,7 @@ For each task:
 interface won't hold, a dependency substitution, a scope cut, an approach swap — append
 the fork to the work stream's decision log (the plan header names it; next D#,
 `phase: build`, per `skills/brainstorming/decision-log-template.md`) BEFORE building the
-deviation, and run the spec's §9 drift protocol if a spec D# is affected (check its
+deviation, and run the spec's §10 drift protocol if a spec D# is affected (check its
 revisit-when trigger; supersede, never silently edit). Small forks get small entries —
 two lines is fine — but they get entries: the log is how "why is it built this way?"
 stays answerable after the build.

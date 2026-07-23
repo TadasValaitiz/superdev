@@ -168,7 +168,7 @@ reports DONE_WITH_CONCERNS with an approach swap, a BLOCKED resolution changes a
 interface, a reviewer finding forces a design change — append a D# entry (`phase:
 build`, per `skills/brainstorming/decision-log-template.md`) in the same bookkeeping
 message as your ledger update: trigger, options, why, revisit-when. If a spec D# is
-affected, run the spec's §9 drift protocol (supersede its status — never silently
+affected, run the spec's §10 drift protocol (supersede its status — never silently
 diverge from the spec). Implementer subagents don't write the log; they report
 deviations in their status and you distill them — one log, one author, no interleaving.
 This is audited: the finishing gate's deviation-audit subagent cross-checks implementer
@@ -295,7 +295,7 @@ a ledger file, not only in todos.
 
 - [implementer-prompt.md](implementer-prompt.md) - Dispatch implementer subagent
 - [task-reviewer-prompt.md](task-reviewer-prompt.md) - Dispatch task reviewer subagent (spec compliance + code quality)
-- Final whole-branch review: use superdev:requesting-code-review's [code-reviewer.md](../requesting-code-review/code-reviewer.md) — and include the plan's **Goals & Acceptance table** in the reviewer's prompt with the instruction to walk it row by row, running each G#'s verify command and reporting met/unmet with actual output. A branch with unmet G#s does not proceed to finishing.
+- Final whole-branch review: use superdev:requesting-code-review's [code-reviewer.md](../requesting-code-review/code-reviewer.md) — pass the anchor's discharged **Use Cases (UC#) and acceptance hints (AH#)** so the reviewer runs the use-case cross-check (each realized / partial / missing, file:line). A branch with a missing or partial UC# does not proceed to finishing. The live-arc demonstration + receipts happen at the finishing gate's deviation/acceptance audit, not here — this review confirms the code PATH exists and is correct; the gate proves it RUNS.
 
 ## Example Workflow
 

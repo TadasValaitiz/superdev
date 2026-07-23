@@ -11,7 +11,7 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
 - **Capture at the moment of decision** — during brainstorming that means the entry is
   written when the fork is resolved in dialogue, not reconstructed afterward. Memory of
   reasoning decays within hours; the log is written while the reasoning is alive.
-- **Shared numbering with the spec:** the spec's §5 Decisions are the distilled subset of
+- **Shared numbering with the spec:** the spec's §6 Decisions are the distilled subset of
   this log, same D-numbers. The log may hold more (dead ends, reversed calls, small forks
   that never graduate to the spec); the spec never holds a D# the log lacks.
 - **Every phase appends:** brainstorm and spec-writing forks (phase: brainstorm/spec),
@@ -27,7 +27,7 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
 # <Topic> — Decision log
 
 **Design doc:** ./YYYY-MM-DD-<topic>-design.md
-Append-only; newest at the bottom. D-numbering shared with the spec's §5.
+Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ---
 
@@ -44,6 +44,6 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §5.
   probes run, measurements cited with their honesty tier)>.
 - **Rests on:** <ASSUMPTION A# | evidence | stated requirement R#> — provisional status
   is mandatory when resting on an unratified assumption.
-- **Affects:** R#…, spec §4.x, <files/interfaces once known>.
+- **Affects:** R#…, spec §5.x, <files/interfaces once known>.
 - **Revisit-when:** <concrete reopening trigger>.
 ```

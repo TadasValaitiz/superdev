@@ -26,17 +26,19 @@ Subagent (general-purpose):
 
     | Category | What to look for |
     |----------|------------------|
-    | Narrative continuity | Does §3 tell one connected story from problem to composed system? Does every §4 area OPEN with a sentence naming its role in that story? Flag any area that reads as a standalone island — the "scattered areas" failure. Flag missing beats: a §3 story step no area implements. |
-    | Traceability | Every §4 area cites the R#/D# it serves; every must-R# is served by some area; every D# cited in §4 exists in §5. Orphans in either direction are blocking. |
+    | Narrative continuity | Does §4 tell one connected story from problem to composed system? Does every §5 area OPEN with a sentence naming its role in that story? Flag any area that reads as a standalone island — the "scattered areas" failure. Flag missing beats: a §4 story step no area implements. |
+    | Traceability | Every §5 area cites the R#/D# it serves; every must-R# is served by some area; every D# cited in §5 exists in §6. Orphans in either direction are blocking. |
+    | Use-case coverage | §3 use cases are in the operator's terms (a journey, not a function call); every UC# exercises named R# and maps to §5 area(s) that realize it; a UC# no area realizes is unbuilt scope. |
+    | Acceptance honesty | §9 hints are operator-language capabilities, NOT pinned commands (a hint reading like a frozen command is the over-specify trap — flag it); every must-R# and every UC# is covered by ≥1 hint; the receipt column is empty at brainstorm time (filled at the gate) — a pre-filled receipt is fine, a hint with no way to ever receipt it is a finding. |
     | Reasoning presence | Every D# has real alternatives (with gains AND sacrifices), a why that argues from evidence or requirements — not a naked conclusion — and a concrete revisit-when trigger. "Revisit-when: never" without argument is a finding. |
     | Requirements quality | §2 exists, is design-independent (would survive a redesign), includes non-functionals, and each row has an acceptance signal. |
-    | Assumption honesty | Every "Source: assumption" R#, and every provisional D#, maps to an A# in §6. Nothing implementation-critical rests on an unratified A#. |
-    | Log consistency | Spec §5 D-numbers all exist in the decision log with fuller trails; no contradiction between the two files. |
+    | Assumption honesty | Every "Source: assumption" R#, and every provisional D#, maps to an A# in §7. Nothing implementation-critical rests on an unratified A#. |
+    | Log consistency | Spec §6 D-numbers all exist in the decision log with fuller trails; no contradiction between the two files. |
     | Completeness | TODOs, placeholders, "TBD", empty template sections. |
     | Consistency | Internal contradictions, conflicting requirements. |
     | Clarity | Requirements ambiguous enough to build the wrong thing. |
-    | Scope | Focused enough for a single plan; §7 Not-doing present, so scope was actually decided rather than left open. |
-    | YAGNI | Unrequested features, over-engineering, areas serving no R#. |
+    | Scope | Focused enough for a single plan; §8 Not-doing present, so scope was actually decided rather than left open. |
+    | YAGNI | Unrequested features, over-engineering, areas serving no R#/UC#. |
 
     ## Calibration
 

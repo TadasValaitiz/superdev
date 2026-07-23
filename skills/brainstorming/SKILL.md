@@ -128,15 +128,18 @@ build all write to the same file.
 
 - Write the design doc to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
-- **Pass 1 — the shape:** problem & intent (§1), approach narrative (§3), design areas
-  (§4), testing (§8). This is the draft you validated section-by-section with the user.
+- **Pass 1 — the shape + the anchor:** problem & intent (§1), requirements (§2), use
+  cases (§3, in the operator's own terms — what they DO and SEE), approach narrative
+  (§4), design areas (§5), and acceptance hints (§9, operator-language "what must be
+  demonstrable" — NOT pinned commands; receipts are filled later at the gate). §1/§2/§3
+  and the §9 hints are the ANCHOR: frozen, bending only by the soften-but-own rule.
+  Acceptance lives HERE, not in the plan.
 - **Pass 2 — the enrichment:** re-read the dialogue and the decision log, then add
-  everything that governs the design without being the design: requirements extracted
-  into §2 (numbered, sourced, with acceptance signals), decisions distilled into §5
-  (with reasoning and revisit-when hooks), assumptions into §6, declined scope into §7 —
-  and write the narrative link-sentence that opens every §4 area, citing the R#/D# each
-  area serves. Pass 2 is NOT optional polish: it is what makes the doc consultable when
-  implementation details drift during the build (§9 drift protocol).
+  everything that governs the design without being the design: decisions distilled into
+  §6 (with reasoning and revisit-when hooks), assumptions into §7, declined scope into
+  §8 — and write the narrative link-sentence that opens every §5 area, citing the R#/D#
+  it serves and the UC# it realizes. Pass 2 is NOT optional polish: it is what makes the
+  doc consultable when implementation details drift during the build (§10 drift protocol).
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document and the decision log to git
 
@@ -147,7 +150,7 @@ After writing the spec document, look at it with fresh eyes:
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
-5. **Trace check:** Does every §4 area cite R#/D#? Does every must-R# have a serving area?
+5. **Trace check:** Does every §5 area cite R#/D# and the UC# it realizes? Does every must-R# and every UC# have a serving area and ≥1 §9 acceptance hint?
 
 Fix any issues inline, then dispatch the spec reviewer subagent
 (`skills/brainstorming/spec-document-reviewer-prompt.md`) — it reads the spec AND the

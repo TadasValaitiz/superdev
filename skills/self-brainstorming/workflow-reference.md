@@ -127,9 +127,11 @@ const paths = await agent(
    Inputs: brief=${args.brief}; grounding=${JSON.stringify(ground)};
    ledger=${JSON.stringify(ledger)}; assumptions=${JSON.stringify(assumptions)};
    stamp entries ${args.nowISO}, phase: brainstorm, decided-by: self-brainstorm round N.
-   Write the design doc in TWO PASSES: pass 1 the shape (§1,3,4,8); pass 2 the
-   enrichment (§2 requirements, §5 decisions w/ revisit-when, §6 assumptions, §7
-   not-doing, and the narrative link-sentence opening every §4 area).
+   Write the design doc in TWO PASSES: pass 1 the shape + anchor (§1 intent, §2
+   requirements, §3 use cases, §4 narrative, §5 design, §9 acceptance hints); pass 2 the
+   enrichment (§2 requirements, §3 use cases, §6 decisions w/ revisit-when, §7
+   assumptions, §8 not-doing, §9 acceptance hints, and the narrative link-sentence
+   opening every §5 area).
    Header: Origin: self-brainstorm. Save under ${args.repoRoot}/${args.specDir}/.
    Do NOT commit.`,
   { schema: PATHS_SCHEMA, label: 'synthesize' })

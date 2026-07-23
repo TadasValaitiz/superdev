@@ -71,6 +71,11 @@ time per the Execution Handoff rule (inline ONLY when the plan is 1-2 tasks with
 interface handoffs AND no substantive design doc behind it; PARALLEL only for
 multi-milestone long plans — see subagent-driven-development/parallel-execution.md)
 
+**Mode:** autonomous | human-in-loop — carried from the anchor (design doc). Governs
+how the finishing gate routes an unmet acceptance hint / anchor deviation: autonomous
+files an owned backlog item and closes; human-in-loop pushes the divergence to the
+operator before finishing.
+
 **Context pack** — the artifacts downstream workers read; list every path that exists:
 - Spec: [design doc] · Decision log: [companion -decisions.md]
 - Domain model: [design doc §N, if the spec has one]
@@ -112,19 +117,22 @@ D#'s revisit-when hook in the spec, append the fork to the decision log
 before continuing. A deviation whose through-line still holds is a re-plan;
 one that breaks it goes back to the human.
 
-## Goals & Acceptance
+## Acceptance (anchored — do not restate here)
 
-[The measurable finish line — what reviewers cross-check as a CHECKLIST, so a
-long technical plan cannot lose its purpose in the task weeds. One row per
-goal, each traceable to a spec acceptance signal and verifiable by a command:]
+[This plan's acceptance bar is the anchor's Use Cases (design doc §3) and Acceptance
+hints (§9) — the operator-language "what must be demonstrable." Do NOT copy a Goals
+table into the plan; that split acceptance across two files and let them drift. Instead:
 
-| # | Goal (measurable) | From | Verify with |
-|---|---|---|---|
-| G1 | [observable outcome, not activity — "st order place refuses stale prices with reason code PRICE_STALE", never "improve order safety"] | R# | `[exact command + expected output]` |
+- Name which UC#/AH# THIS plan discharges (a subset, if the anchor spans multiple plans).
+- Each gate (milestone gate in parallel mode; the finishing gate always) answers its
+  owned hints with RECEIPTS — one re-runnable piece of evidence per hint (test+output,
+  CLI transcript, file:line), filled into the anchor's §9 receipt column when the real
+  surface exists.
+- An unanswered hint is NAMED, never dropped, and routed by the plan's `Mode`:
+  autonomous → file an owned backlog item (naming the UC#/AH# it discharges) and close;
+  human-in-loop → push to the operator before finishing.
 
-[Every must-R# in the spec appears here. The task reviewer checks tasks against
-these; the FINAL whole-branch review walks this table row by row and reports
-each G# as met/unmet with the verify command's actual output.]
+This plan discharges: UC#…, AH#… ]
 
 ---
 ```
@@ -141,7 +149,7 @@ that subagent gets, so make it carry weight. If a task has no honest Role
 line, it doesn't belong in the plan.]
 
 **Read first:** [The Context-pack sections THIS task's implementer must read
-before coding — specific anchors, not whole documents: "spec §4.2", "domain
+before coding — specific anchors, not whole documents: "spec §5.2", "domain
 model N.3 delta ledger rows for OrderSpec", "CLI surface family 1 table".
 Subagents have Read — point them at the truth instead of paraphrasing it.]
 
@@ -198,7 +206,8 @@ deliverable phases), group tasks under milestone headers:
 ## Milestone M1: <name — the deliverable this phase completes>
 
 [One-line milestone narrative: what is TRUE about the system when this gate passes.]
-**Milestone gate:** frozen tree · review findings folded · FULL suite green.
+**Milestone gate:** frozen tree · review findings folded · FULL suite green ·
+**anchor acceptance hints owned by this milestone answered with receipts** (unanswered → named + routed by Mode).
 
 ### Task 1: ...
 ### Task 2: ...
@@ -238,9 +247,18 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **4. Narrative & trace:** Does the Through-Line explain the task ordering and name the load-bearing tasks — or is it a bare task list wearing prose? Does every task's Role line trace to a spec R#/D#? Would an implementer hitting a wall mid-task know where to look (Through-Line → spec D# revisit-when → decision log)?
 
-**5. Goals & context flow:** Is every Goals & Acceptance row measurable with a verify command (an outcome, not an activity)? Does every must-R# appear as a G#? Does every task carry a Read-first line pointing at real Context-pack anchors — and does the Context pack list every artifact that exists (domain section, CLI surface)?
+**5. Acceptance & context flow:** Does the plan name which anchor UC#/AH# it discharges, and does every must-R#/UC# in that subset have tasks that will produce a receipt? Does every task carry a Read-first line pointing at real Context-pack anchors — and does the Context pack list every artifact that exists (design/anchor, decision log, domain section, CLI surface)?
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+
+## Plan Review (REQUIRED — fresh eyes)
+
+Your self-review above is inline. After it, dispatch the **plan reviewer subagent** per
+`skills/writing-plans/plan-document-reviewer-prompt.md` — it reads the plan against the
+anchor and checks narrative/trace, acceptance coverage (every discharged UC#/AH# has
+tasks that produce a receipt), and buildability. You are the author; you are the worst
+judge of your own plan's gaps. Fix blocking issues and re-dispatch once. (This is the
+plan-level equivalent of brainstorming's required spec reviewer.)
 
 ## Decision Logging (planning forks)
 
@@ -249,7 +267,7 @@ trade-off, an interface detail the design left open. Do not resolve these silent
 inside a task description: append each one to the work stream's decision log (the
 spec's companion `-decisions.md` file, next D#, `phase: plan`, per
 `skills/brainstorming/decision-log-template.md`) with options, reasoning, and a
-revisit-when hook. If a fork contradicts a spec D#, that is the spec's §9 drift
+revisit-when hook. If a fork contradicts a spec D#, that is the spec's §10 drift
 protocol — check the D#'s revisit-when trigger and amend the spec's decision status,
 don't quietly plan around it. A plan whose choices are all traceable to the spec or
 the log is re-plannable months later; one with silent choices is not.
