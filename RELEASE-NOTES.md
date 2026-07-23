@@ -1,5 +1,31 @@
 # Superdev Release Notes
 
+## v6.7.0 (2026-07-23)
+
+### Engineering Patterns Library + Selection Cascade
+
+- **New skill: engineering-patterns** — a reference library of stack-specific canons
+  plus the cascade deciding which doc governs a project: project CLAUDE.md declaration
+  (`Engineering patterns: <path> (BINDING)`) always wins > stack detection
+  (pyproject.toml -> python; package.json+react -> react, when authored) > none
+  (declared honestly, generic rubric only). Exactly ONE governing doc per task — no
+  auto-merging of pattern docs.
+- **python-patterns.md** — the generic Python canon, distilled from an
+  operator-ratified production law: five-layer architecture with suite-enforced arrow
+  rules, frozen-Pydantic seams (no dict[str,Any]), identity value objects with
+  completeness/golden-hash guards, hand-rolled DI (App + frozen Deps as the test
+  seam), Result seams with a closed error taxonomy, pipe/flow pipelines, the
+  Command-pattern CLI (web-server-tomorrow guarantee), reconstructability logging,
+  additive-forever persistence, one-home reuse, evidence-not-vibes testing with the
+  real-surface-is-the-final-bar law, report/session hygiene, and policy seams.
+  react-patterns.md deferred until a React project exists.
+- **Injection at all four stages:** plans carry a REQUIRED Engineering patterns line
+  in Global Constraints (same rail as Test lanes); the implementer prompt gains a
+  BINDING block (knowing departures are reportable deviations -> decision log ->
+  deviation audit); both the task reviewer and the final code reviewer check
+  conformance against the declared doc, citing the violated section — the doc is the
+  quality bar, not reviewer taste.
+
 ## v6.6.0 (2026-07-22)
 
 ### Deviation Audit at the Merge Gate

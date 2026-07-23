@@ -33,6 +33,14 @@ Subagent (general-purpose):
        cause of subagents building the wrong thing. If this part is empty,
        say "nothing beyond the artifacts" explicitly — silence is ambiguous.]
 
+    ## Engineering Patterns (BINDING)
+
+    [The governing patterns doc from the plan's Global Constraints — path +
+    "read §X, §Y before coding" for the sections this task lives in. Omit the
+    block entirely only when the plan says none declared/detected.]
+    Your code FOLLOWS the doc. A knowing departure is a reportable deviation:
+    name it and why in your report — it must reach the decision log.
+
     ## Before You Begin
 
     If you have questions about:

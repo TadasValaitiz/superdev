@@ -88,6 +88,12 @@ block, or detected per test-driven-development/testing-lanes.md):
 fast: `<command>` · full: `<command>`. Every commit gate runs FAST; the full
 suite runs ONLY at the finishing gate.
 
+**Engineering patterns** (REQUIRED line — resolved via the engineering-patterns
+skill's cascade: project CLAUDE.md declaration > stack detection > none):
+`<path to governing doc>` (BINDING) — or "none declared/detected". Implementers
+read it before coding; knowing departures are reportable deviations. Task
+Read-first lines cite the specific sections a task lives in.
+
 ## The Through-Line
 
 [The build story, in prose — not bullets, not a restated task list: how the
