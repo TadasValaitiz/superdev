@@ -42,7 +42,12 @@ by silent coverage loss nobody notices.
 | **Before every commit** | **fast suite** — no exceptions |
 | Task review | focused re-runs on specific doubt only — never a suite |
 | Parallel-agent integration | fast suite |
-| **Finishing gate** (finishing-a-development-branch, Step 1) | **full suite — the ONLY full-suite gate in the flow** |
+| **Milestone gate** (parallel mode only, frozen tree) | **full suite** — each milestone boundary is a mini finishing gate |
+| **Finishing gate** (finishing-a-development-branch, Step 1) | **full suite** |
+
+At any commit gate, the task's OWN tests also run targeted — **regardless of which
+lane they classify into** (measured trap: structural guards living in the slow tier
+let three green fast gates miss a real defect).
 
 The finishing gate hard-blocks merge/PR; nothing else in the flow ever waits on the
 slow suite.
@@ -57,6 +62,12 @@ at task-group boundaries, and an escalation trigger (full suite at commits touch
 slow-covered code). Rejected to keep one rule with zero classification judgment calls:
 fast everywhere, full once at finishing. Reconsider if finishing-gate failures that a
 mid-plan run would have caught become a recurring, measured pain.
+**Sanctioned exception (operator-ratified 2026-07-23):** MILESTONE GATES in parallel
+execution mode (`Execution: subagent-driven-parallel`, multi-milestone plans) run the
+full suite on a frozen tree — each milestone boundary is a mini finishing gate. This
+is not the rejected checkpoint idea returning by stealth: it applies only to plans
+explicitly authored as multi-milestone, where the gate follows the milestone, not an
+arbitrary task count.
 
 ## How a project declares its lanes (and how an agent identifies them)
 

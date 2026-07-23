@@ -1,5 +1,27 @@
 # Superdev Release Notes
 
+## v6.8.0 (2026-07-23)
+
+### Parallel Execution Mode (multi-milestone plans)
+
+- **New reference: subagent-driven-development/parallel-execution.md** — generalized
+  from a production program's battle-tested protocol (~30 dispatches, 3 API-death
+  recoveries zero loss, ~12 findings caught pre-publish). Controller-never-implements,
+  context-as-files (brief/report), file-disjoint lanes PROVEN from tasks' Files:
+  blocks in isolated worktrees with ownership lists, same-file tasks batched,
+  SHA-pinned reviews concurrent with implementation, read-only grounding pipelined
+  across milestones, the serial set, shared-index + merge-audit laws (with the
+  duplicate-JSON-key scar), wave rhythm, ledger-as-recovery-map with inspect-first
+  resume, and the two-lane comprehension ceiling (third lane only if read-only).
+- **Opt-in, not default:** writing-plans gains `Execution: subagent-driven-parallel`
+  (multi-milestone long plans only) and an optional Milestones grouping (milestone
+  narrative + gate line; the unit of parallelism). Sequential SDD stays the default.
+- **Gate doctrine reconciled:** testing-lanes sanctions MILESTONE GATES (full suite
+  on a frozen tree) as the explicit exception to full-only-at-finishing — the gate
+  follows the milestone, not an arbitrary task count. New rule at every commit gate:
+  the task's OWN tests run targeted regardless of lane classification (the
+  slow-tier-guards trap).
+
 ## v6.7.1 (2026-07-23)
 
 - self-improvement: the context-doc bottleneck class now names the engineering-patterns

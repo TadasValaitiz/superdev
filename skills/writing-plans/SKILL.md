@@ -66,9 +66,10 @@ independently testable deliverable.
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Execution:** subagent-driven | inline — decided at plan time per the Execution
-Handoff rule (inline ONLY when the plan is 1-2 tasks with no interface handoffs AND
-no substantive design doc behind it)
+**Execution:** subagent-driven | subagent-driven-parallel | inline — decided at plan
+time per the Execution Handoff rule (inline ONLY when the plan is 1-2 tasks with no
+interface handoffs AND no substantive design doc behind it; PARALLEL only for
+multi-milestone long plans — see subagent-driven-development/parallel-execution.md)
 
 **Context pack** — the artifacts downstream workers read; list every path that exists:
 - Spec: [design doc] · Decision log: [companion -decisions.md]
@@ -187,6 +188,27 @@ git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
 ```
 ````
+
+## Milestones (optional — long plans only)
+
+When a plan is long enough to need them (roughly 8+ tasks or multiple distinct
+deliverable phases), group tasks under milestone headers:
+
+```markdown
+## Milestone M1: <name — the deliverable this phase completes>
+
+[One-line milestone narrative: what is TRUE about the system when this gate passes.]
+**Milestone gate:** frozen tree · review findings folded · FULL suite green.
+
+### Task 1: ...
+### Task 2: ...
+```
+
+Milestones are the unit of parallel execution (`Execution: subagent-driven-parallel`):
+within a milestone, file-disjoint tasks may run as concurrent lanes; the milestone
+gate is serial on a frozen tree. Single-milestone plans don't need the headers — the
+finishing gate is their only gate. A milestone whose narrative line you cannot write
+is two milestones (or none).
 
 ## No Placeholders
 
