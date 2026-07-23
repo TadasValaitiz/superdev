@@ -1,5 +1,11 @@
 # Superdev Release Notes
 
+## v6.7.1 (2026-07-23)
+
+- self-improvement: the context-doc bottleneck class now names the engineering-patterns
+  case explicitly (non-conforming code because the governing canon lacks the rule),
+  with routing per the engineering-patterns cascade (stack canon vs project doc).
+
 ## v6.7.0 (2026-07-23)
 
 ### Engineering Patterns Library + Selection Cascade

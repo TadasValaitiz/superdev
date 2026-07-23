@@ -67,7 +67,7 @@ carry? what did the receiver get? what did the receiver need? The bottleneck is 
 | **Orchestrator issue** | The orchestrator HAD X but the SKILL.md never tells it to include X in the dispatch (or fills the slot thinly) | the skill's SKILL.md dispatch instructions |
 | **Parent-skill issue** | The context lives one level up — the CALLING skill (possibly outside this plugin, e.g. a project skill like consumer-pass) doesn't emphasize passing X down | the parent skill's file; no plugin bump if external |
 | **Return-contract issue** | The subagent knew/produced X but the output format drops it — the orchestrator never sees it | the template's output contract + the SKILL.md section that handles the return |
-| **Context-doc issue** | The reference doc the subagent reads is missing, stale, or thin on X | the context/reference document |
+| **Context-doc issue** | The reference doc the subagent reads is missing, stale, or thin on X — e.g. an implementer wrote non-conforming code because the governing engineering-patterns canon lacks the rule (fix the stack canon in `skills/engineering-patterns/`, or the project's own declared doc — whichever governs per that skill's cascade) | the context/reference document |
 | **Missing subagent** | No role in the workflow owns the concern at all — nothing failed, the stage doesn't exist | SKILL.md flow + a new prompt template |
 
 Most failures are context failures, and the cheapest fix is usually the most upstream
