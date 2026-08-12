@@ -1,5 +1,14 @@
 # Superdev Release Notes
 
+## v6.9.1 (2026-08-12)
+
+- **Codex subagent routing is explicit.** The Codex adapter now maps deterministic
+  tool work to direct execution and maps mechanical, integration, debugging, task
+  review, and final-review roles to explicit GPT-5.6 model/effort tiers.
+- **SDD forks stay isolated.** Codex SDD implementers and reviewers use
+  `fork_turns: "none"`, so brief/report/grounding/diff files carry context and an
+  omitted override cannot silently inherit the coordinator's frontier model.
+
 ## v6.9.0 (2026-07-23)
 
 ### The Anchor + Use-Case Cross-Check (goal preservation through delivery)

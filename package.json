@@ -1,6 +1,6 @@
 {
   "name": "superdev",
-  "version": "6.9.0",
+  "version": "6.9.1",
   "description": "Superdev skills and runtime bootstrap for coding agents",
   "type": "module",
   "main": ".opencode/plugins/superdev.js",
