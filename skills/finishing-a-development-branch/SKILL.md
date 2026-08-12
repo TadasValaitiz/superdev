@@ -15,30 +15,42 @@ Guide completion of development work by presenting clear options and handling ch
 
 ## The Process
 
-### Step 1: Verify Tests — the FULL-SUITE gate
+### Step 1: Verify Tests — fast suite + area-selected slow (never the monolith)
 
-**This is the ONLY full-suite gate in the development flow** (every commit gate runs
-the fast suite; see test-driven-development/testing-lanes.md). Before presenting
-options, run the project's FULL suite — fast + slow, everything:
+Per test-driven-development/testing-lanes.md, this gate runs the FAST suite as one
+command, then the slow tests that cover what this branch touched — **each as its own
+killable command, never the whole slow tier in one invocation** (a monolithic run gets
+stuck → you kill it → you rerun from zero, and it serializes badly against other agents).
 
 ```bash
-# The project's FULL suite — use the command declared in the project
-# CLAUDE.md "Test lanes" block (or the plan's Global Constraints), e.g.:
-npm test / cargo test / pytest / go test ./...
+# 1. Fast suite — one command (from the project's CLAUDE.md "Test lanes" / plan Global Constraints)
+<fast command, e.g. pytest tests -m "not slow" -n auto>
+
+# 2. Slow-by-area — SEPARATE commands, one per dir/module/marker covering the branch's changes.
+#    Pick by matching test paths/markers to the files you changed; include slow tests you
+#    authored for this change. When unsure, include it — the scheduled sweep backstops misses.
+<slow command for area A>
+<slow command for area B>
 ```
 
-**If tests fail:**
+If a slow unit hangs, kill THAT command and rerun it alone — the fast run and the other
+slow areas already passed. Whole-suite truth is re-established by the scheduled sweep
+(a separate task on main), not here.
+
+**If any of these fail:**
 ```
-Tests failing (<N> failures). Must fix before completing:
+Tests failing (<N> failures in <which command>). Must fix before completing:
 
 [Show failures]
 
-Cannot proceed with merge/PR until tests pass.
+Cannot proceed with merge/PR until the fast suite and the area's slow tests are green.
 ```
 
 Stop. Don't proceed to Step 2.
 
-**If tests pass:** Continue to Step 2.
+**If they pass:** Continue to Step 2. (Note which slow areas you ran, and any you
+deliberately deferred to the sweep, in the finishing report — an unrun area is a named
+gap, not a silent one.)
 
 ### Step 2: Deviation & Acceptance Audit — prove the done bar before the merge decision
 

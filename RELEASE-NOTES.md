@@ -1,5 +1,33 @@
 # Superdev Release Notes
 
+## v6.10.0 (2026-08-12)
+
+### No Monolithic Full Suite — fast gate + cherry-picked slow, run separately
+
+Supersedes the 2026-07-22/23 "full suite at the finishing/milestone gate" doctrine after
+a measured contention scar (4 concurrent full gates degraded 5.6× — ≈2020s vs ≈356s —
+with nondeterministic flaky reds).
+
+- **The full suite is now a CONCEPT, never a gate command.** Launching the whole slow
+  tier in one invocation is banned at every gate: a monolithic run gets stuck on one
+  hung test → you kill it → you rerun from zero, losing every already-green result, and
+  it serializes badly across concurrent agents.
+- **Gates run fast (one command) + slow-by-area (separate killable commands).** After
+  the fast suite, the agent cherry-picks the slow tests covering what the change touched
+  — matched by path/module/marker — each its own invocation, so a stuck unit is killed
+  and rerun ALONE. Self-authored slow tests are part of the area. When unsure, include it.
+- **New lane: the scheduled sweep** — the slow tier run on latest main as a separate,
+  chunked, killable task (not a gate); this is where whole-suite truth is re-established,
+  off every agent's publish path. A red it finds is a P0-class item.
+- **Honest trade, stated:** the gate proves "fast green + the slow tests plausibly
+  affected by this change green," not "every test passes"; the sweep recovers the rest.
+- Swept through testing-lanes.md (canon), TDD SKILL, finishing-a-development-branch
+  Step 1, parallel-execution milestone gates, writing-plans Global-Constraints lane line
+  + milestone gate line, executing-plans, dispatching-parallel-agents, and the deviation
+  auditor's precondition. CLAUDE.md `Test lanes` block now declares fast + slow-by-area
+  recipe + sweep (not a monolithic "full" command), and honors a gate entrypoint that
+  refuses whole-suite invocations.
+
 ## v6.9.1 (2026-08-12)
 
 - **Codex subagent routing is explicit.** The Codex adapter now maps deterministic

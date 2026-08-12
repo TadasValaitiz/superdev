@@ -1,7 +1,7 @@
 # Deviation Auditor Prompt Template
 
-Dispatch this subagent at the finishing gate (Step 2), after the full suite passes and
-BEFORE presenting merge options. Fresh eyes, no attachment to the branch: its job is to
+Dispatch this subagent at the finishing gate (Step 2), after Step 1's tests pass (fast
+suite + the area's slow tests, per testing-lanes.md) and BEFORE presenting merge options. Fresh eyes, no attachment to the branch: its job is to
 surface every place reality and the documents disagree, AND to prove the anchor's
 acceptance bar with receipts — so the human chooses merge having seen the drift and the
 proof, not just the green.

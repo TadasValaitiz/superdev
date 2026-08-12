@@ -65,8 +65,10 @@ the next dependent wiring.
 - **Gate economics:** per task = the FAST suite + the task's OWN tests targeted —
   **regardless of which lane they classify into** (measured trap: a project's AST
   guards lived in the slow tier, so three green fast gates missed a real defect) —
-  plus any targeted structural guards. The FULL suite runs at milestone gates and
-  the finishing gate only.
+  plus any targeted structural guards. Milestone and finishing gates run the fast
+  suite + area-selected slow tests as separate killable commands (never the whole
+  slow tier as one invocation — testing-lanes.md); the scheduled sweep is the
+  whole-suite backstop.
 - **Wave rhythm:** verify (controller's own re-run) → merge → combined gate → commit
   orchestration state → dispatch the ENTIRE next wave in one message (implementers +
   reviewers together).
@@ -101,7 +103,8 @@ you can audit is not speed; it is deferred debugging.
 ## 7. Gates in this mode
 
 Per-task commit gates: fast suite + own tests (§4 gate economics). **Milestone
-gates: the FULL suite on a frozen tree, findings folded first** — the sanctioned
-exception to "full only at finishing" (testing-lanes.md), because each milestone
-boundary is a mini finishing gate. The terminal finishing gate (full suite +
-deviation audit + human merge decision) is unchanged and still runs at the end.
+gates: on a frozen tree, findings folded first — fast suite + the slow tests
+covering that milestone's area, each its own killable command** (never the whole
+slow tier as one invocation — testing-lanes.md). The terminal finishing gate (same
+fast + area-slow shape + deviation/acceptance audit + human merge decision) runs at
+the end. Whole-suite truth comes from the scheduled sweep on main, off the gate path.

@@ -357,10 +357,12 @@ Never fix bugs without a test.
 ## Test Lanes (which suite runs when)
 
 The red-green loop runs FOCUSED tests. Suites run at gates, and the lane rules live in
-[testing-lanes.md](testing-lanes.md): **fast suite** (everything not marked slow — the
-budgeted development lane) gates every commit; **full suite** (fast + slow = everything)
-runs at exactly one place, the finishing gate. Projects declare their two lane commands
-in a CLAUDE.md `Test lanes` block; plans carry them in Global Constraints. **Bias:
+[testing-lanes.md](testing-lanes.md): the **fast suite** (everything not marked slow —
+the budgeted development lane) gates every commit as one command; gates add the slow
+tests covering the touched area as SEPARATE killable commands. The **full suite** is a
+concept, never launched as one invocation — the whole slow tier lives in a scheduled
+sweep off the gate path. Projects declare their lane commands in a CLAUDE.md `Test
+lanes` block; plans carry them in Global Constraints. **Bias:
 prefer the faster lane** — run the cheapest test that answers the question in front of
 you; heavier lanes belong to their gates. If you're about to run "all the tests"
 anywhere other than the finishing gate, read that file first.

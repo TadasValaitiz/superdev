@@ -172,7 +172,7 @@ Agent 3 → Fix tool-approval-race-conditions.test.ts
 After agents return:
 1. **Review each summary** - Understand what changed
 2. **Check for conflicts** - Did agents edit same code?
-3. **Run the fast suite** - Verify all fixes work together (the full suite runs once, at the finishing gate)
+3. **Run the fast suite** - Verify all fixes work together (slow coverage is cherry-picked by area at the finishing gate as separate commands; the whole slow tier only in the scheduled sweep — testing-lanes.md)
 4. **Spot check** - Agents can make systematic errors
 
 ## Real-World Impact

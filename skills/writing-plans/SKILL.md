@@ -91,8 +91,10 @@ include this section.]
 
 **Test lanes** (REQUIRED line — copied from the project CLAUDE.md `Test lanes`
 block, or detected per test-driven-development/testing-lanes.md):
-fast: `<command>` · full: `<command>`. Every commit gate runs FAST; the full
-suite runs ONLY at the finishing gate.
+fast (the gate): `<command>` · slow-by-area (separate killable commands):
+`<recipe>` · scheduled sweep: `<command/task>`. Every commit gate runs FAST;
+gates add the slow tests covering the touched area as SEPARATE commands; the whole
+slow tier is NEVER one invocation — it lives in the scheduled sweep.
 
 **Engineering patterns** (REQUIRED line — resolved via the engineering-patterns
 skill's cascade: project CLAUDE.md declaration > stack detection > none):
@@ -206,7 +208,8 @@ deliverable phases), group tasks under milestone headers:
 ## Milestone M1: <name — the deliverable this phase completes>
 
 [One-line milestone narrative: what is TRUE about the system when this gate passes.]
-**Milestone gate:** frozen tree · review findings folded · FULL suite green ·
+**Milestone gate:** frozen tree · review findings folded · fast suite + this
+milestone's area slow tests green (separate commands, never the monolith) ·
 **anchor acceptance hints owned by this milestone answered with receipts** (unanswered → named + routed by Mode).
 
 ### Task 1: ...

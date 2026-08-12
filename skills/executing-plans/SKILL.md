@@ -26,9 +26,10 @@ Load plan, review critically, execute all tasks, report when complete.
 For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
-3. Run verifications as specified — before every commit, run the FAST suite
-   (lane commands in the plan's Global Constraints; the full suite runs only
-   at the finishing gate in Step 3)
+3. Run verifications as specified — before every commit, run the FAST suite as one
+   command (lane commands in the plan's Global Constraints; the finishing gate in
+   Step 3 adds area-selected slow tests as separate killable commands — the whole
+   slow tier is never one invocation, per testing-lanes.md)
 4. Mark as completed
 
 **Decision logging (build forks):** when reality deviates from the plan or spec — an
