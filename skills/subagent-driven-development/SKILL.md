@@ -120,9 +120,21 @@ Use the least powerful model that can handle each role to conserve cost and incr
 The final whole-branch review is one of these — dispatch it on the most
 capable available model, not the session default.
 
-**Review tasks**: choose the model with the same judgment, scaled to the
+**Per-task review**: choose the model with the same judgment, scaled to the
 diff's size, complexity, and risk. A small mechanical diff does not need the
 most capable model; a subtle concurrency change does.
+
+**Design & gate review agents — ALWAYS the most capable available model, never
+scaled down.** These are high-judgment roles whose misses are expensive and late:
+the spec/design-doc reviewer, the plan reviewer, the final whole-branch code
+reviewer, and the finishing-gate deviation/acceptance auditor. Each pins the most
+capable model in its own prompt template. (Distinct from per-task review above,
+which scales.) **Design reasoning itself — brainstorming and self-brainstorming —
+runs in the MAIN session, not a dispatch, so no `model:` field governs it: set the
+session to the most capable model (`/model`, or the harness equivalent) before that
+work.** Relative naming ("most capable available") is deliberate — it resolves to
+Opus on Claude Code and to the top tier under Codex or any other harness; never
+hardcode a model name here.
 
 **Always specify the model explicitly when dispatching a subagent.** An
 omitted model inherits your session's model — often the most capable and

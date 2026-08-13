@@ -9,6 +9,12 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
+**Model:** design reasoning is high-judgment and runs in THIS (main) session, not a
+subagent — so no `model:` field governs it. Set the session to the most capable
+available model (`/model`, or the harness equivalent — Opus on Claude Code, top tier
+under Codex) before doing this work. The required spec-reviewer dispatch pins the most
+capable model in its own prompt template; see subagent-driven-development Model Selection.
+
 <HARD-GATE>
 Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
 </HARD-GATE>

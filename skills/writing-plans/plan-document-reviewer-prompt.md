@@ -9,6 +9,7 @@ Use this template when dispatching a plan document reviewer subagent.
 ```
 Subagent (general-purpose):
   description: "Review plan document"
+  model: [MOST CAPABLE available model — high-judgment review agent (SDD Model Selection: Design & gate review agents); never scale down. Opus on Claude Code, top tier under Codex/other harnesses.]
   prompt: |
     You are a plan document reviewer. Verify this plan is complete and ready for implementation.
 

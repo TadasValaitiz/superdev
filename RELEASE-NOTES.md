@@ -1,5 +1,28 @@
 # Superdev Release Notes
 
+## v6.11.0 (2026-08-13)
+
+### Design & Review Agents Pinned to the Most Capable Model
+
+Fixes the observed "plan reviewer ran on Sonnet" gap: the high-judgment review agents
+were unpinned and floated to the harness default.
+
+- **Four review agents now pin the most capable available model** in their own prompt
+  templates: the spec/design-doc reviewer, the plan reviewer, the final whole-branch
+  code reviewer, and the finishing-gate deviation/acceptance auditor. Previously only
+  the SDD implementer and per-task reviewer carried a `model:` field; these floated.
+- **SDD Model Selection** gains a "Design & gate review agents — ALWAYS most capable,
+  never scaled down" clause, distinct from the per-task-review scaling lane, and states
+  that design reasoning (brainstorming/self-brainstorming) runs in the MAIN session so
+  it is governed by `/model`, not a dispatch.
+- **brainstorming** now tells the reader to set the session to the most capable model
+  before design reasoning; **self-brainstorming** pins the Questioner + synthesis agents
+  (design roles) to most-capable, Responder stays standard+high-effort.
+- **Relative naming is deliberate** ("most capable available model", never a hardcoded
+  "Opus") — it resolves to Opus on Claude Code and to the top tier under Codex or any
+  other harness. The .codex-plugin ships no model mapping and needs none: Codex reads
+  the same relative rules and picks its own top tier.
+
 ## v6.10.0 (2026-08-12)
 
 ### No Monolithic Full Suite — fast gate + cherry-picked slow, run separately

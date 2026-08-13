@@ -203,7 +203,10 @@ DECISION_LOG_PATH=paths.logPath; request the REVIEW_SCHEMA fields as the output.
   from cached calls at zero cost.
 - **Budget scaling:** with a token directive, the `budget.remaining()` guard paces
   depth; without one, `maxRounds` is the knob. Report which limit ended the run.
-- **Model/effort:** default inherit. If overriding: the Questioner deserves the
-  strongest reasoning (question quality is the bottleneck); the Responder needs tool
-  diligence more than brilliance; synthesis benefits from high effort (pass 2 is where
-  richness lives).
+- **Model/effort:** the Questioner (design authority) and the synthesis agent (writes
+  the design doc) are high-judgment DESIGN roles — pin them to the most capable
+  available model, same rule as brainstorming's design reasoning (SDD Model Selection:
+  Design & gate review agents). The `review` agent reuses the spec-reviewer template,
+  which already pins most-capable. The Responder needs tool diligence more than
+  brilliance — a standard model with high effort is the calibrated choice there. Relative
+  naming resolves to Opus on Claude Code, top tier under Codex.
