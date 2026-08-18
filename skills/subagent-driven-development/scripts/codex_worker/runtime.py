@@ -133,9 +133,11 @@ class RuntimeStore:
                 runtime.awaiting_start_response = False
                 runtime.observed_start_turn_id = None
                 if lost_turn_id is not None:
+                    items = list(runtime.items.pop(lost_turn_id, []))
                     runtime.latest_turn = TurnSnapshot(
-                        lost_turn_id, "failed", reason, list(runtime.items.get(lost_turn_id, []))
+                        lost_turn_id, "failed", reason, items
                     )
+                runtime.items.clear()
                 self._append_event(runtime, "transport_error", lost_turn_id, error=reason)
                 runtime.condition.notify_all()
 
@@ -188,6 +190,10 @@ class RuntimeStore:
                     return
                 runtime.start_pending = False
                 runtime.active_turn_id = turn_id
+                retained = runtime.items.get(turn_id)
+                runtime.items.clear()
+                if retained:
+                    runtime.items[turn_id] = retained
                 if runtime.awaiting_start_response:
                     runtime.observed_start_turn_id = turn_id
                 self._append_event(runtime, "turn_started", turn_id)
@@ -203,8 +209,10 @@ class RuntimeStore:
                     runtime.observed_start_turn_id = turn_id
                 runtime.start_pending = False
                 runtime.active_turn_id = None
+                items = list(runtime.items.pop(turn_id, []))
+                runtime.items.clear()
                 runtime.latest_turn = TurnSnapshot(
-                    turn_id, status, error, list(runtime.items.get(turn_id, []))
+                    turn_id, status, error, items
                 )
                 self._append_event(runtime, "turn_completed", turn_id, error=error)
                 runtime.condition.notify_all()
@@ -215,7 +223,16 @@ class RuntimeStore:
                     return
                 data = {key: value for key, value in item.items() if key not in ("id", "type")}
                 item_record = ItemRecord(item["id"], item["type"], data)
-                if isinstance(turn_id, str):
+                current_turn = (
+                    isinstance(turn_id, str) and (
+                        runtime.active_turn_id == turn_id or (
+                            runtime.awaiting_start_response and
+                            runtime.observed_start_turn_id == turn_id and
+                            (runtime.latest_turn is None or runtime.latest_turn.turn_id != turn_id)
+                        )
+                    )
+                )
+                if current_turn:
                     runtime.items.setdefault(turn_id, []).append(item_record)
                 self._append_event(
                     runtime, "item_completed", turn_id if isinstance(turn_id, str) else None, item_record

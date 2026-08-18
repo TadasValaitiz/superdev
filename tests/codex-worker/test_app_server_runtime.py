@@ -215,6 +215,30 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertIs(self.store.wait(self.session.session_id, 0), snapshots[0])
         self.assertEqual(snapshots[0].items[0].data["text"], "1")
 
+    def test_completion_copies_items_into_snapshot_and_releases_raw_bucket(self):
+        self.store.on_notification(self.started("turn-retained"))
+        self.store.on_notification(self.item(1, "turn-retained"))
+        self.store.on_notification(self.completed("turn-retained"))
+
+        snapshot = self.store.status(self.session.session_id).latest_turn
+        self.assertEqual([item.data["text"] for item in snapshot.items], ["1"])
+        self.assertEqual(self.store._get(self.session.session_id).items, {})
+
+    def test_late_and_orphan_items_do_not_resurrect_completed_turn_buckets(self):
+        for index in range(8):
+            turn_id = "turn-%s" % index
+            self.store.on_notification(self.started(turn_id))
+            self.store.on_notification(self.item(index, turn_id))
+            self.store.on_notification(self.completed(turn_id))
+
+        self.store.on_notification(self.item("late", "turn-7"))
+        self.store.on_notification(self.item("orphan", "turn-never-active"))
+
+        runtime = self.store._get(self.session.session_id)
+        self.assertEqual(runtime.items, {})
+        self.assertEqual(runtime.latest_turn.turn_id, "turn-7")
+        self.assertEqual([item.data["text"] for item in runtime.latest_turn.items], ["7"])
+
     def test_wait_blocks_while_start_is_reserved_before_started_notification(self):
         self.store.reserve_start(self.session.session_id)
         result = []
