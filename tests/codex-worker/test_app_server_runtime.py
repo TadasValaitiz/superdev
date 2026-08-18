@@ -59,20 +59,29 @@ class AppServerTests(unittest.TestCase):
             results = list(pool.map(lambda _: client.list_models(), range(40)))
         self.assertTrue(all(result[0]["id"] == "fake-model-a" for result in results))
 
-    def test_command_file_and_user_input_approvals_fail_closed_without_secret_event_data(self):
-        for mode in ("approval-command", "approval-file", "approval-user"):
+    def test_measured_approval_methods_fail_closed_with_schema_valid_shapes_and_safe_audit(self):
+        cases = {
+            "approval-command": {"decision": "decline"},
+            "approval-file": {"decision": "decline"},
+            "approval-user": {"answers": {}},
+            "approval-permissions": {"permissions": {}},
+        }
+        for mode, expected_response in cases.items():
             observed = []
             client = self.make_client(mode=mode, callback=observed.append)
             client.start_thread(self.cwd)
             client.start_turn("thr-fake", "contains SECRET")
             deadline = time.monotonic() + 2
-            while not any(x.get("method") == "approval/declined" for x in observed):
+            while not (any(x.get("method") == "approval/declined" for x in observed)
+                       and any(x.get("method") == "item/completed" for x in observed)):
                 self.assertLess(time.monotonic(), deadline)
                 time.sleep(0.005)
             safe = [x for x in observed if x.get("method") == "approval/declined"]
             self.assertEqual(len(safe), 1)
             self.assertNotIn("SECRET", repr(safe))
             self.assertIn("approvalMethod", safe[0]["params"])
+            completed = next(x for x in observed if x.get("method") == "item/completed")
+            self.assertEqual(completed["params"]["item"]["decision"], expected_response)
 
     def test_custom_approval_handler_response_is_used(self):
         fake = Path(__file__).with_name("fake_codex.py")
@@ -125,6 +134,18 @@ class AppServerTests(unittest.TestCase):
                 future.result()
         with self.assertRaises(CodexTransportError):
             client.list_models()
+
+    def test_malformed_output_terminates_reaps_child_and_closes_all_pipes(self):
+        client = self.make_client(mode="malformed")
+        with self.assertRaises(CodexTransportError):
+            client.list_models()
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and (
+                client.proc.poll() is None
+                or not all(pipe.closed for pipe in (client.proc.stdin, client.proc.stdout, client.proc.stderr))):
+            time.sleep(0.005)
+        self.assertIsNotNone(client.proc.poll())
+        self.assertTrue(all(pipe.closed for pipe in (client.proc.stdin, client.proc.stdout, client.proc.stderr)))
 
     def test_child_exit_fails_call_instead_of_hanging(self):
         client = self.make_client(mode="exit")

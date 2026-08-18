@@ -53,7 +53,8 @@ class FakeCodex:
         return {
             "approval-command": "item/commandExecution/requestApproval",
             "approval-file": "item/fileChange/requestApproval",
-            "approval-user": "tool/requestUserInput",
+            "approval-user": "item/tool/requestUserInput",
+            "approval-permissions": "item/permissions/requestApproval",
         }.get(self.mode)
 
     def handle_turn_start(self, message):
@@ -92,6 +93,7 @@ class FakeCodex:
                 "reason": "SECRET prompt content",
                 "command": "echo SECRET",
                 "questions": [{"id": "secret-question", "question": "SECRET?"}],
+                "permissions": {"network": {"enabled": True}},
             }
             self.send({"id": self.approval_request_id, "method": approval_method, "params": params})
         else:

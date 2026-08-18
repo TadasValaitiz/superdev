@@ -37,7 +37,8 @@ class CodexAppServer:
     _APPROVAL_METHODS = {
         "item/commandExecution/requestApproval",
         "item/fileChange/requestApproval",
-        "tool/requestUserInput",
+        "item/tool/requestUserInput",
+        "item/permissions/requestApproval",
     }
 
     def __init__(
@@ -57,6 +58,7 @@ class CodexAppServer:
         self._write_lock = threading.Lock()
         self._closed = False
         self._close_error = None  # type: Optional[CodexTransportError]
+        self._cleanup_done = threading.Event()
         self.stderr_diagnostics = []  # type: List[str]
         self.proc = subprocess.Popen(
             list(codex_argv),
@@ -136,11 +138,17 @@ class CodexAppServer:
             self._close_error = error
             pending = list(self._pending.values())
             self._pending.clear()
+            cleanup = threading.Thread(
+                target=self._cleanup_process,
+                name="codex-app-server-cleanup",
+                daemon=True,
+            )
         for waiter in pending:
             try:
                 waiter.put_nowait(error)
             except queue.Full:
                 pass
+        cleanup.start()
         self._emit_notification({
             "method": "transport/error",
             "params": {
@@ -148,6 +156,40 @@ class CodexAppServer:
                 "details": dict(error.details) if error.details is not None else None,
             },
         })
+
+    def _cleanup_process(self) -> None:
+        try:
+            stream = self.proc.stdin
+            if stream is not None and not stream.closed:
+                try:
+                    stream.close()
+                except (OSError, ValueError):
+                    pass
+            if self.proc.poll() is None:
+                try:
+                    self.proc.terminate()
+                except OSError:
+                    pass
+                try:
+                    self.proc.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        self.proc.kill()
+                    except OSError:
+                        pass
+                    self.proc.wait(timeout=1.0)
+            current = threading.current_thread()
+            for worker in (self._reader, self._stderr_reader):
+                if worker is not current:
+                    worker.join(timeout=1.0)
+            for pipe in (self.proc.stdout, self.proc.stderr):
+                if pipe is not None and not pipe.closed:
+                    try:
+                        pipe.close()
+                    except (OSError, ValueError):
+                        pass
+        finally:
+            self._cleanup_done.set()
 
     def _send(self, message: JsonObject) -> None:
         encoded = json.dumps(message, separators=(",", ":")) + "\n"
@@ -245,16 +287,20 @@ class CodexAppServer:
     def _default_approval_response(method: str) -> JsonObject:
         if method in ("item/commandExecution/requestApproval", "item/fileChange/requestApproval"):
             return {"decision": "decline"}
-        if method == "tool/requestUserInput":
+        if method == "item/tool/requestUserInput":
             return {"answers": {}}
+        if method == "item/permissions/requestApproval":
+            return {"permissions": {}}
         return {}
 
     @staticmethod
     def _is_decline(method: str, result: JsonObject) -> bool:
         if method in ("item/commandExecution/requestApproval", "item/fileChange/requestApproval"):
             return result.get("decision") in ("decline", "cancel")
-        if method == "tool/requestUserInput":
+        if method == "item/tool/requestUserInput":
             return not result.get("answers")
+        if method == "item/permissions/requestApproval":
+            return not result.get("permissions")
         return True
 
     def _handle_server_request(self, message: JsonObject) -> None:
@@ -341,29 +387,4 @@ class CodexAppServer:
     def shutdown(self) -> None:
         error = CodexTransportError(details={"message": "adapter shutdown"})
         self._fail_transport(error)
-        stream = self.proc.stdin
-        if stream is not None:
-            try:
-                stream.close()
-            except (OSError, ValueError):
-                pass
-        if self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-            except OSError:
-                pass
-            try:
-                self.proc.wait(timeout=1.0)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-                self.proc.wait(timeout=1.0)
-        current = threading.current_thread()
-        for worker in (self._reader, self._stderr_reader):
-            if worker is not current:
-                worker.join(timeout=1.0)
-        for pipe in (self.proc.stdout, self.proc.stderr):
-            if pipe is not None and not pipe.closed:
-                try:
-                    pipe.close()
-                except (OSError, ValueError):
-                    pass
+        self._cleanup_done.wait(timeout=4.0)
