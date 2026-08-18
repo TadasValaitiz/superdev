@@ -4,6 +4,11 @@ Generalized from a production project's proven reference (multi-session room orc
 technically verified 2026-08-18: live S-room sessions + measured ping-pong delivery tests).
 Every command here is the verbatim working form.
 
+**LAW vs DEFAULT:** transport, launch commands, publish recipe, fault handling, and the
+gotchas are LAWS — measured mechanics that don't bend. The reporting protocol below is the
+proven DEFAULT vocabulary — the orchestrator authors each room's actual protocol in its
+brief (see SKILL.md Authorship) and may compose a different one from these parts.
+
 ## The pieces
 
 - **Orchestrator (control room)** — a normal Claude Code session. Holds the durable state,
@@ -61,7 +66,7 @@ The LOCAL FF-only push IS the compare-and-swap: if a peer landed first, the push
 (non-FF) → rebase, re-gate, retry. The integration branch reaches `main` once, at milestone
 close, human-approved.
 
-## Reporting protocol (room → orchestrator, via SendMessage)
+## Reporting protocol (room → orchestrator, via SendMessage) — DEFAULT vocabulary, author per room
 
 - **R0 START** — after grounding: what was read · worktree state · first move.
 - **R1 DESIGN-READY** — design/surface doc path + rulings needed. Self rooms WAIT here for

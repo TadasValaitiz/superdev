@@ -1,10 +1,17 @@
-# Brief Templates — the switch, made concrete
+# Brief Templates — WORKED EXAMPLES, not forms
 
 The same superdev skills run in both paths; **how they are STARTED selects the behavior.**
 The room brief = the standalone brief + the orchestration contract (HOME/publish-recipe ·
 FILES YOU PRODUCE · REPORTING). That added block is the entire switch: a skill that finds it
-in its brief behaves as a room; a skill that doesn't runs exactly as today. Fill ⟨slots⟩;
-delete inapplicable lines rather than leaving empty headers.
+in its brief behaves as a room; a skill that doesn't runs exactly as today.
+
+**These are sample sentences in the brief language, not forms to fill** (SKILL.md
+Authorship). Adapt the STRUCTURE, not just the ⟨slots⟩: redesign the reporting events, move
+or remove the ratification WAIT, add mid-room gates, strip sections a trivial room doesn't
+need. The parts you may NOT redesign are the laws: the HOME/isolation paragraph, the FF-CAS
+publish recipe, never-push-to-main, and (for rooms) reporting to the orchestrator rather
+than merging on their own authority. Fill ⟨slots⟩; delete inapplicable lines rather than
+leaving empty headers.
 
 ## A. Standalone brief (no orchestrator — the DEFAULT, today's flow)
 

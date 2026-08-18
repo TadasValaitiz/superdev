@@ -1,5 +1,19 @@
 # Superdev Release Notes
 
+## v7.0.1 (2026-08-18)
+
+- **Authorship framing (operator directive, from watching live rooms):** the orchestrator
+  is an AUTHOR, not a dispatcher — the brief is a language, the templates are worked
+  examples ("sample sentences"), and the skill now says so loudly. New Authorship section
+  in orchestrator/SKILL.md splits LAWS (transport, worktree+FF-CAS, membrane, durable
+  state, human-approved close, base case) from the AUTHORED layer: graph shape, per-room
+  gating structure (gate placement = where trust runs out — build-immediately vs
+  wait-at-ratification vs staged mid-room gates), per-room reporting protocol (R0–R5 =
+  proven DEFAULT vocabulary, not scripture), files/ID-blocks/modes/batching. Parallel
+  rooms need not behave alike — that composition IS the job. room-mechanics marks LAW vs
+  DEFAULT; room-brief-template re-titled WORKED EXAMPLES with adapt-the-structure guidance
+  and the short list of non-negotiables.
+
 ## v7.0.0 (2026-08-18)
 
 ### The Third Modality: Enterable Rooms + the Orchestrator

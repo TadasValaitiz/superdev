@@ -15,6 +15,35 @@ This skill is how ONE orchestrator session runs a milestone as a cascade of such
 directly (standalone path). Orchestration is purely additive; the launch brief is the switch
 (see room-brief-template.md).
 
+## Authorship — the brief is a language, not a form
+
+You are an AUTHOR, not a dispatcher. This skill teaches a grammar and gives sample
+sentences; you write new sentences every milestone. Two layers, keep them straight:
+
+**LAWS (invariant — measured or structural; never improvise):** the transport wiring
+(messages don't deliver otherwise) · worktree-per-room + FF-CAS self-publish (rooms merge
+themselves; you never do) · the membrane (the operator talks to rooms, never their
+subagents) · durable state as files · human-approved milestone close with zero in-milestone
+leftovers · the untouched base case.
+
+**AUTHORED (yours to design, per milestone and per room):**
+- **The graph shape** — serial ladder, diamond, parallel waves, a long-running research room
+  feeding others, a standing review room: whatever the dependency reality actually is.
+- **Each room's gating structure** — start-building-immediately (spec complete; a
+  ratification gate would be ceremony) · wait-at-ratification (design needs a ruling first) ·
+  staged mid-room gates (a money-boundary room that stops twice) · gate-free-until-close (a
+  mechanical room). Gate placement encodes WHERE TRUST RUNS OUT — it differs per room, and
+  choosing it is the same class of judgment as residual routing.
+- **Each room's reporting protocol** — R0–R5 is the proven DEFAULT vocabulary, not
+  scripture: define fewer events, more events, different cadences, different WAIT points,
+  event kinds never named here. A design room may need three events; a high-risk build room
+  a report per phase.
+- The files each room produces, its ID block, its mode, its batching rhythm with the human.
+
+Rooms launched in parallel need not behave alike: one may build immediately while its
+sibling waits for ratification — because you wrote them different contracts. That
+composition IS the job.
+
 ## The membrane (two layers — never blur them)
 
 - **Operator ↔ rooms**: peer sessions, enterable, HIL-gated. The operator's ONLY
