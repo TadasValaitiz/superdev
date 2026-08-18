@@ -99,6 +99,14 @@ class RegistryTests(unittest.TestCase):
         SessionRegistry(self.state_path)
         self.assertEqual(os.stat(self.state_path).st_mode & 0o777, 0o600)
 
+    def test_state_path_symlink_is_rejected(self):
+        self.state_path.parent.mkdir()
+        target = self.state_path.parent / "real.json"
+        target.write_text(json.dumps({"schema_version": 1, "sessions": []}))
+        self.state_path.symlink_to(target)
+        with self.assertRaises(ValueError):
+            SessionRegistry(self.state_path)
+
     def test_foreign_owner_state_is_rejected_when_testable(self):
         if os.getuid() == 0:
             self.skipTest("root cannot exercise foreign-owner behavior")

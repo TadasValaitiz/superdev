@@ -2,6 +2,7 @@
 import datetime
 import json
 import os
+import stat
 import tempfile
 import threading
 import uuid
@@ -68,8 +69,8 @@ class SessionRegistry:
     def _load(self) -> List[SessionRecord]:
         if not self.path.exists():
             return []
-        stat = os.lstat(self.path)
-        if not os.path.isfile(self.path) or stat.st_uid != os.getuid():
+        metadata = os.lstat(self.path)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
             raise RegistryError("registry must be an owner-owned regular file")
         try:
             os.chmod(self.path, 0o600)
