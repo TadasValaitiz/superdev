@@ -1,6 +1,7 @@
 """Command-line entrypoint for the local Codex worker daemon/client."""
 import argparse
 import json
+import math
 import os
 import signal
 import sys
@@ -76,8 +77,8 @@ def _event_limit(value: str) -> int:
 
 def _nonnegative_float(value: str) -> float:
     parsed = float(value)
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("must be >= 0")
+    if parsed < 0 or not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be a finite value >= 0")
     return parsed
 
 

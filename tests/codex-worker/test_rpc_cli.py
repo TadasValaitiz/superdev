@@ -134,8 +134,9 @@ class RpcServerTests(unittest.TestCase):
 
     def tearDown(self):
         for server in reversed(self.servers):
-            with contextlib.suppress(Exception):
-                server.shutdown()
+            if getattr(server, "_test_thread", None) is not None:
+                with contextlib.suppress(Exception):
+                    server.shutdown()
             with contextlib.suppress(Exception):
                 server.server_close()
 
@@ -207,6 +208,48 @@ class RpcServerTests(unittest.TestCase):
         with self.assertRaises(SocketPathUnsafe):
             self.start_server()
         self.assertEqual(Path(self.socket_path).read_text(encoding="utf-8"), "owned by another process")
+
+    def test_existing_socket_parent_permissions_are_not_changed(self):
+        parent = Path(self.tempdir.name) / "shared"
+        parent.mkdir()
+        parent.chmod(0o755)
+        self.socket_path = str(parent / "worker.sock")
+        self.start_server()
+        self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o755)
+
+    def test_concurrent_daemons_cannot_both_replace_the_same_stale_socket(self):
+        stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        stale.bind(self.socket_path)
+        stale.close()
+        successes = []
+        failures = []
+        lock = threading.Lock()
+
+        def build_server():
+            try:
+                server = RpcServer(self.socket_path, FakeBroker())
+            except Exception as exc:
+                with lock:
+                    failures.append(exc)
+                return
+            with lock:
+                successes.append(server)
+
+        workers = [threading.Thread(target=build_server) for _ in range(6)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        self.servers.extend(successes)
+        self.assertEqual(len(successes), 1)
+        self.assertTrue(all(isinstance(exc, SocketInUse) for exc in failures))
+        self.assertEqual(len(failures), 5)
+
+    def test_start_lock_path_must_be_a_regular_file(self):
+        Path(self.socket_path + ".lock").mkdir()
+        with self.assertRaises(SocketPathUnsafe):
+            self.start_server()
+        self.assertTrue(Path(self.socket_path + ".lock").is_dir())
 
     def test_dispatch_converts_params_and_domain_faults_to_json_rpc(self):
         broker = FakeBroker()
@@ -359,6 +402,10 @@ class CliTests(unittest.TestCase):
         prompt = self.run_cli(["turn", "start", "--session", self.session_id,
                                "--prompt", "inline", "--prompt-file", str(self.prompt_file)])
         self.assertEqual(prompt.returncode, 2)
+        non_finite = self.run_cli(["turn", "wait", "--session", self.session_id,
+                                   "--timeout", "inf"])
+        self.assertEqual(non_finite.returncode, 2)
+        self.assertNotIn("Traceback", non_finite.stderr)
 
     def test_pretty_prints_one_json_object_for_client_commands(self):
         completed = self.run_cli(["--pretty", "daemon", "status"], fake_rpc=self.fake_rpc_success)

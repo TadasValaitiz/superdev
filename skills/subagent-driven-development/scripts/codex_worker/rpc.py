@@ -1,6 +1,8 @@
 """Local AF_UNIX JSON-RPC server and client for the Codex worker broker."""
 import errno
+import fcntl
 import json
+import math
 import os
 import socket
 import socketserver
@@ -135,20 +137,21 @@ class RpcServer(ThreadingUnixServer):
         self.broker = broker
         self._shutdown_started = False
         self._bound_stat = None
-        self._prepare_socket_path(socket_path)
+        self._lock_fd = None  # type: Optional[int]
         parent = os.path.dirname(socket_path)
         if parent:
             os.makedirs(parent, mode=0o700, exist_ok=True)
-            try:
-                os.chmod(parent, 0o700)
-            except OSError:
-                pass
-        super().__init__(socket_path, RpcRequestHandler)
-        os.chmod(socket_path, 0o600)
         try:
-            self._bound_stat = os.stat(socket_path)
-        except OSError:
-            self._bound_stat = None
+            self._acquire_start_lock()
+            self._prepare_socket_path(socket_path)
+            super().__init__(socket_path, RpcRequestHandler)
+            os.chmod(socket_path, 0o600)
+            try:
+                self._bound_stat = os.stat(socket_path)
+            except OSError:
+                self._bound_stat = None
+        finally:
+            self._release_start_lock()
 
     def server_close(self) -> None:
         super().server_close()
@@ -192,6 +195,36 @@ class RpcServer(ThreadingUnixServer):
         except OSError:
             pass
 
+    def _acquire_start_lock(self) -> None:
+        lock_path = self.socket_path + ".lock"
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(lock_path, flags, 0o600)
+        except OSError as exc:
+            raise SocketPathUnsafe("socket lock path is unsafe: %s" % lock_path) from exc
+        try:
+            metadata = os.fstat(fd)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
+                raise SocketPathUnsafe("socket lock path must be an owner-owned regular file")
+            os.fchmod(fd, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(fd)
+            raise
+        self._lock_fd = fd
+
+    def _release_start_lock(self) -> None:
+        if self._lock_fd is None:
+            return
+        fd = self._lock_fd
+        self._lock_fd = None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
 
 def _socket_accepts_connections(socket_path: str) -> bool:
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -223,6 +256,9 @@ def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
         params = {}
     if not isinstance(params, dict):
         raise ValueError("params must be an object")
+    if type(timeout) not in (int, float) or not math.isfinite(float(timeout)) or float(timeout) < 0:
+        raise ValueError("timeout must be a finite non-negative number")
+    timeout = float(timeout)
     request = {"jsonrpc": "2.0", "id": "cli", "method": method, "params": params}
     received = b""
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
