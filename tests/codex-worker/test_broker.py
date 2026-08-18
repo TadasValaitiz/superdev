@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
+from codex_worker.app_server import CodexCallError
 from codex_worker.broker import ModelSelectionError, WorkerBroker
 from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
@@ -23,6 +24,7 @@ class FakeCodex:
         ]
         self.start_result = None
         self.resume_result = None
+        self.start_exception = None
         self.start_calls = []
         self.resume_calls = []
         self.turn_start_calls = []
@@ -36,12 +38,16 @@ class FakeCodex:
         self.emit_before_response = False
         self.response_turn_id = None
         self.notification_turn_id = None
+        self.control_failure = None
+        self.control_hook = None
 
     def list_models(self):
         return list(self.models)
 
     def start_thread(self, cwd, model=None):
         self.start_calls.append({"cwd": cwd, "model": model})
+        if self.start_exception is not None:
+            raise self.start_exception
         return self.start_result or {"thread": {"id": "thr-start", "cwd": cwd}, "model": model}
 
     def resume_thread(self, thread_id, approval_policy="never", sandbox="workspace-write"):
@@ -67,10 +73,18 @@ class FakeCodex:
 
     def steer(self, thread_id, turn_id, prompt):
         self.steer_calls.append({"thread_id": thread_id, "turn_id": turn_id, "prompt": prompt})
+        if self.control_hook is not None:
+            self.control_hook()
+        if self.control_failure is not None:
+            raise self.control_failure
         return turn_id
 
     def interrupt(self, thread_id, turn_id):
         self.interrupt_calls.append({"thread_id": thread_id, "turn_id": turn_id})
+        if self.control_hook is not None:
+            self.control_hook()
+        if self.control_failure is not None:
+            raise self.control_failure
         if self._active == (thread_id, turn_id):
             self._emit_completed(thread_id, turn_id, "interrupted")
             self._active = None
@@ -151,6 +165,31 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(self.codex.resume_calls[0]["cwd"], None)
         self.assertEqual(self.codex.resume_calls[0]["sandbox"], "workspace-write")
         self.assertEqual(SessionRegistry(self.state_path).resolve(IdentifierSelector(thread_id="thr-9")).cwd, self.cwd)
+
+    def test_recovery_rejects_invalid_upstream_cwds_as_protocol_faults_without_persisting(self):
+        invalid_responses = [
+            {"thread": {"id": "thr-missing"}},
+            {"thread": {"id": "thr-relative", "cwd": "relative"}},
+            {"thread": {"id": "thr-gone", "cwd": str(Path(self.cwd) / "gone")}},
+            {"thread": {"id": "thr-conflict", "cwd": self.cwd}, "cwd": tempfile.gettempdir()},
+        ]
+        for response in invalid_responses:
+            with self.subTest(response=response):
+                self.codex.resume_result = response
+                thread_id = response["thread"]["id"]
+                with self.assertRaises(RpcFault) as caught:
+                    self.broker.session_resume(IdentifierSelector(thread_id=thread_id))
+                self.assertEqual(caught.exception.kind, "codex_protocol_error")
+                self.assertIsNone(self.registry.try_resolve(IdentifierSelector(thread_id=thread_id)))
+
+    def test_adapter_protocol_error_is_a_broker_protocol_fault(self):
+        self.codex.start_exception = CodexCallError("protocol_error", "thread/start", {
+            "message": "thread/start response omitted thread id",
+        })
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.session_start(self.cwd)
+        self.assertEqual(caught.exception.code, -32015)
+        self.assertEqual(caught.exception.kind, "codex_protocol_error")
 
     def test_existing_session_resume_rejects_upstream_cwd_drift_without_attaching(self):
         selector = self.start_session()
@@ -236,6 +275,38 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertTrue(steered["accepted"])
         self.assertEqual(waiter.result()["turn"]["status"], "completed")
         self.assertEqual(self.codex.steer_calls[-1]["turn_id"], "turn-1")
+
+    def test_delayed_steer_error_after_replacement_turn_is_not_active_race(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+
+        def replace_turn():
+            self.codex.complete_active_turn()
+            self.broker.turn_start(session, "replacement", model="fake-model-a", effort="medium")
+
+        self.codex.control_hook = replace_turn
+        self.codex.control_failure = CodexCallError("upstream_error", "turn/steer")
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_steer(session, "narrow the task")
+        self.assertEqual(caught.exception.kind, "turn_not_active")
+        self.assertEqual(caught.exception.details["latest_turn"]["turn_id"], "turn-1")
+        self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
+
+    def test_delayed_interrupt_error_after_replacement_turn_is_not_active_race(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+
+        def replace_turn():
+            self.codex.complete_active_turn()
+            self.broker.turn_start(session, "replacement", model="fake-model-a", effort="medium")
+
+        self.codex.control_hook = replace_turn
+        self.codex.control_failure = CodexCallError("upstream_error", "turn/interrupt")
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_interrupt(session)
+        self.assertEqual(caught.exception.kind, "turn_not_active")
+        self.assertEqual(caught.exception.details["latest_turn"]["turn_id"], "turn-1")
+        self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
 
     def test_interrupt_completes_active_turn_and_idle_race_is_typed(self):
         session = self.start_session()

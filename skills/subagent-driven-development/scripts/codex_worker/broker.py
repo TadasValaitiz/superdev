@@ -229,7 +229,7 @@ class WorkerBroker:
         try:
             returned_id = self.codex.steer(record.thread_id, turn_id, prompt)
         except CodexCallError as exc:
-            self._raise_control_race_or_codex(record, exc)
+            self._raise_control_race_or_codex(record, turn_id, exc)
         if returned_id != turn_id:
             raise _fault(
                 -32015, "Codex steer returned a different turn", "codex_protocol_error",
@@ -244,7 +244,7 @@ class WorkerBroker:
         try:
             self.codex.interrupt(record.thread_id, turn_id)
         except CodexCallError as exc:
-            self._raise_control_race_or_codex(record, exc)
+            self._raise_control_race_or_codex(record, turn_id, exc)
         return {"session_id": record.session_id, "thread_id": record.thread_id,
                 "turn_id": turn_id, "accepted": True}
 
@@ -341,13 +341,29 @@ class WorkerBroker:
             raise _fault(-32015, "Codex thread response omitted its ID", "codex_protocol_error")
         # Codex 0.147.0 requires Thread.cwd.  Prefer it over the duplicate
         # response-level compatibility field and reject their disagreement.
-        thread_cwd = self._canonical_cwd(thread.get("cwd"), "Codex returned cwd")
+        thread_cwd = self._upstream_cwd(thread.get("cwd"), "Codex thread.cwd")
         response_cwd = response.get("cwd")
         if response_cwd is not None:
-            normalized_response_cwd = self._canonical_cwd(response_cwd, "Codex returned cwd")
+            normalized_response_cwd = self._upstream_cwd(response_cwd, "Codex response cwd")
             if normalized_response_cwd != thread_cwd:
                 raise _fault(-32015, "Codex response has conflicting working directories", "codex_protocol_error")
         return thread["id"], thread_cwd
+
+    @staticmethod
+    def _upstream_cwd(cwd: Any, label: str) -> str:
+        """Validate a Codex-provided immutable cwd as upstream protocol data."""
+        if not isinstance(cwd, str) or not cwd:
+            raise _fault(-32015, "%s is missing or malformed" % label, "codex_protocol_error")
+        path = Path(cwd)
+        if not path.is_absolute():
+            raise _fault(-32015, "%s must be absolute" % label, "codex_protocol_error")
+        try:
+            canonical = str(path.resolve(strict=True))
+        except (OSError, RuntimeError) as exc:
+            raise _fault(-32015, "%s must be an existing directory" % label, "codex_protocol_error") from exc
+        if not os.path.isdir(canonical):
+            raise _fault(-32015, "%s must be an existing directory" % label, "codex_protocol_error")
+        return canonical
 
     @staticmethod
     def _string_annotation(response: Any, key: str) -> Optional[str]:
@@ -404,9 +420,10 @@ class WorkerBroker:
             raise self._turn_not_active(record, status.latest_turn)
         return status.active_turn_id
 
-    def _raise_control_race_or_codex(self, record: SessionRecord, exc: CodexCallError) -> None:
+    def _raise_control_race_or_codex(self, record: SessionRecord, expected_turn_id: str,
+                                     exc: CodexCallError) -> None:
         status = self._status_or_detached(record)
-        if status.active_turn_id is None:
+        if status.active_turn_id != expected_turn_id:
             raise self._turn_not_active(record, status.latest_turn) from exc
         raise self._codex_fault(exc) from exc
 
@@ -423,6 +440,11 @@ class WorkerBroker:
 
     @staticmethod
     def _codex_fault(exc: CodexCallError) -> RpcFault:
+        if exc.kind == "protocol_error":
+            return _fault(
+                -32015, "Codex response violates the expected protocol", "codex_protocol_error",
+                details={"method": exc.method, "details": exc.details},
+            )
         return _fault(
             -32020, "Codex operation failed", "codex_failure",
             details={"method": exc.method, "kind": exc.kind, "details": exc.details},
