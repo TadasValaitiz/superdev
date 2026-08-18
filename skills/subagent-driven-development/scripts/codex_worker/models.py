@@ -143,12 +143,18 @@ class SessionRecord:
 
 
 @dataclass(frozen=True)
-class RpcFault:
+class RpcFault(Exception):
     code: int
     message: str
     kind: str
     recovery: Optional[str] = None
     details: Optional[JsonObject] = None
+
+    def __post_init__(self) -> None:
+        # Broker/domain callers raise this value directly; keeping the wire
+        # representation and the exception contract in one type prevents a
+        # second, drifting hierarchy of RPC errors.
+        Exception.__init__(self, self.message)
 
     def to_dict(self) -> JsonObject:
         data = ErrorDetail(self.kind, self.recovery, self.details).to_dict()
