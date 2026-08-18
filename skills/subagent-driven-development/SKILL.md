@@ -11,6 +11,10 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 **Core principle:** Fresh subagent per task + task review (spec + quality) + broad final review = high quality, fast iteration
 
+## Codex workers from Claude Code
+
+When the operator or plan selects a Codex worker, read [Codex worker broker](codex-worker.md). Start its daemon explicitly, discover models live, give each implementer/reviewer a distinct session and worktree, and preserve the normal task brief/report/review-package contracts. A worker never reviews its own diff, and a resumed session never changes cwd.
+
 **Narration:** between tool calls, narrate at most one short line — the
 ledger and the tool results carry the record.
 
