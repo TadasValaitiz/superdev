@@ -8,6 +8,7 @@ import socket
 import socketserver
 import stat
 import threading
+import time
 from typing import Any, Callable, Dict, Optional, Union
 
 from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
@@ -15,6 +16,7 @@ from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
 JsonId = Optional[Union[str, int]]
 
 MAX_REQUEST_BYTES = 1024 * 1024
+START_LOCK_TIMEOUT_SECONDS = 2.0
 
 
 class SocketPathUnsafe(RuntimeError):
@@ -51,10 +53,53 @@ def daemon_unavailable_fault(socket_path: str) -> RpcFault:
     )
 
 
+def socket_endpoint_unsafe_fault(socket_path: str, reason: str) -> RpcFault:
+    return _fault(
+        -32017,
+        "Codex worker socket endpoint is unsafe",
+        "socket_endpoint_unsafe",
+        recovery="remove the unsafe endpoint and restart codex-worker daemon serve",
+        details={"socket_path": socket_path, "reason": reason},
+    )
+
+
+def _json_dumps(payload: JsonObject) -> str:
+    return json.dumps(payload, separators=(",", ":"), allow_nan=False)
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError("non-finite JSON constant is not allowed: %s" % value)
+
+
+def _json_loads(data: Union[str, bytes]) -> Any:
+    if isinstance(data, bytes):
+        data = data.decode("utf-8")
+    return json.loads(data, parse_constant=_reject_json_constant)
+
+
+def _finite_nonnegative_float(value: Any, label: str) -> float:
+    if type(value) not in (int, float):
+        raise ValueError("%s must be a finite non-negative number" % label)
+    try:
+        parsed = float(value)
+    except OverflowError as exc:
+        raise ValueError("%s must be finite" % label) from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError("%s must be a finite non-negative number" % label)
+    return parsed
+
+
+def _bounded_platform_timeout(timeout: float) -> float:
+    maximum = getattr(threading, "TIMEOUT_MAX", None)
+    if type(maximum) in (int, float) and math.isfinite(float(maximum)):
+        return min(timeout, float(maximum))
+    return timeout
+
+
 def encode_response(request_id: JsonId, result: Optional[JsonObject] = None,
                     fault: Optional[RpcFault] = None) -> bytes:
     envelope = rpc_response(request_id, result=result, fault=fault)
-    return (json.dumps(envelope, separators=(",", ":")) + "\n").encode("utf-8")
+    return (_json_dumps(envelope) + "\n").encode("utf-8")
 
 
 class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
@@ -65,13 +110,14 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         request_id = None  # type: JsonId
         method = None  # type: Optional[str]
+        shutdown_accepted = False
         try:
             raw = self.rfile.readline(MAX_REQUEST_BYTES + 1)
             if not raw or len(raw) > MAX_REQUEST_BYTES:
                 self._write(encode_response(None, fault=INVALID_REQUEST))
                 return
             try:
-                payload = json.loads(raw.decode("utf-8"))
+                payload = _json_loads(raw)
             except (UnicodeDecodeError, ValueError, TypeError):
                 self._write(encode_response(None, fault=PARSE_ERROR))
                 return
@@ -79,9 +125,8 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
             try:
                 method, params = self._validate_request(payload)
                 result = self.server.dispatch(method, params)  # type: ignore[attr-defined]
+                shutdown_accepted = method == "daemon/shutdown"
                 self._write(encode_response(request_id, result=result))
-                if method == "daemon/shutdown":
-                    self.server.request_shutdown()  # type: ignore[attr-defined]
             except RpcFault as fault:
                 self._write(encode_response(request_id, fault=fault))
             except ValueError as exc:
@@ -94,6 +139,9 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
                 )))
         except (BrokenPipeError, ConnectionError, OSError):
             return
+        finally:
+            if shutdown_accepted:
+                self.server.request_shutdown()  # type: ignore[attr-defined]
 
     def _write(self, payload: bytes) -> None:
         self.wfile.write(payload)
@@ -119,12 +167,9 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
         method = payload.get("method")
         if not isinstance(method, str) or not method:
             raise INVALID_REQUEST
-        params = payload.get("params")
-        if params is None:
-            params = {}
-        if not isinstance(params, dict):
+        if "params" not in payload or not isinstance(payload.get("params"), dict):
             raise _fault(-32602, "Invalid params", "invalid_params")
-        return method, params
+        return method, payload["params"]
 
 
 class RpcServer(ThreadingUnixServer):
@@ -141,15 +186,35 @@ class RpcServer(ThreadingUnixServer):
         parent = os.path.dirname(socket_path)
         if parent:
             os.makedirs(parent, mode=0o700, exist_ok=True)
+        parent_reason = _unsafe_socket_parent_reason(socket_path)
+        if parent_reason is not None:
+            raise SocketPathUnsafe(parent_reason)
         try:
             self._acquire_start_lock()
             self._prepare_socket_path(socket_path)
-            super().__init__(socket_path, RpcRequestHandler)
-            os.chmod(socket_path, 0o600)
             try:
-                self._bound_stat = os.stat(socket_path)
+                super().__init__(socket_path, RpcRequestHandler, bind_and_activate=False)
+                self.server_bind()
+                self._bound_stat = os.lstat(socket_path)
+                if not stat.S_ISSOCK(self._bound_stat.st_mode) or self._bound_stat.st_uid != os.getuid():
+                    raise SocketPathUnsafe("bound socket inode is unsafe")
+                os.chmod(socket_path, 0o600)
+                hardened = os.lstat(socket_path)
+                if ((hardened.st_dev, hardened.st_ino) != (self._bound_stat.st_dev, self._bound_stat.st_ino)
+                        or not stat.S_ISSOCK(hardened.st_mode)
+                        or hardened.st_uid != os.getuid()
+                        or stat.S_IMODE(hardened.st_mode) != 0o600):
+                    raise SocketPathUnsafe("bound socket permissions could not be hardened")
+                self._bound_stat = hardened
+                self.server_activate()
             except OSError:
-                self._bound_stat = None
+                if hasattr(self, "socket"):
+                    self.server_close()
+                raise
+            except BaseException:
+                if hasattr(self, "socket"):
+                    self.server_close()
+                raise
         finally:
             self._release_start_lock()
 
@@ -176,6 +241,8 @@ class RpcServer(ThreadingUnixServer):
             return
         if not stat.S_ISSOCK(metadata.st_mode):
             raise SocketPathUnsafe("socket path exists and is not a socket: %s" % socket_path)
+        if metadata.st_uid != os.getuid():
+            raise SocketPathUnsafe("socket path is not owned by this user: %s" % socket_path)
         if _socket_accepts_connections(socket_path):
             raise SocketInUse("socket path is already served: %s" % socket_path)
         os.unlink(socket_path)
@@ -187,9 +254,10 @@ class RpcServer(ThreadingUnixServer):
             return
         if not stat.S_ISSOCK(metadata.st_mode):
             return
-        if self._bound_stat is not None:
-            if (metadata.st_dev, metadata.st_ino) != (self._bound_stat.st_dev, self._bound_stat.st_ino):
-                return
+        if self._bound_stat is None:
+            return
+        if (metadata.st_dev, metadata.st_ino) != (self._bound_stat.st_dev, self._bound_stat.st_ino):
+            return
         try:
             os.unlink(self.socket_path)
         except OSError:
@@ -197,6 +265,15 @@ class RpcServer(ThreadingUnixServer):
 
     def _acquire_start_lock(self) -> None:
         lock_path = self.socket_path + ".lock"
+        try:
+            existing = os.lstat(lock_path)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None:
+            if not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.getuid():
+                raise SocketPathUnsafe("socket lock path must be an owner-owned regular file")
+            if stat.S_IMODE(existing.st_mode) & 0o077:
+                raise SocketPathUnsafe("socket lock path must be owner-only")
         flags = os.O_RDWR | os.O_CREAT
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
@@ -209,7 +286,18 @@ class RpcServer(ThreadingUnixServer):
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
                 raise SocketPathUnsafe("socket lock path must be an owner-owned regular file")
             os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            metadata = os.fstat(fd)
+            if stat.S_IMODE(metadata.st_mode) != 0o600:
+                raise SocketPathUnsafe("socket lock path permissions could not be hardened")
+            deadline = time.monotonic() + START_LOCK_TIMEOUT_SECONDS
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise SocketInUse("socket startup lock is held: %s" % lock_path)
+                    time.sleep(0.02)
         except BaseException:
             os.close(fd)
             raise
@@ -237,7 +325,7 @@ def _socket_accepts_connections(socket_path: str) -> bool:
                 return False
             raise SocketInUse("socket path could not be probed safely: %s" % socket_path)
         request = {"jsonrpc": "2.0", "id": "probe", "method": "daemon/status", "params": {}}
-        client.sendall((json.dumps(request, separators=(",", ":")) + "\n").encode("utf-8"))
+        client.sendall((_json_dumps(request) + "\n").encode("utf-8"))
         # If a process accepted the connection, treat it as live even if it is
         # slow, incompatible, or returns an error.  Safety beats convenience:
         # never unlink a socket with an accepting peer behind it.
@@ -256,9 +344,8 @@ def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
         params = {}
     if not isinstance(params, dict):
         raise ValueError("params must be an object")
-    if type(timeout) not in (int, float) or not math.isfinite(float(timeout)) or float(timeout) < 0:
-        raise ValueError("timeout must be a finite non-negative number")
-    timeout = float(timeout)
+    timeout = _bounded_platform_timeout(_finite_nonnegative_float(timeout, "timeout"))
+    expected_endpoint = _validate_socket_endpoint(socket_path)
     request = {"jsonrpc": "2.0", "id": "cli", "method": method, "params": params}
     received = b""
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -268,8 +355,9 @@ def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
             client.connect(socket_path)
         except OSError as exc:
             raise daemon_unavailable_fault(socket_path) from exc
-        encoded = (json.dumps(request, separators=(",", ":")) + "\n").encode("utf-8")
+        encoded = (_json_dumps(request) + "\n").encode("utf-8")
         try:
+            _validate_socket_endpoint(socket_path, expected_endpoint)
             client.sendall(encoded)
             while not received.endswith(b"\n"):
                 chunk = client.recv(65536)
@@ -279,18 +367,90 @@ def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
                 if len(received) > MAX_REQUEST_BYTES:
                     raise _fault(-32016, "Daemon response is too large", "daemon_protocol_error")
         except (socket.timeout, OSError) as exc:
+            if isinstance(exc, RpcFault):
+                raise
             raise daemon_unavailable_fault(socket_path) from exc
     finally:
         client.close()
     if not received:
         raise daemon_unavailable_fault(socket_path)
     try:
-        response = json.loads(received.decode("utf-8"))
+        response = _json_loads(received)
     except (UnicodeDecodeError, ValueError, TypeError) as exc:
         raise _fault(-32016, "Daemon returned malformed JSON", "daemon_protocol_error") from exc
+    _validate_response_envelope(response, expected_id="cli")
+    return response
+
+
+def _validate_response_envelope(response: Any, expected_id: str) -> None:
     if not isinstance(response, dict):
         raise _fault(-32016, "Daemon returned a non-object response", "daemon_protocol_error")
-    return response
+    if response.get("jsonrpc") != "2.0":
+        raise _fault(-32016, "Daemon response has invalid jsonrpc version", "daemon_protocol_error")
+    if response.get("id") != expected_id:
+        raise _fault(-32016, "Daemon response id does not match request", "daemon_protocol_error")
+    has_result = "result" in response
+    has_error = "error" in response
+    if has_result == has_error:
+        raise _fault(-32016, "Daemon response must contain exactly one of result or error",
+                     "daemon_protocol_error")
+    if has_result and not isinstance(response.get("result"), dict):
+        raise _fault(-32016, "Daemon response result must be an object", "daemon_protocol_error")
+    if has_error:
+        error = response.get("error")
+        if (not isinstance(error, dict)
+                or type(error.get("code")) is not int
+                or not isinstance(error.get("message"), str)
+                or not isinstance(error.get("data"), dict)
+                or not isinstance(error["data"].get("kind"), str)):
+            raise _fault(-32016, "Daemon response error is malformed", "daemon_protocol_error")
+
+
+def _validate_socket_endpoint(socket_path: str, expected: Any = None):
+    try:
+        metadata = os.lstat(socket_path)
+    except FileNotFoundError as exc:
+        raise daemon_unavailable_fault(socket_path) from exc
+    except OSError as exc:
+        raise socket_endpoint_unsafe_fault(socket_path, "could not inspect socket path") from exc
+    if expected is not None and (metadata.st_dev, metadata.st_ino) != (expected.st_dev, expected.st_ino):
+        raise socket_endpoint_unsafe_fault(socket_path, "socket endpoint changed during connect")
+    if not stat.S_ISSOCK(metadata.st_mode):
+        raise socket_endpoint_unsafe_fault(socket_path, "path is not an AF_UNIX socket")
+    if metadata.st_uid != os.getuid():
+        raise socket_endpoint_unsafe_fault(socket_path, "socket is not owned by this user")
+    if stat.S_IMODE(metadata.st_mode) & 0o077:
+        raise socket_endpoint_unsafe_fault(socket_path, "socket is accessible by group or other users")
+    parent_reason = _unsafe_socket_parent_reason(socket_path)
+    if parent_reason is not None:
+        raise socket_endpoint_unsafe_fault(socket_path, parent_reason)
+    return metadata
+
+
+def _unsafe_socket_parent_reason(socket_path: str) -> Optional[str]:
+    parent = os.path.dirname(socket_path) or "."
+    try:
+        parent_metadata = os.lstat(parent)
+    except OSError as exc:
+        return "could not inspect socket parent: %s" % type(exc).__name__
+    if not stat.S_ISDIR(parent_metadata.st_mode):
+        return "socket parent is not a directory"
+    parent_mode = stat.S_IMODE(parent_metadata.st_mode)
+    parent_writable_by_others = bool(parent_mode & 0o022)
+    parent_sticky = bool(parent_metadata.st_mode & stat.S_ISVTX)
+    if parent_writable_by_others and not parent_sticky:
+        return "socket parent is writable by group/other users without sticky-bit protection"
+    return None
+
+
+def _expect_params(params: JsonObject, allowed, required=()) -> None:
+    allowed_set = set(allowed)
+    unexpected = sorted(set(params) - allowed_set)
+    if unexpected:
+        raise ValueError("unexpected params: %s" % ", ".join(unexpected))
+    missing = [key for key in required if key not in params]
+    if missing:
+        raise ValueError("missing params: %s" % ", ".join(missing))
 
 
 def _optional_string(params: JsonObject, key: str) -> Optional[str]:
@@ -323,7 +483,13 @@ def _number(params: JsonObject, key: str) -> float:
     value = params.get(key)
     if type(value) not in (int, float):
         raise ValueError("%s must be a number" % key)
-    return float(value)
+    try:
+        parsed = float(value)
+    except OverflowError as exc:
+        raise ValueError("%s must be finite" % key) from exc
+    if not math.isfinite(parsed):
+        raise ValueError("%s must be finite" % key)
+    return parsed
 
 
 def _integer(params: JsonObject, key: str) -> int:
@@ -352,6 +518,7 @@ def _model_list(broker: Any, params: JsonObject) -> JsonObject:
 
 
 def _session_start(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("cwd", "name", "model"), required=("cwd",))
     return broker.session_start(
         _required_string(params, "cwd"),
         name=_optional_string(params, "name"),
@@ -360,6 +527,7 @@ def _session_start(broker: Any, params: JsonObject) -> JsonObject:
 
 
 def _session_resume(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id", "name"))
     return broker.session_resume(_selector(params), name=_optional_string(params, "name"))
 
 
@@ -368,10 +536,12 @@ def _session_list(broker: Any, params: JsonObject) -> JsonObject:
 
 
 def _session_show(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id"))
     return broker.session_show(_selector(params))
 
 
 def _turn_start(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id", "prompt", "model", "effort"), required=("prompt",))
     return broker.turn_start(
         _selector(params),
         _required_string(params, "prompt"),
@@ -381,17 +551,20 @@ def _turn_start(broker: Any, params: JsonObject) -> JsonObject:
 
 
 def _turn_status(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id"))
     return broker.turn_status(_selector(params))
 
 
 def _turn_wait(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id", "timeout"), required=("timeout",))
     timeout = _number(params, "timeout")
     if timeout < 0:
         raise ValueError("timeout must be non-negative")
-    return broker.turn_wait(_selector(params), timeout)
+    return broker.turn_wait(_selector(params), _bounded_platform_timeout(timeout))
 
 
 def _turn_events(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id", "after", "limit"), required=("after", "limit"))
     after = _integer(params, "after")
     limit = _integer(params, "limit")
     if after < 0:
@@ -402,10 +575,12 @@ def _turn_events(broker: Any, params: JsonObject) -> JsonObject:
 
 
 def _turn_steer(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id", "prompt"), required=("prompt",))
     return broker.turn_steer(_selector(params), _required_string(params, "prompt"))
 
 
 def _turn_interrupt(broker: Any, params: JsonObject) -> JsonObject:
+    _expect_params(params, ("session_id", "thread_id"))
     return broker.turn_interrupt(_selector(params))
 
 

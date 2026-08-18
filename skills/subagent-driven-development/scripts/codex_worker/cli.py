@@ -34,6 +34,17 @@ DOCUMENTED_CLIENT_METHODS = {
 }
 
 
+class CliUsageError(ValueError):
+    pass
+
+
+class CodexWorkerArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self._print_message("%s: error: %s\n" % (self.prog, message), sys.stderr)
+        raise CliUsageError(message)
+
+
 def default_socket_path() -> str:
     configured = os.environ.get("SUPERDEV_CODEX_WORKER_SOCKET")
     if configured:
@@ -83,7 +94,7 @@ def _nonnegative_float(value: str) -> float:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = CodexWorkerArgumentParser(
         prog="codex-worker",
         description="Local Unix-socket broker for durable Codex worker sessions.",
     )
@@ -92,10 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pretty", action="store_true",
                         help="Pretty-print JSON responses for client commands")
 
-    families = parser.add_subparsers(dest="family", required=True)
+    families = parser.add_subparsers(
+        dest="family", required=True, parser_class=CodexWorkerArgumentParser
+    )
 
     daemon = families.add_parser("daemon", help="broker lifecycle")
-    daemon_sub = daemon.add_subparsers(dest="action", required=True)
+    daemon_sub = daemon.add_subparsers(
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser
+    )
     serve = daemon_sub.add_parser("serve", help="run the worker daemon in the foreground")
     serve.set_defaults(method=None)
     serve.add_argument("--state", default=default_state_path(),
@@ -108,11 +123,15 @@ def build_parser() -> argparse.ArgumentParser:
     daemon_sub.add_parser("shutdown", help="gracefully stop the daemon").set_defaults(method="daemon/shutdown")
 
     model = families.add_parser("model", help="live Codex model discovery")
-    model_sub = model.add_subparsers(dest="action", required=True)
+    model_sub = model.add_subparsers(
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser
+    )
     model_sub.add_parser("list", help="list discovered models and reasoning efforts").set_defaults(method="model/list")
 
     session = families.add_parser("session", help="durable conversation identity")
-    session_sub = session.add_subparsers(dest="action", required=True)
+    session_sub = session.add_subparsers(
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser
+    )
     session_start = session_sub.add_parser("start", help="create and persist a new session")
     session_start.set_defaults(method="session/start")
     session_start.add_argument("--cwd", required=True, help="absolute worker cwd")
@@ -130,7 +149,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_selector_group(session_show)
 
     turn = families.add_parser("turn", help="start, observe, steer, or interrupt turns")
-    turn_sub = turn.add_subparsers(dest="action", required=True)
+    turn_sub = turn.add_subparsers(
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser
+    )
 
     turn_start = turn_sub.add_parser("start", help="start a turn and return immediately")
     turn_start.set_defaults(method="turn/start")
@@ -181,10 +202,45 @@ def _add_prompt_group(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--prompt-file", help="path to a UTF-8 prompt file")
 
 
+def _argv_selects_daemon_serve(argv: List[str]) -> bool:
+    positional = []
+    skip_next = False
+    for token in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--socket":
+            skip_next = True
+            continue
+        if token.startswith("--socket="):
+            continue
+        if token == "--pretty":
+            continue
+        if token in ("-h", "--help"):
+            return False
+        if token.startswith("-"):
+            continue
+        positional.append(token)
+    return len(positional) >= 2 and positional[0] == "daemon" and positional[1] == "serve"
+
+
+def _argv_wants_pretty(argv: List[str]) -> bool:
+    return "--pretty" in argv
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(raw_argv)
+    except CliUsageError as exc:
+        if _argv_selects_daemon_serve(raw_argv):
+            return 2
+        response = rpc_response(None, fault=RpcFault(
+            -32602, "Invalid params", "invalid_params", details={"reason": str(exc)}
+        ))
+        _print_json(response, _argv_wants_pretty(raw_argv))
+        return 2
     except SystemExit as exc:
         return int(exc.code)
 
@@ -271,6 +327,8 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
             "model": args.model,
         }
     if method == "session/resume":
+        if getattr(args, "session_id", None) is not None and args.name is not None:
+            raise ValueError("--name is only valid with --thread raw recovery")
         return _selector_params(args, {"name": args.name})
     if method == "session/show":
         return _selector_params(args, {})
@@ -303,12 +361,19 @@ def _selector_params(args: argparse.Namespace, extra: JsonObject) -> JsonObject:
 
 
 def _prompt(args: argparse.Namespace) -> str:
-    if getattr(args, "prompt_file", None):
+    prompt_file = getattr(args, "prompt_file", None)
+    if prompt_file is not None:
+        if not prompt_file:
+            raise ValueError("prompt file path must be non-empty")
         try:
-            return Path(args.prompt_file).read_text(encoding="utf-8")
+            prompt = Path(prompt_file).read_text(encoding="utf-8")
         except OSError as exc:
             raise ValueError("could not read prompt file: %s" % exc) from exc
-    return args.prompt
+    else:
+        prompt = args.prompt
+    if not isinstance(prompt, str) or not prompt:
+        raise ValueError("prompt must be a non-empty string")
+    return prompt
 
 
 def _client_timeout(method: str, params: JsonObject) -> float:
@@ -321,6 +386,6 @@ def _client_timeout(method: str, params: JsonObject) -> float:
 
 def _print_json(payload: JsonObject, pretty: bool) -> None:
     if pretty:
-        print(json.dumps(payload, indent=2, sort_keys=True))
+        print(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False))
     else:
-        print(json.dumps(payload, separators=(",", ":")))
+        print(json.dumps(payload, separators=(",", ":"), allow_nan=False))
