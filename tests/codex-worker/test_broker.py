@@ -1,8 +1,11 @@
 import sys
 import tempfile
+import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
+from uuid import UUID
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
@@ -237,6 +240,49 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(ModelSelectionError):
             self.broker.turn_start(session, "task", model="not-live", effort="medium")
 
+    def test_effort_only_turn_uses_persisted_nondefault_model_for_validation_and_upstream(self):
+        session = self.start_session(model="fake-model-b")
+        result = self.broker.turn_start(session, "task", effort="high")
+        self.assertEqual(result["turn_id"], "turn-1")
+        self.assertEqual(self.codex.turn_start_calls[-1]["model"], "fake-model-b")
+        self.assertEqual(self.codex.turn_start_calls[-1]["effort"], "high")
+        record = self.registry.resolve(session)
+        self.assertEqual((record.model, record.effort), ("fake-model-b", "high"))
+
+    def test_effort_only_turn_uses_discovered_default_when_session_has_no_model(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "task", effort="medium")
+        self.assertEqual(self.codex.turn_start_calls[-1]["model"], "fake-model-a")
+        record = self.registry.resolve(session)
+        self.assertEqual((record.model, record.effort), ("fake-model-a", "medium"))
+
+    def test_effort_only_turn_does_not_search_nondefault_models_for_a_supported_effort(self):
+        session = self.start_session()
+        with self.assertRaises(ModelSelectionError) as caught:
+            self.broker.turn_start(session, "task", effort="high")
+        self.assertEqual(caught.exception.details["model"], "fake-model-a")
+        self.assertEqual(self.codex.turn_start_calls, [])
+
+    def test_model_only_turn_preserves_omitted_persisted_effort(self):
+        session = self.start_session(model="fake-model-b")
+        self.broker.turn_start(session, "first", effort="high")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "second", model="fake-model-a")
+        self.assertEqual(self.codex.turn_start_calls[-1]["model"], "fake-model-a")
+        self.assertEqual(self.codex.turn_start_calls[-1]["effort"], None)
+        record = self.registry.resolve(session)
+        self.assertEqual((record.model, record.effort), ("fake-model-a", "high"))
+
+    def test_turn_with_omitted_options_preserves_persisted_annotations(self):
+        session = self.start_session(model="fake-model-b")
+        self.broker.turn_start(session, "first", effort="high")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "second")
+        self.assertEqual(self.codex.turn_start_calls[-1]["model"], None)
+        self.assertEqual(self.codex.turn_start_calls[-1]["effort"], None)
+        record = self.registry.resolve(session)
+        self.assertEqual((record.model, record.effort), ("fake-model-b", "high"))
+
     def test_turn_start_is_nonblocking_and_updates_annotations_after_live_validation(self):
         session = self.start_session()
         result = self.broker.turn_start(session, "task", model="fake-model-b", effort="high")
@@ -251,6 +297,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.codex.emit_before_response = True
         result = self.broker.turn_start(session, "task", model="fake-model-a", effort="medium")
         self.assertEqual(result["turn_id"], "turn-1")
+        self.assertEqual(result["status"], "in_progress")
         status = self.broker.turn_status(session)
         self.assertIsNone(status["active_turn_id"])
         self.assertEqual(status["latest_turn"]["status"], "completed")
@@ -290,7 +337,10 @@ class WorkerBrokerTests(unittest.TestCase):
             self.broker.turn_start(session, "replacement", model="fake-model-a", effort="medium")
 
         self.codex.control_hook = replace_turn
-        self.codex.control_failure = CodexCallError("upstream_error", "turn/steer")
+        self.codex.control_failure = CodexCallError(
+            "upstream_error", "turn/steer",
+            {"code": -32600, "message": "no active turn to steer"},
+        )
         with self.assertRaises(RpcFault) as caught:
             self.broker.turn_steer(session, "narrow the task")
         self.assertEqual(caught.exception.kind, "turn_not_active")
@@ -306,12 +356,129 @@ class WorkerBrokerTests(unittest.TestCase):
             self.broker.turn_start(session, "replacement", model="fake-model-a", effort="medium")
 
         self.codex.control_hook = replace_turn
-        self.codex.control_failure = CodexCallError("upstream_error", "turn/interrupt")
+        self.codex.control_failure = CodexCallError(
+            "upstream_error", "turn/interrupt",
+            {"code": -32600, "message": "no active turn to interrupt"},
+        )
         with self.assertRaises(RpcFault) as caught:
             self.broker.turn_interrupt(session)
         self.assertEqual(caught.exception.kind, "turn_not_active")
         self.assertEqual(caught.exception.details["latest_turn"]["turn_id"], "turn-1")
         self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
+
+    def test_upstream_idle_steer_response_before_delayed_completion_is_typed_with_both_identities(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "second", model="fake-model-a", effort="medium")
+        response_ready = threading.Event()
+
+        def response_before_notification():
+            response_ready.set()
+
+        self.codex.control_hook = response_before_notification
+        self.codex.control_failure = CodexCallError(
+            "upstream_error", "turn/steer",
+            {"code": -32600, "message": "no active turn to steer"},
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self.broker.turn_steer, session, "too late")
+            self.assertTrue(response_ready.wait(1.0))
+            caught = future.exception(timeout=1.0)
+            self.codex.complete_active_turn()
+        self.assertIsInstance(caught, RpcFault)
+        self.assertEqual(caught.kind, "turn_not_active")
+        self.assertEqual(caught.details["turn_id"], "turn-2")
+        self.assertEqual(caught.details["latest_turn"]["turn_id"], "turn-1")
+        self.assertEqual(self.broker.turn_status(session)["latest_turn"]["turn_id"], "turn-2")
+
+    def test_upstream_idle_interrupt_response_before_delayed_completion_is_typed_with_both_identities(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "second", model="fake-model-a", effort="medium")
+        response_ready = threading.Event()
+
+        def response_before_notification():
+            response_ready.set()
+
+        self.codex.control_hook = response_before_notification
+        self.codex.control_failure = CodexCallError(
+            "upstream_error", "turn/interrupt",
+            {"code": -32600, "message": "no active turn to interrupt"},
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self.broker.turn_interrupt, session)
+            self.assertTrue(response_ready.wait(1.0))
+            caught = future.exception(timeout=1.0)
+            self.codex.complete_active_turn()
+        self.assertIsInstance(caught, RpcFault)
+        self.assertEqual(caught.kind, "turn_not_active")
+        self.assertEqual(caught.details["turn_id"], "turn-2")
+        self.assertEqual(caught.details["latest_turn"]["turn_id"], "turn-1")
+        self.assertEqual(self.broker.turn_status(session)["latest_turn"]["turn_id"], "turn-2")
+
+    def test_unrelated_control_error_is_not_misclassified_as_idle_race(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "task", model="fake-model-a", effort="medium")
+
+        def complete_before_unrelated_error():
+            self.codex.complete_active_turn()
+
+        self.codex.control_hook = complete_before_unrelated_error
+        self.codex.control_failure = CodexCallError(
+            "upstream_error", "turn/steer", {"code": -32600, "message": "permission denied"},
+        )
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_steer(session, "narrow")
+        self.assertEqual(caught.exception.kind, "codex_failure")
+
+    def test_session_start_persistence_failure_exposes_unpersisted_upstream_identity(self):
+        with mock.patch("codex_worker.registry.os.replace", side_effect=OSError("disk full")):
+            with self.assertRaises(RpcFault) as caught:
+                self.broker.session_start(self.cwd, name="worker", model="fake-model-b")
+        fault = caught.exception
+        self.assertEqual((fault.code, fault.kind), (-32011, "registry_error"))
+        self.assertEqual(fault.details["operation"], "session_start")
+        self.assertEqual(fault.details["durable_state"], "not_persisted")
+        UUID(fault.details["session_id"])
+        self.assertEqual(fault.details["thread_id"], "thr-start")
+        self.assertNotIn("turn_id", fault.details)
+        self.assertIn("session resume --thread thr-start", fault.recovery)
+
+    def test_raw_resume_persistence_failure_exposes_unpersisted_upstream_identity(self):
+        self.codex.resume_result = {"thread": {"id": "thr-recovered", "cwd": self.cwd}}
+        with mock.patch("codex_worker.registry.os.replace", side_effect=OSError("disk full")):
+            with self.assertRaises(RpcFault) as caught:
+                self.broker.session_resume(
+                    IdentifierSelector(thread_id="thr-recovered"), name="recovered"
+                )
+        fault = caught.exception
+        self.assertEqual((fault.code, fault.kind), (-32011, "registry_error"))
+        self.assertEqual(fault.details["operation"], "session_resume")
+        self.assertEqual(fault.details["durable_state"], "not_persisted")
+        UUID(fault.details["session_id"])
+        self.assertEqual(fault.details["thread_id"], "thr-recovered")
+        self.assertIn("session resume --thread thr-recovered", fault.recovery)
+
+    def test_turn_annotation_persistence_failure_exposes_started_turn_identity_and_recovery(self):
+        session = self.start_session(model="fake-model-a")
+        with mock.patch("codex_worker.registry.os.replace", side_effect=OSError("disk full")):
+            with self.assertRaises(RpcFault) as caught:
+                self.broker.turn_start(session, "task", effort="medium")
+        fault = caught.exception
+        self.assertEqual((fault.code, fault.kind), (-32011, "registry_error"))
+        self.assertEqual(fault.details, {
+            "operation": "turn_start_annotations",
+            "durable_state": "not_persisted",
+            "session_id": session.session_id,
+            "thread_id": "thr-start",
+            "turn_id": "turn-1",
+            "reason": "disk full",
+        })
+        self.assertIn("turn status --session %s" % session.session_id, fault.recovery)
+        self.assertIn("turn events --session %s" % session.session_id, fault.recovery)
+        self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-1")
 
     def test_interrupt_completes_active_turn_and_idle_race_is_typed(self):
         session = self.start_session()

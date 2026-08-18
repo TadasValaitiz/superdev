@@ -408,7 +408,7 @@ def turn_start(self, selector: IdentifierSelector, prompt: str, model: Optional[
 
 Treat interrupt completion races as typed `turn_not_active` faults carrying `latest_turn`; never implicitly steer/start a replacement turn.
 
-Add a test mode where fake Codex emits `turn/started` and `turn/completed` before replying to `turn/start`. Assert `turn_start` returns the matching ID, status is terminal, no active turn remains, and the next turn can reserve successfully. Add a mismatched-response-ID case that fails as `codex_protocol_error`.
+Add a test mode where fake Codex emits `turn/started` and `turn/completed` before replying to `turn/start`. Assert the literal `turn_start` response returns the matching ID with `status: "in_progress"`, while the runtime/status projection is terminal, no active turn remains, and the next turn can reserve successfully. Add a mismatched-response-ID case that fails as `codex_protocol_error`.
 
 - [ ] **Step 6: Run focused and fast gates**
 

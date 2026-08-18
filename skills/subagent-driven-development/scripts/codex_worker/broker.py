@@ -1,5 +1,6 @@
 """High-level durable session and turn contract for the Codex worker daemon."""
 import os
+import uuid
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -72,6 +73,7 @@ class WorkerBroker:
                       model: Optional[str] = None) -> JsonObject:
         canonical_cwd = self._canonical_cwd(cwd, "declared cwd")
         self._validate_model_effort(model, None)
+        session_id = str(uuid.uuid4())
         try:
             response = self.codex.start_thread(canonical_cwd, model=model)
             thread_id, returned_cwd = self._resume_identity(response)
@@ -80,15 +82,20 @@ class WorkerBroker:
                     -32014, "Codex returned a different working directory", "session_cwd_mismatch",
                     details={"expected_cwd": canonical_cwd, "returned_cwd": returned_cwd},
                 )
-            record = self.registry.create(thread_id, canonical_cwd, name, model, None)
-            self.runtime.attach(record)
-            return session_result(record, attached=True)
         except RpcFault:
             raise
-        except (RegistryError, ValueError) as exc:
-            raise _fault(-32011, "could not persist session", "registry_error", details={"reason": str(exc)}) from exc
         except CodexCallError as exc:
             raise self._codex_fault(exc) from exc
+        try:
+            record = self.registry.create(
+                thread_id, canonical_cwd, name, model, None, session_id=session_id
+            )
+        except (RegistryError, OSError) as exc:
+            raise self._post_upstream_registry_fault(
+                "session_start", session_id, thread_id, None, exc,
+            ) from exc
+        self.runtime.attach(record)
+        return session_result(record, attached=True)
 
     def session_resume(self, selector: IdentifierSelector,
                        name: Optional[str] = None) -> JsonObject:
@@ -121,6 +128,7 @@ class WorkerBroker:
 
         if selector.thread_id is None:
             raise self._unknown_session(selector)
+        session_id = str(uuid.uuid4())
         try:
             response = self.codex.resume_thread(
                 selector.thread_id, approval_policy="never", sandbox="workspace-write"
@@ -135,15 +143,18 @@ class WorkerBroker:
                 thread_id, recovered_cwd, name,
                 self._string_annotation(response, "model"),
                 self._string_annotation(response, "reasoningEffort"),
+                session_id=session_id,
             )
-            self.runtime.attach(record)
-            return session_result(record, attached=True)
         except RpcFault:
             raise
-        except (RegistryError, ValueError) as exc:
-            raise _fault(-32011, "could not persist recovered session", "registry_error", details={"reason": str(exc)}) from exc
         except (CodexCallError, CodexProtocolError) as exc:
             raise self._from_lower(exc) from exc
+        except (RegistryError, OSError) as exc:
+            raise self._post_upstream_registry_fault(
+                "session_resume", session_id, selector.thread_id, None, exc,
+            ) from exc
+        self.runtime.attach(record)
+        return session_result(record, attached=True)
 
     def session_list(self) -> JsonObject:
         sessions = []  # type: List[JsonObject]
@@ -176,26 +187,43 @@ class WorkerBroker:
         if not isinstance(prompt, str) or not prompt:
             raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
         record = self._resolve(selector, require_attached=True)
-        self._validate_model_effort(model, effort)
+        validation_model = model
+        if validation_model is None and effort is not None:
+            validation_model = record.model
+        effective_model = self._validate_model_effort(validation_model, effort)
+        upstream_model = effective_model if effort is not None else model
+        annotation_model = (
+            effective_model if effort is not None
+            else model if model is not None
+            else record.model
+        )
+        annotation_effort = effort if effort is not None else record.effort
         try:
             self.runtime.reserve_start(record.session_id)
             try:
-                turn_id = self.codex.start_turn(record.thread_id, prompt, model=model, effort=effort)
+                turn_id = self.codex.start_turn(
+                    record.thread_id, prompt, model=upstream_model, effort=effort
+                )
                 self.runtime.reconcile_start(record.session_id, turn_id)
             except BaseException:
                 self.runtime.cancel_start(record.session_id)
                 raise
-            self.registry.update_annotations(record.session_id, model=model, effort=effort)
-            return {
-                "session_id": record.session_id, "thread_id": record.thread_id,
-                "turn_id": turn_id, "status": "in_progress",
-            }
         except RpcFault:
             raise
-        except (RegistryError, ValueError) as exc:
-            raise _fault(-32011, "could not update session annotations", "registry_error", details={"reason": str(exc)}) from exc
         except (CodexCallError, CodexProtocolError, TurnActive, SessionDetached, UnknownSession) as exc:
             raise self._from_lower(exc, record) from exc
+        try:
+            self.registry.update_annotations(
+                record.session_id, model=annotation_model, effort=annotation_effort
+            )
+        except (RegistryError, OSError) as exc:
+            raise self._post_upstream_registry_fault(
+                "turn_start_annotations", record.session_id, record.thread_id, turn_id, exc,
+            ) from exc
+        return {
+            "session_id": record.session_id, "thread_id": record.thread_id,
+            "turn_id": turn_id, "status": "in_progress",
+        }
 
     def turn_status(self, selector: IdentifierSelector) -> JsonObject:
         record = self._resolve(selector, require_attached=False)
@@ -293,7 +321,7 @@ class WorkerBroker:
             raise _fault(-32015, "Codex model efforts are duplicated", "codex_protocol_error")
         return efforts
 
-    def _validate_model_effort(self, model: Optional[str], effort: Optional[str]) -> None:
+    def _validate_model_effort(self, model: Optional[str], effort: Optional[str]) -> Optional[str]:
         if model is not None and (not isinstance(model, str) or not model):
             raise ModelSelectionError("model must be a non-empty string", {"model": model})
         if effort is not None and (not isinstance(effort, str) or not effort):
@@ -317,6 +345,7 @@ class WorkerBroker:
             raise ModelSelectionError("effort is not supported by selected live model",
                                       {"model": selected["id"], "effort": effort,
                                        "supported_efforts": selected["supported_efforts"]})
+        return selected["id"] if selected is not None else None
 
     @staticmethod
     def _canonical_cwd(cwd: str, label: str) -> str:
@@ -420,26 +449,64 @@ class WorkerBroker:
                 recovery="run session resume --session %s" % record.session_id,
             )
         if status.active_turn_id is None:
-            raise self._turn_not_active(record, status.latest_turn)
+            latest_turn_id = status.latest_turn.turn_id if status.latest_turn else None
+            raise self._turn_not_active(record, status.latest_turn, latest_turn_id)
         return status.active_turn_id
 
     def _raise_control_race_or_codex(self, record: SessionRecord, expected_turn_id: str,
                                      exc: CodexCallError) -> None:
         status = self._status_or_detached(record)
-        if status.active_turn_id != expected_turn_id:
-            raise self._turn_not_active(record, status.latest_turn) from exc
+        if self._is_upstream_turn_not_active(exc):
+            raise self._turn_not_active(record, status.latest_turn, expected_turn_id) from exc
         raise self._codex_fault(exc) from exc
 
     @staticmethod
-    def _turn_not_active(record: SessionRecord, latest_turn: Any) -> RpcFault:
+    def _is_upstream_turn_not_active(exc: CodexCallError) -> bool:
+        expected_messages = {
+            "turn/steer": "no active turn to steer",
+            "turn/interrupt": "no active turn to interrupt",
+        }
+        if exc.kind != "upstream_error" or not isinstance(exc.details, dict):
+            return False
+        return (
+            exc.details.get("code") == -32600
+            and exc.details.get("message") == expected_messages.get(exc.method)
+        )
+
+    @staticmethod
+    def _turn_not_active(record: SessionRecord, latest_turn: Any,
+                         turn_id: Optional[str] = None) -> RpcFault:
         return _fault(
             -32005, "turn is not active", "turn_not_active",
             details={
                 "session_id": record.session_id,
                 "thread_id": record.thread_id,
+                "turn_id": turn_id,
                 "latest_turn": latest_turn.to_dict() if latest_turn else None,
             },
         )
+
+    @staticmethod
+    def _post_upstream_registry_fault(operation: str, session_id: str, thread_id: str,
+                                      turn_id: Optional[str], exc: BaseException) -> RpcFault:
+        details = {
+            "operation": operation,
+            "durable_state": "not_persisted",
+            "session_id": session_id,
+            "thread_id": thread_id,
+            "reason": str(exc),
+        }  # type: JsonObject
+        if turn_id is None:
+            recovery = "run session resume --thread %s" % thread_id
+            message = "Codex thread exists but its session identity was not persisted"
+        else:
+            details["turn_id"] = turn_id
+            recovery = (
+                "inspect the upstream-started turn with turn status --session %s, "
+                "then turn events --session %s" % (session_id, session_id)
+            )
+            message = "Codex turn started but its session annotations were not persisted"
+        return _fault(-32011, message, "registry_error", recovery=recovery, details=details)
 
     @staticmethod
     def _codex_fault(exc: CodexCallError) -> RpcFault:
