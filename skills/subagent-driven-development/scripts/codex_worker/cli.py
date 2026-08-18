@@ -93,6 +93,12 @@ def _nonnegative_float(value: str) -> float:
     return parsed
 
 
+def _unsupported_turn_selector(value: str) -> str:
+    raise argparse.ArgumentTypeError(
+        "unsupported argument --turn; use --session <session-id> or --thread <thread-id>"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = CodexWorkerArgumentParser(
         prog="codex-worker",
@@ -194,6 +200,8 @@ def _add_selector_group(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--session", dest="session_id", help="daemon-minted session UUID")
     group.add_argument("--thread", dest="thread_id", help="raw Codex thread ID")
+    group.add_argument("--turn", dest="unsupported_turn_id", type=_unsupported_turn_selector,
+                       help=argparse.SUPPRESS)
 
 
 def _add_prompt_group(parser: argparse.ArgumentParser) -> None:

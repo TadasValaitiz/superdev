@@ -728,6 +728,13 @@ class CliTests(unittest.TestCase):
                                    "--timeout", "inf"])
         self.assert_json_error(non_finite, 2)
         self.assertNotIn("Traceback", non_finite.stderr)
+        unsupported_turn = self.run_cli(["turn", "wait", "--turn", "turn-1", "--timeout", "0"])
+        payload = self.assert_json_error(unsupported_turn, 2)
+        reason = payload["error"]["data"]["details"]["reason"]
+        self.assertIn("unsupported argument --turn", reason)
+        self.assertIn("--session", reason)
+        self.assertIn("--thread", reason)
+        self.assertIn("error:", unsupported_turn.stderr)
 
     def test_pretty_usage_errors_honor_pretty_flag(self):
         completed = self.run_cli(["--pretty", "session", "show", "--session", self.session_id,

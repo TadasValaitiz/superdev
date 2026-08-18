@@ -110,6 +110,9 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         for fragment in (
             'a `turn wait` timeout exits 1',
             '.error.data.kind == "wait_timeout"',
+            '.error.data.details.active == true',
+            '.error.data.details.next_actions',
+            'work remains active',
             'a successful terminal `turn wait` returns `.result.turn.status`',
             '`turn status` reports a latest terminal state at `.result.latest_turn.status`',
             '.result.turn.status == "interrupted"',
@@ -146,6 +149,8 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             "needs_context",
             "done_with_concerns",
             "never treat an interrupted turn as merely a wait failure",
+            "`--turn` is unsupported",
+            "`--session` or `--thread`",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)

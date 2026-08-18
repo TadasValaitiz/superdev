@@ -396,7 +396,10 @@ class WorkerBroker:
             )
         return _fault(
             -32001, "unknown session", "unknown_session",
-            recovery="run session list or session resume --session %s" % selector.session_id,
+            recovery=(
+                "run session list to choose a known session, or recover a raw Codex thread with "
+                "session resume --thread <thread-id> --name <name>"
+            ),
             details={"session_id": selector.session_id},
         )
 
@@ -463,8 +466,23 @@ class WorkerBroker:
             return _fault(-32003, "session is detached", "session_detached",
                           recovery="run session resume --session %s" % (record.session_id if record else "<id>"))
         if isinstance(exc, WaitTimeout):
-            return _fault(-32006, "timed out waiting for turn", "wait_timeout",
-                          details={"session_id": exc.session_id, "turn_id": exc.turn_id})
+            session_id = record.session_id if record else exc.session_id
+            next_actions = [
+                "turn status --session %s" % session_id,
+                "turn wait --session %s --timeout <seconds>" % session_id,
+                "turn steer --session %s --prompt <text>" % session_id,
+                "turn interrupt --session %s" % session_id,
+            ]
+            return _fault(
+                -32006, "timed out waiting for turn; work remains active", "wait_timeout",
+                recovery="work remains active; run turn status/wait/steer/interrupt for session %s" % session_id,
+                details={
+                    "session_id": exc.session_id,
+                    "turn_id": exc.turn_id,
+                    "active": True,
+                    "next_actions": next_actions,
+                },
+            )
         if isinstance(exc, NoTurn):
             return _fault(-32007, "session has no terminal turn", "no_turn",
                           details={"session_id": record.session_id if record else None})

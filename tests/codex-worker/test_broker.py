@@ -212,6 +212,11 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(RpcFault) as unknown_uuid:
             self.broker.session_show(IdentifierSelector(session_id="00000000-0000-0000-0000-000000000099"))
         self.assertEqual(unknown_uuid.exception.kind, "unknown_session")
+        self.assertEqual(
+            unknown_uuid.exception.recovery,
+            "run session list to choose a known session, or recover a raw Codex thread with "
+            "session resume --thread <thread-id> --name <name>",
+        )
         with self.assertRaisesRegex(RpcFault, "session resume --thread"):
             self.broker.turn_status(IdentifierSelector(thread_id="unknown"))
 
@@ -328,6 +333,14 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(RpcFault) as caught:
             self.broker.turn_wait(session, 0)
         self.assertEqual(caught.exception.kind, "wait_timeout")
+        self.assertIn("work remains active", caught.exception.message)
+        self.assertTrue(caught.exception.details["active"])
+        self.assertEqual(caught.exception.details["next_actions"], [
+            "turn status --session %s" % session.session_id,
+            "turn wait --session %s --timeout <seconds>" % session.session_id,
+            "turn steer --session %s --prompt <text>" % session.session_id,
+            "turn interrupt --session %s" % session.session_id,
+        ])
         page = self.broker.turn_events(session, after=0, limit=3)
         self.assertEqual(page["next_cursor"], 0)
         self.assertFalse(page["truncated"])

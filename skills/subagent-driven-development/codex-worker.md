@@ -62,9 +62,14 @@ Codex terminal state is evidence for the SDD report, not a replacement for it:
 
 Only a `wait_timeout` error means that observation timed out; it does not cancel
 the turn. A `turn wait` timeout exits 1 and returns an error envelope whose
-`.error.data.kind == "wait_timeout"`, not a result envelope. A successful
+`.error.data.kind == "wait_timeout"`, not a result envelope. That timeout
+means work remains active: the error sets `.error.data.details.active == true`
+and `.error.data.details.next_actions` to concrete `turn status`, `turn wait`,
+`turn steer`, and `turn interrupt` commands for the same session. A successful
 terminal `turn wait` returns `.result.turn.status`; `turn status` reports a
-latest terminal state at `.result.latest_turn.status`. An authoritative
+latest terminal state at `.result.latest_turn.status`. Turn commands select a
+conversation with `--session` or `--thread`; `--turn` is unsupported and a
+returned `turn_id` is evidence, not a later selector. An authoritative
 `.result.turn.status == "interrupted"` from `turn wait`, or
 `.result.latest_turn.status == "interrupted"` from `turn status`, is
 terminal/incomplete: reconcile the disk and report evidence and normally map it
