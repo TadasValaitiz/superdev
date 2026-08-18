@@ -64,6 +64,34 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
+    def test_reference_preserves_canonical_sdd_status_tokens(self):
+        text = REFERENCE.read_text(encoding="utf-8")
+        for status in ("DONE", "DONE_WITH_CONCERNS", "NEEDS_CONTEXT", "BLOCKED"):
+            with self.subTest(status=status):
+                self.assertIn("`%s`" % status, text)
+
+    def test_reference_requires_extracting_session_fields_from_json_envelopes(self):
+        text = self._reference()
+        for field in (".result.session.session_id", ".result.session.thread_id"):
+            with self.subTest(field=field):
+                self.assertIn(field, text)
+        self.assertIn("For every `session start` and `session resume` response", text)
+        self.assertIn("Do not assign the whole JSON response", text)
+        self.assertNotIn("A_SESSION=$(codex-worker", text)
+
+    def test_reference_distinguishes_wait_timeout_from_interrupted_terminal_state(self):
+        text = self._reference().lower()
+        for fragment in (
+            "wait_timeout",
+            "turn.status: interrupted",
+            "terminal/incomplete",
+            "needs_context",
+            "done_with_concerns",
+            "never treat an interrupted turn as merely a wait failure",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
     def test_recovery_pressure_covers_uuid_raw_thread_and_immutable_cwd(self):
         text = self._reference().lower()
         for fragment in (

@@ -38,6 +38,13 @@ codex-worker --socket "$SOCKET" turn wait --session "$SESSION_UUID"
 codex-worker --socket "$SOCKET" turn events --session "$SESSION_UUID"
 ```
 
+Every client command prints one JSON envelope. For every `session start` and
+`session resume` response, read the field paths
+`.result.session.session_id` and `.result.session.thread_id` and retain those
+values before running later commands. Do not assign the whole JSON response to
+`SESSION_UUID` or `THREAD_ID`; the placeholders above mean the extracted field
+values, not the response envelope.
+
 The normal SDD file handoffs still apply: provide the task brief, collect the
 worker's report, and generate/pass the review-package file. A Codex implementer
 cannot be the required independent reviewer of its own diff; a worker never
@@ -53,10 +60,12 @@ Codex terminal state is evidence for the SDD report, not a replacement for it:
 | stopped because required context or a handoff is missing | `NEEDS_CONTEXT`; supply it and re-dispatch |
 | failed because the daemon/Codex/workspace cannot safely continue | `BLOCKED`; preserve evidence and resolve the blocker |
 
-Do not classify an interrupted or timed-out wait as cancellation automatically.
-`turn wait` observes a turn; inspect `turn status`, use `turn steer` to add an
-instruction, or use `turn interrupt` deliberately, then wait for the authoritative
-terminal snapshot.
+Only a `wait_timeout` result means that observation timed out; it does not cancel
+the turn. An authoritative `turn.status: interrupted` is terminal/incomplete:
+reconcile the disk and report evidence and normally map it to `NEEDS_CONTEXT` or
+`DONE_WITH_CONCERNS`. Never treat an interrupted turn as merely a wait failure.
+Use `turn status`, `turn steer`, or deliberate `turn interrupt` as appropriate,
+then wait for the authoritative terminal snapshot.
 
 ## Recovery and cwd safety
 
