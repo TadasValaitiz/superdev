@@ -246,13 +246,67 @@ def finish_scenario(recorder: Recorder, scenario: str, result: Json,
 
 
 def cleanup_daemon(recorder: Recorder, daemon: Daemon) -> None:
+    shutdown_error = None  # type: Optional[BaseException]
+    dispose_error = None  # type: Optional[BaseException]
     try:
         daemon.shutdown()
-    except Exception as exc:
+    except BaseException as exc:
+        shutdown_error = exc
         recorder.record("cleanup_error", {"type": type(exc).__name__, "message": str(exc)})
-        daemon.close(force=True)
+        try:
+            daemon.close(force=True)
+        except BaseException as force_exc:
+            recorder.record("cleanup_error", {
+                "phase": "force_close", "type": type(force_exc).__name__,
+                "message": str(force_exc),
+            })
     finally:
-        daemon.dispose()
+        try:
+            daemon.dispose()
+        except BaseException as exc:
+            dispose_error = exc
+            recorder.record("cleanup_error", {
+                "phase": "dispose", "type": type(exc).__name__, "message": str(exc),
+            })
+    if shutdown_error is not None:
+        raise shutdown_error
+    if dispose_error is not None:
+        raise dispose_error
+
+
+def require_distinct_worker_evidence(session_a: Json, session_b: Json,
+                                     recovery_token: str, waited_b: Json,
+                                     events_b: Json) -> None:
+    assert session_a["session_id"] != session_b["session_id"], (session_a, session_b)
+    assert session_a["thread_id"] != session_b["thread_id"], (session_a, session_b)
+    worker_b_evidence = json.dumps(
+        {"turn": waited_b.get("turn"), "events": events_b.get("events")},
+        sort_keys=True,
+    )
+    assert recovery_token not in worker_b_evidence, "Worker A recovery token leaked into Worker B"
+
+
+def require_successful_command_event(events: Sequence[Json], expected_cwd: Path,
+                                     command_fragment: str) -> Json:
+    expected = str(expected_cwd.resolve())
+    matches = []
+    for event in events:
+        item = event.get("item") or {}
+        data = item.get("data") or {}
+        if (
+            event.get("event") == "item_completed"
+            and item.get("type") == "commandExecution"
+            and data.get("cwd") == expected
+            and command_fragment in str(data.get("command", ""))
+            and data.get("status") == "completed"
+            and data.get("exitCode") == 0
+        ):
+            matches.append(event)
+    assert matches, {
+        "expected_cwd": expected, "command_fragment": command_fragment,
+        "command_events": [event for event in events if (event.get("item") or {}).get("type") == "commandExecution"],
+    }
+    return matches[-1]
 
 
 def require_command(recorder: Recorder, argv: Sequence[str], cwd: Optional[Path] = None,
@@ -333,6 +387,7 @@ def wait_turn(daemon: Daemon, session_id: str, timeout: float = 900.0) -> Json:
 def scenario_concurrent_worktrees() -> Json:
     recorder = Recorder("concurrent-worktrees")
     daemon = Daemon(recorder, event_limit=40)
+    cleaned = False
     try:
         _, worker_a, worker_b = make_worktrees(recorder)
         daemon.start()
@@ -358,7 +413,6 @@ Report the exact test command. Do not create hello.py or hello-output.txt.
         # concurrency assertion, not inferred from elapsed time.
         run_a = start_turn(daemon, session_a["session_id"], prompt_a, selected[0])
         run_b = start_turn(daemon, session_b["session_id"], prompt_b, selected[1])
-        assert run_a["turn_id"] != run_b["turn_id"] or session_a["thread_id"] != session_b["thread_id"]
         waited_a = wait_turn(daemon, session_a["session_id"])
         waited_b = wait_turn(daemon, session_b["session_id"])
         assert waited_a["turn"]["status"] == "completed", waited_a
@@ -373,6 +427,15 @@ Report the exact test command. Do not create hello.py or hello-output.txt.
         assert not (worker_b / "hello-output.txt").exists()
         events_a = daemon.client("turn", "events", "--session", session_a["session_id"], "--limit", "100")
         events_b = daemon.client("turn", "events", "--session", session_b["session_id"], "--limit", "100")
+        require_distinct_worker_evidence(
+            session_a, session_b, recovery_token, waited_b, events_b,
+        )
+        hello_execution = require_successful_command_event(
+            events_a["events"], worker_a, "python3 hello.py",
+        )
+        math_execution = require_successful_command_event(
+            events_b["events"], worker_b, "python3 math_cli.py 2 5",
+        )
         context = {
             "recovery_token": recovery_token,
             "session_a": session_a,
@@ -395,10 +458,16 @@ Report the exact test command. Do not create hello.py or hello-output.txt.
             "event_count_b": len(events_b["events"]),
             "hello_output": "Hello from Codex\\n",
             "math_output": math.stdout,
+            "hello_execution": hello_execution,
+            "math_execution": math_execution,
+            "worker_b_token_absent": True,
         }
+        cleanup_daemon(recorder, daemon)
+        cleaned = True
         return finish_scenario(recorder, "concurrent-worktrees", result, ["AH2", "AH8"])
     finally:
-        cleanup_daemon(recorder, daemon)
+        if not cleaned:
+            cleanup_daemon(recorder, daemon)
 
 
 def assert_typed_error(payload: Json, completed: subprocess.CompletedProcess,
@@ -413,6 +482,7 @@ def assert_typed_error(payload: Json, completed: subprocess.CompletedProcess,
 def scenario_control() -> Json:
     recorder = Recorder("control")
     daemon = Daemon(recorder, event_limit=40)
+    cleaned = False
     try:
         _, worker_a, worker_b = make_worktrees(recorder)
         daemon.start()
@@ -481,9 +551,12 @@ Do not finish before the command completes.
             },
             "idle_interrupt_error": idle_interrupt,
         }
+        cleanup_daemon(recorder, daemon)
+        cleaned = True
         return finish_scenario(recorder, "control", result, ["AH3", "AH4"])
     finally:
-        cleanup_daemon(recorder, daemon)
+        if not cleaned:
+            cleanup_daemon(recorder, daemon)
 
 
 def waiter_command(daemon: Daemon, session_id: str, timeout: float) -> List[str]:
@@ -509,6 +582,7 @@ def collect_waiter(recorder: Recorder, label: str, argv: Sequence[str],
 def scenario_observe_socket() -> Json:
     recorder = Recorder("observe-socket")
     daemon = Daemon(recorder, event_limit=3)
+    cleaned = False
     try:
         _, worker_a, _ = make_worktrees(recorder)
         daemon.start()
@@ -610,9 +684,12 @@ Then inspect README.md, create observe.txt with exact content `observed\\n`, run
             "tcp_listener_output": lsof.stdout,
             "restarted_daemon_pid": restarted["daemon_pid"],
         }
+        cleanup_daemon(recorder, daemon)
+        cleaned = True
         return finish_scenario(recorder, "observe-socket", result, ["AH7", "AH10"])
     finally:
-        cleanup_daemon(recorder, daemon)
+        if not cleaned:
+            cleanup_daemon(recorder, daemon)
 
 
 def scenario_recovery() -> Json:
@@ -620,6 +697,8 @@ def scenario_recovery() -> Json:
     state_path = recorder.run_dir / "durable-sessions.json"
     daemon = Daemon(recorder, name="uuid-daemon", event_limit=40, state_path=state_path)
     raw_daemon = None  # type: Optional[Daemon]
+    daemon_cleaned = False
+    raw_cleaned = False
     try:
         _, worker_a, _ = make_worktrees(recorder)
         daemon.start()
@@ -699,11 +778,16 @@ Create seed.txt with exact content `seeded\\n`, verify it, and then finish.
             "uuid_token_match": True,
             "raw_token_match": True,
         }
+        cleanup_daemon(recorder, raw_daemon)
+        raw_cleaned = True
+        cleanup_daemon(recorder, daemon)
+        daemon_cleaned = True
         return finish_scenario(recorder, "recovery", result, ["AH5", "AH6"])
     finally:
-        if raw_daemon is not None:
+        if raw_daemon is not None and not raw_cleaned:
             cleanup_daemon(recorder, raw_daemon)
-        cleanup_daemon(recorder, daemon)
+        if not daemon_cleaned:
+            cleanup_daemon(recorder, daemon)
 
 
 def make_fake_codex_wrapper(recorder: Recorder, mode: str) -> Path:
@@ -788,6 +872,9 @@ def scenario_approvals() -> Json:
             "label": "deterministic live broker + fake upstream",
             "modes": results,
         }
+        for daemon in reversed(daemons):
+            cleanup_daemon(recorder, daemon)
+        daemons.clear()
         return finish_scenario(recorder, "approvals", result, ["AH12"])
     finally:
         for daemon in reversed(daemons):
@@ -797,6 +884,7 @@ def scenario_approvals() -> Json:
 def preflight() -> Json:
     recorder = Recorder("preflight")
     daemon = Daemon(recorder)
+    cleaned = False
     try:
         codex_version = recorder.run(["codex", "--version"], timeout=15.0)
         assert codex_version.returncode == 0
@@ -817,15 +905,13 @@ def preflight() -> Json:
             json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n",
             encoding="utf-8",
         )
+        cleanup_daemon(recorder, daemon)
+        cleaned = True
         write_summary(recorder, "preflight", result)
         return result
     finally:
-        try:
-            daemon.shutdown()
-        except Exception as exc:
-            recorder.record("cleanup_error", {"type": type(exc).__name__, "message": str(exc)})
-            daemon.close(force=True)
-        daemon.dispose()
+        if not cleaned:
+            cleanup_daemon(recorder, daemon)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:

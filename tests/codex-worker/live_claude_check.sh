@@ -14,6 +14,7 @@ DAEMON_STDERR="$RUN_DIR/daemon.stderr"
 CLAUDE_TRANSCRIPT="$RUN_DIR/claude.stream.jsonl"
 CLAUDE_STDERR="$RUN_DIR/claude.stderr"
 COMMANDS_JSON="$RUN_DIR/claude-bash-commands.json"
+EVIDENCE_JSON="$RUN_DIR/validated-broker-evidence.json"
 DAEMON_PID=""
 
 mkdir -p "$RUN_DIR" "$REPO"
@@ -157,7 +158,14 @@ PY
 wait "$DAEMON_PID"
 DAEMON_PID=""
 
-python3 - "$REPO/from-claude.txt" "$CLAUDE_TRANSCRIPT" "$COMMANDS_JSON" "$RUN_DIR" "$ROOT" <<'PY'
+python3 "$ROOT/tests/codex-worker/live_claude_evidence.py" \
+  --transcript "$CLAUDE_TRANSCRIPT" \
+  --state "$STATE" \
+  --cwd "$REPO" \
+  --cli "$CLI" \
+  --output "$EVIDENCE_JSON"
+
+python3 - "$REPO/from-claude.txt" "$CLAUDE_TRANSCRIPT" "$COMMANDS_JSON" "$EVIDENCE_JSON" "$RUN_DIR" "$ROOT" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -165,15 +173,25 @@ from pathlib import Path
 output = Path(sys.argv[1])
 transcript = Path(sys.argv[2])
 commands = Path(sys.argv[3])
-run_dir = Path(sys.argv[4])
-root = Path(sys.argv[5])
+evidence_path = Path(sys.argv[4])
+run_dir = Path(sys.argv[5])
+root = Path(sys.argv[6])
 assert output.read_text(encoding="utf-8") == "created through Claude Code\n"
+evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
 summary = {
     "status": "PASS",
     "scenario": "claude-code-caller",
     "output": output.read_text(encoding="utf-8"),
     "claude_transcript": str(transcript.relative_to(root)),
     "bash_commands": str(commands.relative_to(root)),
+    "validated_evidence": str(evidence_path.relative_to(root)),
+    "session_id": evidence["session_id"],
+    "thread_id": evidence["thread_id"],
+    "turn_id": evidence["turn_id"],
+    "model": evidence["model"],
+    "effort": evidence["effort"],
+    "event_count": evidence["event_count"],
+    "registry_session_persisted": evidence["registry_session_persisted"],
 }
 (run_dir / "summary.json").write_text(
     json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -185,12 +203,20 @@ receipts["CLAUDE_CODE_CALLER"] = {
     "status": "PASS",
     "transcript": str(transcript.relative_to(root)),
     "bash_commands": str(commands.relative_to(root)),
+    "validated_evidence": str(evidence_path.relative_to(root)),
+    "session_id": evidence["session_id"],
+    "thread_id": evidence["thread_id"],
+    "turn_id": evidence["turn_id"],
 }
 receipts["AH1"] = {
     "command": "bash tests/codex-worker/live_claude_check.sh",
     "status": "PASS",
     "transcript": str(transcript.relative_to(root)),
     "bash_commands": str(commands.relative_to(root)),
+    "validated_evidence": str(evidence_path.relative_to(root)),
+    "session_id": evidence["session_id"],
+    "thread_id": evidence["thread_id"],
+    "turn_id": evidence["turn_id"],
 }
 receipts_path.write_text(json.dumps(receipts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 print(json.dumps(summary, sort_keys=True))
