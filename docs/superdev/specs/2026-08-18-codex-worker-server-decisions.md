@@ -202,3 +202,31 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** D9, human instruction, and spec-review finding.
 - **Affects:** R8–R10, UC2, AH2, verification plan.
 - **Revisit-when:** The operator explicitly relaxes the multiple-model acceptance requirement.
+
+## D15 — Split the prototype into a focused Python package behind one executable
+**When:** 2026-08-18T19:49:48Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** agent under autonomous mandate
+
+- **Trigger:** The 358-line prototype already owns transport, lifecycle, turn state, approvals, and CLI; adding broker/RPC/registry logic in one file would erase reviewable boundaries.
+- **Options weighed:**
+  - A: Grow the extensionless script in place — gains trivial packaging / sacrifices focused testing and creates one concurrency-heavy monolith.
+  - B: Keep the executable as a thin bootstrap and add a sibling `codex_worker` standard-library package — gains explicit adapter/registry/runtime/broker/RPC/CLI seams / sacrifices several small shipped files.
+- **Decided:** Use a thin `scripts/codex-worker` bootstrap plus `scripts/codex_worker/{models,registry,app_server,runtime,broker,rpc,cli}.py`.
+- **Rests on:** D8, D10–D11 and writing-plans file-structure discipline.
+- **Affects:** implementation plan Tasks 1–4, test decomposition, reviewer scopes.
+- **Revisit-when:** Plugin packaging proves sibling Python modules are not installed with skill assets.
+
+## D16 — New deterministic suite is fast; real agent scenarios are separate slow checks
+**When:** 2026-08-18T19:49:48Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** agent under autonomous mandate
+
+- **Trigger:** The repo declares no unified fast/slow commands, while real Codex/Claude sessions are categorically slow and credential-dependent.
+- **Options weighed:**
+  - A: Put every test behind one script — gains one command / sacrifices killability and makes the commit loop depend on live services.
+  - B: Standard-library deterministic discovery as the affected-area fast gate plus one live scenario command per area — gains fast TDD and independently killable end-to-end evidence / sacrifices a single all-tests command.
+- **Decided:** Fast gate is `python3 -m unittest discover -s tests/codex-worker -p 'test_*.py'`; live broker and Claude Code behavior checks run as separate commands and never as one monolithic suite.
+- **Rests on:** D9, D14 and Superdev testing-lanes doctrine.
+- **Affects:** implementation plan Global Constraints, every task commit gate, finishing receipts.
+- **Revisit-when:** The project declares a repository-wide test-lane entrypoint that includes this area.
