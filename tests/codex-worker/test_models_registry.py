@@ -71,6 +71,45 @@ class RegistryTests(unittest.TestCase):
         self.state_path.write_text("not json")
         with self.assertRaises(ValueError):
             SessionRegistry(self.state_path)
+
+    def test_create_canonicalizes_cwd_and_rejects_bad_inputs(self):
+        real = Path(self.cwd) / "real"
+        real.mkdir()
+        link = Path(self.cwd) / "link"
+        link.symlink_to(real, target_is_directory=True)
+        record = SessionRegistry(self.state_path).create("thr-1", str(link), None, None, None)
+        self.assertEqual(record.cwd, str(real.resolve()))
+        with self.assertRaises(ValueError):
+            SessionRegistry(self.state_path).create("thr-2", self.cwd, None, 1, None)
+        with self.assertRaises(ValueError):
+            SessionRegistry(self.state_path).create("thr-3", self.cwd, None, None, None, session_id="")
+
+    def test_snapshot_rejects_bool_version_and_unknown_fields(self):
+        self.state_path.parent.mkdir()
+        for payload in ({"schema_version": True, "sessions": []},
+                        {"schema_version": 1, "sessions": [], "extra": 1}):
+            self.state_path.write_text(json.dumps(payload))
+            with self.assertRaises(ValueError):
+                SessionRegistry(self.state_path)
+
+    def test_existing_world_readable_state_is_hardened(self):
+        registry = SessionRegistry(self.state_path)
+        registry.create("thr-1", self.cwd, None, None, None)
+        os.chmod(self.state_path, 0o644)
+        SessionRegistry(self.state_path)
+        self.assertEqual(os.stat(self.state_path).st_mode & 0o777, 0o600)
+
+    def test_foreign_owner_state_is_rejected_when_testable(self):
+        if os.getuid() == 0:
+            self.skipTest("root cannot exercise foreign-owner behavior")
+        self.state_path.parent.mkdir()
+        self.state_path.write_text(json.dumps({"schema_version": 1, "sessions": []}))
+        try:
+            os.chown(self.state_path, os.getuid() + 1, os.getgid())
+        except PermissionError:
+            self.skipTest("cannot alter owner on this host")
+        with self.assertRaises(ValueError):
+            SessionRegistry(self.state_path)
         self.state_path.write_text(json.dumps({"schema_version": 2, "sessions": []}))
         with self.assertRaises(ValueError):
             SessionRegistry(self.state_path)
