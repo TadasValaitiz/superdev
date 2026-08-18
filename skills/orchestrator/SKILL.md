@@ -10,6 +10,9 @@ A third dispatch modality beyond headless workers (Agent tool) and Workflow scri
 It appears in the session picker, is attachable (`claude attach <id>`), **preserves context
 across the human entering and leaving**, and reports to you over cross-session messaging.
 This skill is how ONE orchestrator session runs a milestone as a cascade of such rooms.
+**"Milestone" is an ALTITUDE, not a fixed unit:** the integration scope can be a big bundle,
+a milestone phase, or any coordinated wave — the machinery is identical (integration branch,
+rooms, ledger, human-approved landing); only the scope name changes.
 
 **The base case is untouched:** a single task needs NO orchestrator — launch the skills
 directly (standalone path). Orchestration is purely additive; the launch brief is the switch
@@ -28,7 +31,11 @@ leftovers · the untouched base case.
 
 **AUTHORED (yours to design, per milestone and per room):**
 - **The graph shape** — serial ladder, diamond, parallel waves, a long-running research room
-  feeding others, a standing review room: whatever the dependency reality actually is.
+  feeding others, a standing review room: whatever the dependency reality actually is. The
+  graph may be DERIVED rather than authored from scratch: if the project's work-tracking
+  system already encodes members, dependency edges, and write surfaces (bundles, depends_on
+  guards, launch tables), read the graph off that metadata and co-ratify it with the human
+  instead of inventing a parallel structure.
 - **Each room's gating structure** — start-building-immediately (spec complete; a
   ratification gate would be ceremony) · wait-at-ratification (design needs a ruling first) ·
   staged mid-room gates (a money-boundary room that stops twice) · gate-free-until-close (a

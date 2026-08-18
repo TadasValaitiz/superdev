@@ -1,5 +1,15 @@
 # Superdev Release Notes
 
+## v7.0.2 (2026-08-18)
+
+- orchestrator: "milestone" clarified as an ALTITUDE, not a fixed unit — the integration
+  scope can be a big bundle, a milestone phase, or any coordinated wave; identical
+  machinery. Authorship notes the orchestration graph may be DERIVED from an existing
+  work-tracking system's metadata (bundle members, dependency guards, launch tables)
+  and co-ratified, rather than authored from scratch. Motivated by the first downstream
+  integration: a project's backlog wired granularity-based escalation (item -> small
+  bundle -> orchestrated bundle -> orchestrated milestone phase) onto this skill.
+
 ## v7.0.1 (2026-08-18)
 
 - **Authorship framing (operator directive, from watching live rooms):** the orchestrator
