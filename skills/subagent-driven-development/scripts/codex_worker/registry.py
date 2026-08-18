@@ -106,6 +106,13 @@ class SessionRegistry:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_name, str(self.path))
+            directory_fd = os.open(
+                str(parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            )
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
         except BaseException:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)

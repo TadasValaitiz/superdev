@@ -59,6 +59,107 @@ class RegistryTests(unittest.TestCase):
         restored = SessionRegistry(self.state_path)
         self.assertIsNone(restored.resolve(IdentifierSelector(session_id=record.session_id)).model)
 
+    def test_snapshot_syncs_file_then_replacement_directory(self):
+        events = []
+
+        class RecordingFile:
+            def __init__(self, fd):
+                self.fd = fd
+                self.wrote = False
+
+            def write(self, value):
+                if not self.wrote:
+                    events.append("temp-write")
+                    self.wrote = True
+                return len(value)
+
+            def flush(self):
+                events.append("temp-flush")
+
+            def fileno(self):
+                return self.fd
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                events.append("temp-close")
+
+        temp_fd = 101
+        directory_fd = 102
+        temp_name = str(self.state_path.parent / "sessions.json.tmp")
+
+        def fsync(fd):
+            events.append("file-fsync" if fd == temp_fd else "directory-fsync")
+
+        def replace(source, target):
+            self.assertEqual(source, temp_name)
+            self.assertEqual(target, str(self.state_path))
+            events.append("replace")
+
+        def open_directory(path, flags):
+            self.assertEqual(path, str(self.state_path.parent))
+            self.assertEqual(flags, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            events.append("directory-open")
+            return directory_fd
+
+        def close(fd):
+            self.assertEqual(fd, directory_fd)
+            events.append("directory-close")
+
+        with mock.patch("codex_worker.registry.tempfile.mkstemp", return_value=(temp_fd, temp_name)), \
+             mock.patch("codex_worker.registry.os.fchmod"), \
+             mock.patch("codex_worker.registry.os.fdopen", return_value=RecordingFile(temp_fd)), \
+             mock.patch("codex_worker.registry.os.fsync", side_effect=fsync), \
+             mock.patch("codex_worker.registry.os.replace", side_effect=replace), \
+             mock.patch("codex_worker.registry.os.open", side_effect=open_directory), \
+             mock.patch("codex_worker.registry.os.close", side_effect=close):
+            SessionRegistry(self.state_path).create("thr-1", self.cwd, None, None, None)
+
+        self.assertEqual(events, [
+            "temp-write", "temp-flush", "file-fsync", "temp-close",
+            "replace", "directory-open", "directory-fsync", "directory-close",
+        ])
+
+    def test_directory_sync_failure_closes_descriptor(self):
+        events = []
+
+        class RecordingFile:
+            def write(self, value):
+                events.append("temp-write")
+                return len(value)
+
+            def flush(self):
+                events.append("temp-flush")
+
+            def fileno(self):
+                return 101
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                events.append("temp-close")
+
+        temp_name = str(self.state_path.parent / "sessions.json.tmp")
+
+        def fsync(fd):
+            events.append("file-fsync" if fd == 101 else "directory-fsync")
+            if fd == 102:
+                raise OSError("directory sync failed")
+
+        with mock.patch("codex_worker.registry.tempfile.mkstemp", return_value=(101, temp_name)), \
+             mock.patch("codex_worker.registry.os.fchmod"), \
+             mock.patch("codex_worker.registry.os.fdopen", return_value=RecordingFile()), \
+             mock.patch("codex_worker.registry.os.fsync", side_effect=fsync), \
+             mock.patch("codex_worker.registry.os.replace", side_effect=lambda *_: events.append("replace")), \
+             mock.patch("codex_worker.registry.os.open", side_effect=lambda *_: events.append("directory-open") or 102), \
+             mock.patch("codex_worker.registry.os.close", side_effect=lambda fd: events.append("directory-close")):
+            with self.assertRaisesRegex(OSError, "directory sync failed"):
+                SessionRegistry(self.state_path).create("thr-1", self.cwd, None, None, None)
+
+        self.assertEqual(events[-2:], ["directory-fsync", "directory-close"])
+
     def test_snapshot_is_schema_versioned_and_owner_only(self):
         record = SessionRegistry(self.state_path).create("thr-1", self.cwd, None, "m", "e")
         payload = json.loads(self.state_path.read_text())
