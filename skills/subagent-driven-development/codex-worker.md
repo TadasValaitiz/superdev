@@ -60,12 +60,18 @@ Codex terminal state is evidence for the SDD report, not a replacement for it:
 | stopped because required context or a handoff is missing | `NEEDS_CONTEXT`; supply it and re-dispatch |
 | failed because the daemon/Codex/workspace cannot safely continue | `BLOCKED`; preserve evidence and resolve the blocker |
 
-Only a `wait_timeout` result means that observation timed out; it does not cancel
-the turn. An authoritative `turn.status: interrupted` is terminal/incomplete:
-reconcile the disk and report evidence and normally map it to `NEEDS_CONTEXT` or
-`DONE_WITH_CONCERNS`. Never treat an interrupted turn as merely a wait failure.
-Use `turn status`, `turn steer`, or deliberate `turn interrupt` as appropriate,
-then wait for the authoritative terminal snapshot.
+Only a `wait_timeout` error means that observation timed out; it does not cancel
+the turn. A `turn wait` timeout exits 1 and returns an error envelope whose
+`.error.data.kind == "wait_timeout"`, not a result envelope. A successful
+terminal `turn wait` returns `.result.turn.status`; `turn status` reports a
+latest terminal state at `.result.latest_turn.status`. An authoritative
+`.result.turn.status == "interrupted"` from `turn wait`, or
+`.result.latest_turn.status == "interrupted"` from `turn status`, is
+terminal/incomplete: reconcile the disk and report evidence and normally map it
+to `NEEDS_CONTEXT` or `DONE_WITH_CONCERNS`. Never treat an interrupted turn as
+merely a wait failure. Use `turn status`, `turn steer`, or deliberate
+`turn interrupt` as appropriate, then wait for the authoritative terminal
+snapshot.
 
 ## Recovery and cwd safety
 
