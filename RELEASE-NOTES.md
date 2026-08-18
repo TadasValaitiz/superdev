@@ -1,5 +1,48 @@
 # Superdev Release Notes
 
+## v7.0.0 (2026-08-18)
+
+### The Third Modality: Enterable Rooms + the Orchestrator
+
+Major version: a new dispatch modality beyond headless workers and Workflow scripts —
+the ENTERABLE ROOM (a full peer `claude --bg` session, attachable, context-preserving,
+HIL-gated), and a milestone-altitude orchestrator skill to run cascades of them.
+Generalized from a production project's proven multi-session orchestration reference
+(measured 2026-08-18: live rooms + ping-pong delivery tests).
+
+- **New skill: orchestrator** — ONE control session coordinates rooms at milestone
+  altitude: ground → HIL co-plan the ORCHESTRATION GRAPH (nodes=rooms with
+  mode/shape/scope/ID-block, edges=dependencies+residual-routing) → open the milestone
+  branch → launch rooms (dependency order) → track residuals/deviations cross-room →
+  batch forks for altitude rulings → human-approved milestone close (the sole human gate
+  on the merge path). Rooms SELF-PUBLISH via FF-CAS to the milestone branch — the
+  orchestrator coordinates, never merges. Residual engine distinguishes in-milestone
+  (drain to zero before close) from global platform issues (escape hatch: file to the
+  backlog, batched at the end, never blocks close). Ships room-mechanics.md (verbatim
+  launch/publish commands, transport, R0-R5+R-H+pre-spawn reporting protocol, fault
+  handling, six measured gotchas incl. disjoint ID blocks), room-brief-template.md
+  (standalone vs room briefs — the brief IS the switch), durable-state.md (graph,
+  cursor, ledger, ratification queue — compaction survival).
+- **Three room modes:** HIL (human rules in-room; inbound hold gate), SELF (autonomous;
+  batched ratification), HYBRID (new: self-brainstorming with fork classification —
+  detail forks flow, holistic forks marked HOLISTIC-PROVISIONAL and batched to R-H
+  checkpoints; the human enters, rules the SHAPE at altitude, leaves; never stalls —
+  safe because nothing reaches main before the human-approved close).
+- **New skill: cli-checkride** — the active validation gate for surface-changing work:
+  an EXECUTOR agent drives the real CLI/API live (args + full output + exit codes,
+  happy AND refusal paths) and an EVALUATOR (most-capable model) judges from the
+  operator's seat (readable? explainable? honest refusals? frictionless frequent path?
+  gates guarding something real?); iterate until PASS; transcript commits with the work.
+  The finishing gate's acceptance cross-check now DELEGATES to a checkride when the
+  branch changed a user-facing surface (scoped — trivial branches keep the lighter
+  receipt check).
+- **Guarded room sections** in brainstorming + self-brainstorming: DEFAULT = standalone,
+  unchanged — only a launch brief carrying the orchestration contract (address +
+  reporting + publish recipe) activates room behavior. The base case cannot regress.
+- **parallel-execution reconciliation:** lanes = controller-merges (headless workers);
+  rooms = self-publish FF-CAS (full sessions with their own merge evidence). Two
+  integration models, picked by what the worker is — never blended.
+
 ## v6.11.0 (2026-08-13)
 
 ### Design & Review Agents Pinned to the Most Capable Model

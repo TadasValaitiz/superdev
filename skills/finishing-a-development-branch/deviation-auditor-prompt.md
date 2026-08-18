@@ -36,6 +36,13 @@ Subagent (general-purpose):
 
     ## Part B — Acceptance cross-check (do this FIRST; it is the done bar)
 
+    SCOPED DELEGATION: if this branch changed a USER-FACING SURFACE (CLI commands/args/
+    output, API routes), the receipts come from a full CLI CHECKRIDE
+    (superdev:cli-checkride — executor drives the surface live, evaluator judges from the
+    operator's perspective, iterate until pass); cite its transcript + verdict here
+    instead of collecting receipts yourself. Trivial/no-surface branches keep THIS
+    lighter receipt check — never impose an executor+evaluator ride on a one-line bugfix.
+
     For each UC#/AH# the plan discharges, produce ONE RECEIPT: run the capability on the
     most realistic substrate available and capture it — a LIVE ARC transcript (the
     end-to-end journey the use case describes, command + output + exit code), a test

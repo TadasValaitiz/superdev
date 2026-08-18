@@ -15,6 +15,14 @@ available model (`/model`, or the harness equivalent — Opus on Claude Code, to
 under Codex) before doing this work. The required spec-reviewer dispatch pins the most
 capable model in its own prompt template; see subagent-driven-development Model Selection.
 
+**Launched as a room? (GUARDED — default is standalone, unchanged.)** If — and ONLY if —
+your launch brief names an orchestrator address, a reporting protocol (R0–R5), and a
+milestone-branch publish recipe, you are an ORCHESTRATED ROOM (an HIL room: the human
+converses and rules here, in-session): follow the brief's reporting contract, produce its
+FILES-YOU-PRODUCE set, and self-publish via the brief's FF-CAS recipe to the milestone
+branch — never to main. See orchestrator/room-mechanics.md. Absent that contract in your
+brief, ignore this paragraph entirely — nothing about the standalone flow changes.
+
 <HARD-GATE>
 Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
 </HARD-GATE>

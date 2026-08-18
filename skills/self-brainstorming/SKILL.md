@@ -26,6 +26,25 @@ operator has pre-delegated that authority, until you have re-verified every ASSU
 against evidence and said so in the hand-off.
 </HARD-GATE>
 
+## Launched as a room? (GUARDED — default is standalone, unchanged)
+
+If — and ONLY if — your launch brief names an orchestrator address, a reporting protocol
+(R0–R5), and a milestone-branch publish recipe, you are an ORCHESTRATED ROOM: follow the
+brief's reporting contract (R1 design-ready then WAIT for relayed ratification — the
+orchestrator carries your doc to the human), produce its FILES-YOU-PRODUCE set, and
+self-publish via the brief's FF-CAS recipe to the milestone branch — never to main. See
+orchestrator/room-mechanics.md. Absent that contract, ignore this section entirely.
+
+**HYBRID mode (brief says HYBRID):** run this skill as normal, plus fork classification —
+the Questioner tags each fork **detail** (agent-owned; decide and lock as usual) or
+**holistic** (human-owned: large blast radius, cross-cutting shape, taste, money/
+irreversibility). Holistic forks are decided PROVISIONALLY (status HOLISTIC-PROVISIONAL,
+never plain locked), batched, and surfaced via R-H reports — the picture + the fork in
+prose, never a detail dump — while the loop KEEPS FLOWING; never stall waiting for the
+human. The human enters at checkpoints, rules at altitude, leaves; re-flow whatever their
+redirect touches. Safe by topology: nothing reaches main before the human-approved
+milestone close.
+
 ## The two roles (and why the split matters)
 
 **The Questioner is the design authority.** It owns the brainstorming skill's question

@@ -45,6 +45,16 @@ accepting — trust nothing, re-run the cheap gates personally.
   files, never committing, assumptions queued for the human) parallels execution the
   same way.
 
+## Integration models — lanes vs rooms (do not mix them up)
+
+This file's lanes are HEADLESS workers: the CONTROLLER merges each lane back
+(merge audit + combined gate) because a headless lane cannot be trusted to self-publish.
+ENTERABLE ROOMS (the orchestrator skill) are the opposite: full peer sessions that ran the
+whole discipline including the checkride, so they SELF-PUBLISH via FF-CAS to the milestone
+branch and the orchestrator never merges. Same repo, two models — pick by what the worker
+is, never blend (a controller merging room work recreates the bottleneck; a lane
+self-publishing skips the merge audit).
+
 ## 3. The serial set (never parallelize)
 
 Merges/publishes (one at a time). Milestone gates (a FROZEN tree — nothing mutates

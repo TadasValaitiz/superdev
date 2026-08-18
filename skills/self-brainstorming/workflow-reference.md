@@ -42,6 +42,7 @@ const Q_SCHEMA = { type: 'object', required: ['locks','saturated'], properties: 
       alternatives: { type: 'array', items: { type: 'string' } }, // each with gains/sacrifices
       why:          { type: 'string' },
       status:       { enum: ['locked','provisional'] },  // provisional iff resting on ASSUMPTION
+      holistic:     { type: 'boolean' },  // HYBRID mode: true = human-owned fork -> force provisional + queue for R-H
       restsOn:      { type: 'string' },   // evidence cite or "A3"
       revisitWhen:  { type: 'string' }
     }}},
