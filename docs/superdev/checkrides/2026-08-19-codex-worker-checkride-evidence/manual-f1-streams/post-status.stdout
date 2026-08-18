@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"Codex worker daemon is not available","data":{"kind":"daemon_unavailable","recovery":"run codex-worker --socket /tmp/cw-f1.SnZYn7/worker.sock daemon serve","details":{"socket_path":"/tmp/cw-f1.SnZYn7/worker.sock"}}}}

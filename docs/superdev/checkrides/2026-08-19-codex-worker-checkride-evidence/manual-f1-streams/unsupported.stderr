@@ -1,0 +1,3 @@
+usage: codex-worker turn status [-h]
+                                (--session SESSION_ID | --thread THREAD_ID)
+codex-worker turn status: error: argument --turn: unsupported argument --turn; use --session <session-id> or --thread <thread-id>

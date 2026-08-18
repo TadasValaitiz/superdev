@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"cli","error":{"code":-32001,"message":"unknown session","data":{"kind":"unknown_session","recovery":"run session list to choose a known session, or recover a raw Codex thread with session resume --thread <thread-id> --name <name>","details":{"session_id":"00000000-0000-4000-8000-000000000000"}}}}
