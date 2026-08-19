@@ -1168,3 +1168,34 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   inspection plus a later stop retry. `DaemonStopResponse` remains success-only.
 - **Affects:** command fault vocabulary, instance stop, CLI error table, adversarial tests.
 - **Revisit-when:** Stop gains a richer asynchronous lifecycle/status model.
+
+## D52 — Close the façade over the complete published error vocabulary
+**When:** 2026-08-19T19:01:24Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Task 1 closed `FacadeFaultCode` over newly allocated `-32021..-32030`
+  values but omitted common-surface codes already published in CLI §10 for invalid
+  params, idle turns, registry failures, and upstream/protocol failures.
+- **Decided:** The one façade code/kind map includes `-32602`, `-32005`, `-32011`,
+  `-32015`, `-32020`, and `-32021..-32030`. Raw `RpcFault` wire serialization remains
+  unchanged; façade conversion uses the shared total map.
+- **Affects:** strict fault construction, broker-to-facade translation, control races,
+  storage recovery, exhaustive round-trip tests.
+- **Revisit-when:** The public CLI error table changes.
+
+## D53 — Persist complete common policy in the broker's single creation write
+**When:** 2026-08-19T19:01:24Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The typed broker start initially used the legacy registry writer, making
+  a just-created façade worker incomplete before its first turn. A proposed second
+  promotion write would create an avoidable partial-persistence window.
+- **Options weighed:** two-write promotion; direct façade registry overwrite; carry the
+  complete policy through the typed start spec and choose one registry writer.
+- **Decided:** `SessionStartSpec` carries tier, model, effort, access, and annotation
+  policy. Preserve mode performs one `create_worker` write after upstream thread identity;
+  legacy mode keeps one legacy `create` write. A raw-model common worker is complete with
+  `tier: null` because name/model/effort/access identify the immutable policy.
+- **Affects:** broker start seam, registry completeness, façade start, raw compatibility,
+  post-upstream recovery tests.
+- **Revisit-when:** Registry creation becomes transactional with upstream thread start.

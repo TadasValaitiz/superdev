@@ -164,8 +164,9 @@ records as v2 only after a successful mutation. Missing/zero-byte input writes t
 empty v2 snapshot atomically. Preserve non-empty malformed bytes and include
 path/expected versions in `RegistryError`. Enforce unique non-null names in addition to
 session/thread IDs, parent fsync after replace, and exact owner-only regular-file checks.
-Loading never invents access, tier, model, or effort; a record is common-policy complete
-only when every immutable field is present.
+Loading never invents access, tier, model, or effort. A record is common-policy complete
+when `name/model/effort/access` are present; `tier` may deliberately be null for an
+explicit raw-model worker. Legacy/raw records remain incomplete because access is null.
 
 - [ ] **Step 6: Run focused and fast gates**
 
@@ -320,7 +321,7 @@ git commit -m "feat(codex-worker): manage session-scoped daemon instances"
 
 **Interfaces:**
 - Consumes: Task 1 response/value models; existing `WorkerBroker`, `RuntimeStore`, `CodexAppServer.call`.
-- Produces: `SessionStartSpec`, `SessionResumeSpec`, `TurnStartSpec`; public broker methods `start_session(spec)`, `resume_session(spec)`, `start_turn(spec)` used by both raw dispatch and façade; `AnnotationPolicy.LEGACY_MUTABLE|PRESERVE_WORKER_POLICY`; `NativeCodexProxy.goal_set/get`, `turns_list`, `rate_limits_read`; pure `select_completion_messages`, `project_completion`, `project_history_turn`, `derive_metrics`.
+- Produces: `SessionStartSpec(cwd, name, model, access, tier, effort, annotation_policy)`, `SessionResumeSpec`, `TurnStartSpec`; public broker methods `start_session(spec)`, `resume_session(spec)`, `start_turn(spec)` used by both raw dispatch and façade; `AnnotationPolicy.LEGACY_MUTABLE|PRESERVE_WORKER_POLICY`; one-write common creation through `registry.create_worker`; `NativeCodexProxy.goal_set/get`, `turns_list`, `rate_limits_read`; pure `select_completion_messages`, `project_completion`, `project_history_turn`, `derive_metrics`.
 
 - [ ] **Step 1: Write RED adapter request-shape tests**
 

@@ -147,6 +147,8 @@ conversations that can fan out independently.
   fan-out collisions.
 - **Interface / contract:** `(instance, name)` is stable until an explicitly future
   deletion feature exists. No common command deletes or reconfigures a worker.
+  Policy completeness requires name, resolved model, effort, and access; `tier` is
+  intentionally null when creation used the mutually exclusive raw-model path.
 - **Depends on:** instance manager, versioned registry, existing session start/resume.
 - **Serves:** R2, R4, R6, R7, R8, R11, R13 · **Governed by:** D11–D12, D19–D23,
   D28, D36, D42 · **Realizes:** UC1–UC3, UC5, UC8–UC9
