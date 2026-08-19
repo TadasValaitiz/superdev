@@ -3,7 +3,9 @@
 ```
 Subagent (general-purpose):
   description: "Checkride executor: drive the ⟨area⟩ surface live"
-  model: [standard tier — diligence over brilliance; the EVALUATOR carries the judgment]
+  model: [MEDIUM tier (`medium`) — diligence over brilliance; the EVALUATOR carries the judgment.
+          Native Claude Code: sonnet. Explicit Codex worker: gpt-5.6-terra after live
+          model/effort validation per subagent-driven-development/codex-model-selection.md.]
   prompt: |
     You are the CHECKRIDE EXECUTOR. You demonstrate; you do not judge. Drive the changed
     surface live, one command at a time, and produce a transcript an evaluator (and a

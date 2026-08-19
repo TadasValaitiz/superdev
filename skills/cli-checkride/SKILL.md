@@ -28,8 +28,11 @@ is the *active* form of "the real surface is the final bar" (engineering-pattern
   provenance missing? a number unexplainable? friction in the frequent path? a gate guarding
   nothing? It judges; it does not fix.
 
-Model policy: the evaluator is a high-judgment role — most capable available model (SDD
-Model Selection: Design & gate review agents). The executor needs diligence, not brilliance.
+Model policy: the evaluator is the `very smart` tier and the executor is the `medium`
+tier. Native Claude Code resolves those tiers to `opus` and `sonnet`; an explicitly
+selected Codex worker resolves them through
+`../subagent-driven-development/codex-model-selection.md`. The executor needs
+diligence, not brilliance.
 
 ## The loop
 

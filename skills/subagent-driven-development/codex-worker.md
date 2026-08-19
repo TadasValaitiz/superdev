@@ -22,6 +22,10 @@ remembered aliases or assume that a model supports an effort it did not return.
 If the daemon is absent, report that fact and start the exact `daemon serve`
 command; do not invent a different lifecycle command.
 
+Resolve SDD's two tiers through [Codex model selection](codex-model-selection.md);
+that appendix owns model meaning and effort selection, while this reference owns
+worker lifecycle and recovery mechanics.
+
 ## One session per role and worktree
 
 The coordinator creates worktrees using the normal SDD/worktree procedure. Give

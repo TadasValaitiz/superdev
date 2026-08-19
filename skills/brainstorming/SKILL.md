@@ -9,11 +9,11 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
-**Model:** design reasoning is high-judgment and runs in THIS (main) session, not a
-subagent — so no `model:` field governs it. Set the session to the most capable
-available model (`/model`, or the harness equivalent — Opus on Claude Code, top tier
-under Codex) before doing this work. The required spec-reviewer dispatch pins the most
-capable model in its own prompt template; see subagent-driven-development Model Selection.
+**Model:** design reasoning is the `very smart` tier and runs in THIS (main) session,
+not a subagent — so no `model:` field governs it. It remains native Claude Code work on
+`opus`, never a Codex-worker dispatch. The required spec-reviewer dispatch pins the
+`very smart` tier in its own prompt template; see subagent-driven-development Model
+Selection.
 
 **Launched as a room? (GUARDED — default is standalone, unchanged.)** If — and ONLY if —
 your launch brief names an orchestrator address, a reporting protocol (R0–R5), and a

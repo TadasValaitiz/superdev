@@ -13,7 +13,9 @@ implementation planning.
 ```
 Subagent (general-purpose):
   description: "Review design spec + decision log"
-  model: [MOST CAPABLE available model — high-judgment review agent (SDD Model Selection: Design & gate review agents); never scale down. Opus on Claude Code, top tier under Codex/other harnesses.]
+  model: [VERY SMART tier — REQUIRED for this high-judgment gate; never scale down.
+          Native Claude Code: opus. Explicit Codex worker: gpt-5.6-sol after live
+          model/effort validation per subagent-driven-development/codex-model-selection.md.]
   prompt: |
     You are a design-document reviewer. Fresh eyes — you have no attachment to this
     design. Verify the spec is ready to govern an implementation, including months from

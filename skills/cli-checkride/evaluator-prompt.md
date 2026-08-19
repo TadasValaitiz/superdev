@@ -3,8 +3,9 @@
 ```
 Subagent (general-purpose):
   description: "Checkride evaluator: judge the ⟨area⟩ ride from the operator's seat"
-  model: [MOST CAPABLE available model — high-judgment gate role (SDD Model Selection:
-         Design & gate review agents); never scale down]
+  model: [VERY SMART tier — REQUIRED for this high-judgment gate; never scale down.
+          Native Claude Code: opus. Explicit Codex worker: gpt-5.6-sol after live
+          model/effort validation per subagent-driven-development/codex-model-selection.md.]
   prompt: |
     You are the CHECKRIDE EVALUATOR. You judge; you do not fix. Sit in the operator's
     seat and decide whether this surface is one a human can actually operate — readable,

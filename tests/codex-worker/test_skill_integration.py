@@ -5,6 +5,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SDD = ROOT / "skills" / "subagent-driven-development" / "SKILL.md"
 REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-worker.md"
+MODEL_REFERENCE = (
+    ROOT / "skills" / "subagent-driven-development" / "codex-model-selection.md"
+)
+ROUTING_CONSUMERS = (
+    ROOT / "skills" / "brainstorming" / "SKILL.md",
+    ROOT / "skills" / "brainstorming" / "spec-document-reviewer-prompt.md",
+    ROOT / "skills" / "writing-plans" / "plan-document-reviewer-prompt.md",
+    ROOT / "skills" / "requesting-code-review" / "code-reviewer.md",
+    ROOT / "skills" / "finishing-a-development-branch" / "deviation-auditor-prompt.md",
+    ROOT / "skills" / "cli-checkride" / "SKILL.md",
+    ROOT / "skills" / "cli-checkride" / "evaluator-prompt.md",
+    ROOT / "skills" / "cli-checkride" / "executor-prompt.md",
+    ROOT / "skills" / "self-brainstorming" / "workflow-reference.md",
+    ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md",
+)
 
 
 class CodexWorkerSkillIntegrationTests(unittest.TestCase):
@@ -172,6 +187,67 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         text = self._reference().lower()
         self.assertIn("brainstorm", text)
         self.assertIn("main session", text)
+
+
+class SddModelSelectionTests(unittest.TestCase):
+    def test_core_skill_links_two_tier_codex_appendix_and_preserves_claude(self):
+        text = SDD.read_text(encoding="utf-8")
+        self.assertIn("[Codex model selection](codex-model-selection.md)", text)
+        self.assertIn("`very smart`", text)
+        self.assertIn("`medium`", text)
+        self.assertIn("`opus`", text)
+        self.assertIn("`sonnet`", text)
+        self.assertIn("main-session brainstorming and design", text.lower())
+        section = text.split("## Model Selection", 1)[1].split("\n## ", 1)[0].lower()
+        for retired_tier in ("cheap model", "standard model", "most capable model"):
+            with self.subTest(retired_tier=retired_tier):
+                self.assertNotIn(retired_tier, section)
+
+    def test_codex_appendix_defines_only_sol_and_terra_tier_mappings(self):
+        self.assertTrue(MODEL_REFERENCE.is_file())
+        text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
+        self.assertIn("`very smart` → `gpt-5.6-sol`", text)
+        self.assertIn("`medium` → `gpt-5.6-terra`", text)
+        self.assertNotIn("third tier", text.split("## not a model catalog")[0])
+
+    def test_codex_appendix_requires_live_effort_validation_and_no_fallback(self):
+        text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
+        for fragment in (
+            "model list",
+            "supported_efforts",
+            "effort is independent",
+            "block",
+            "never silently substitute",
+            "session start",
+            "turn start",
+            "session resume",
+            "codex-worker.md",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+    def test_active_routing_consumers_use_two_tier_vocabulary(self):
+        retired = (
+            "MOST CAPABLE",
+            "most capable model",
+            "most capable available model",
+            "most capable tier",
+            "standard model",
+            "standard tier",
+            "top tier under Codex",
+            "gpt-5.6-luna",
+            "nearest cheap",
+            "cheap, balanced, or frontier",
+        )
+        for path in ROUTING_CONSUMERS:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=str(path)):
+                for phrase in retired:
+                    self.assertNotIn(phrase, text)
+                self.assertTrue(
+                    "very smart" in text.lower() or "`medium`" in text.lower(),
+                    "routing consumer must name a shared SDD tier",
+                )
 
 
 if __name__ == "__main__":

@@ -205,9 +205,8 @@ DECISION_LOG_PATH=paths.logPath; request the REVIEW_SCHEMA fields as the output.
 - **Budget scaling:** with a token directive, the `budget.remaining()` guard paces
   depth; without one, `maxRounds` is the knob. Report which limit ended the run.
 - **Model/effort:** the Questioner (design authority) and the synthesis agent (writes
-  the design doc) are high-judgment DESIGN roles — pin them to the most capable
-  available model, same rule as brainstorming's design reasoning (SDD Model Selection:
-  Design & gate review agents). The `review` agent reuses the spec-reviewer template,
-  which already pins most-capable. The Responder needs tool diligence more than
-  brilliance — a standard model with high effort is the calibrated choice there. Relative
-  naming resolves to Opus on Claude Code, top tier under Codex.
+  the design doc) are native Claude Code `opus` (`very smart`) roles, matching
+  brainstorming's design reasoning. The `review` agent reuses the spec-reviewer
+  template, which already pins the `very smart` tier. The Responder needs tool
+  diligence more than brilliance: native Claude Code `sonnet` (`medium`) is the
+  calibrated choice there. These are native Claude roles, not Codex-worker dispatches.

@@ -7,7 +7,9 @@ Use this template when dispatching a code reviewer subagent.
 ```
 Subagent (general-purpose):
   description: "Review code changes"
-  model: [MOST CAPABLE available model — high-judgment review agent (SDD Model Selection: Design & gate review agents); never scale down. Opus on Claude Code, top tier under Codex/other harnesses.]
+  model: [VERY SMART tier — REQUIRED for this high-judgment gate; never scale down.
+          Native Claude Code: opus. Explicit Codex worker: gpt-5.6-sol after live
+          model/effort validation per subagent-driven-development/codex-model-selection.md.]
   prompt: |
     You are a Senior Code Reviewer with expertise in software architecture,
     design patterns, and best practices. Your job is to review completed work
