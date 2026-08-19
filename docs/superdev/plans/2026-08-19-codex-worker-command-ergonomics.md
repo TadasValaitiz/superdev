@@ -127,7 +127,10 @@ class StartWorkerRequest:
             raise ValueError("--token-budget requires --goal")
 ```
 
-Implement explicit `to_dict`/`from_dict` for every seam model, reject unknown keys, preserve nullability/enums from CLI §8, and pin new codes `-32021..-32029`. Keep existing `RpcFault/ErrorDetail` serialization unchanged for advanced methods.
+Implement explicit `to_dict`/`from_dict` for every seam model, reject unknown keys,
+preserve nullability/enums from CLI §8, and pin new codes `-32021..-32030` including
+typed `daemon_stop_failed`. Keep existing `RpcFault/ErrorDetail` serialization unchanged
+for advanced methods.
 
 - [ ] **Step 4: Write RED registry migration/bootstrap tests**
 
@@ -195,8 +198,8 @@ git commit -m "feat(codex-worker): add named worker command domain"
 - Modify: `tests/codex-worker/test_rpc_cli.py`
 
 **Interfaces:**
-- Consumes: Task 1 `InstanceIdentity`, `InstanceView`, `DaemonStatusResponse`, `DaemonStopResponse`, `FacadeFault`.
-- Produces: `resolve_instance(explicit, env) -> InstanceIdentity`; `derive_instance_paths(identity, platform, state_home, temp_root, uid) -> InstancePaths`; injectable `InstanceDeps`; `InstanceManager.status()`, `ensure_running()`, `stop()`; owner-only `instance.json`; `load_managed_identity(state_path) -> Optional[InstanceIdentity]`; executable cwd-independent `bin/codex-worker`.
+- Consumes: Task 1 `InstanceSource`, `InstanceView`, `DaemonStatusResponse`, `DaemonStopResponse`, `FacadeFault`.
+- Produces: `InstanceIdentity`, `validate_instance_id`; `resolve_instance(explicit, env) -> InstanceIdentity`; `derive_instance_paths(identity, platform, state_home, temp_root, uid) -> InstancePaths`; injectable `InstanceDeps`; `InstanceManager.status()`, `ensure_running()`, `stop()`; owner-only `instance.json`; `load_managed_identity(state_path) -> Optional[InstanceIdentity]`; executable cwd-independent `bin/codex-worker`.
 
 - [ ] **Step 1: Write RED precedence/path tests**
 

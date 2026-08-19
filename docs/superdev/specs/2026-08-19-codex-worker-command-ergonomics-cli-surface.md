@@ -356,6 +356,7 @@ rolled back. Preserve the reported IDs and log/state paths.
 | `-32022` | `worker_not_found` | Name absent for continuation/observation/control. | Use `start --name <name>` or select the right instance. |
 | `-32023` | `daemon_stopped` | A non-autostart command selected an inactive runtime. | Use `start`/`run` to restart, or stop if observation was unintended. |
 | `-32024` | `daemon_start_failed` | Implicit startup failed readiness. | Inspect the returned log/path/cause; no arbitrary sleep retry. |
+| `-32030` | `daemon_stop_failed` | Graceful stop did not terminate every reported process before its bounded deadline. | Inspect returned PIDs/status, then retry stop; durable state and verified runtime markers were preserved. |
 | `-32025` | `timeout_active` | Local wait expired while turn remains active. | Use returned status/messages/interrupt commands. |
 | `-32005` | `turn_not_active` | No matching active turn, including exact already-finished race. | Inspect status/history; start a later `run` if more work is needed. |
 | `-32026` | `model_unavailable` | Requested tier/raw model is absent from live discovery. | Choose from returned discovery data; no fallback occurred. |

@@ -250,7 +250,7 @@ non-destructive, and actionable without reading implementation source.
 - **Error contract:** Service seams return closed typed results. Errors include stable
   code/kind, human message, retryability, source, known identities, and structured
   `next_actions`. Expected classes cover invalid params/prompt/schema, name exists/not
-  found, daemon stopped/start failed, registry malformed/write failed, model/effort
+  found, daemon stopped/start/stop failed, registry malformed/write failed, model/effort
   unavailable, timeout-active, turn not active, limits unavailable, Codex failure, and
   protocol-incomplete completion. CLI parse errors retain stderr usage and emit the
   same one-object stdout error with exit 2; operational refusals exit 1.

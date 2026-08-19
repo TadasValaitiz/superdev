@@ -1138,3 +1138,33 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   official metadata package is not present (MEASURED); the package builder remains gated.
 - **Affects:** Task 8, D45's local meaning of packaged, checkride evidence, handoff.
 - **Revisit-when:** Official portal metadata is supplied for an upload artifact.
+
+## D50 — Put instance identity in the lifecycle module that produces it
+**When:** 2026-08-19T18:10:33Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Task 2's plan interface said it consumed `InstanceIdentity` from Task 1,
+  but Task 1 correctly produced only the shared source enum and response models; no task
+  actually owned construction or validation of the identity value.
+- **Options weighed:** retrofit identity logic into generic command models; duplicate it
+  across caller and manager; let the instance module own the type and validator it uses.
+- **Decided:** `codex_worker.instance` owns `InstanceIdentity` and
+  `validate_instance_id`; command models retain `InstanceSource` and `InstanceView`.
+  This corrects the plan's Consumes/Produces edge without changing public behavior.
+- **Affects:** Task 2 interface, Task 4 `FacadeDeps`, Task 5 instance resolution.
+- **Revisit-when:** Instance identity becomes a serialized public request model.
+
+## D51 — Give incomplete graceful stop its own typed refusal
+**When:** 2026-08-19T18:10:33Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Adversarial review proved the manager could reach its stop deadline while
+  a reported daemon or Codex PID remained alive. `DaemonStopResponse` can truthfully
+  represent only terminal stopped success, and no existing fault kind described this.
+- **Options weighed:** falsely return stopped; overload startup or upstream failure;
+  add a precise lifecycle refusal.
+- **Decided:** Add `-32030` / `daemon_stop_failed`. It reports observed PIDs and deadline,
+  labels durable state preserved, retains verified runtime markers, and suggests status
+  inspection plus a later stop retry. `DaemonStopResponse` remains success-only.
+- **Affects:** command fault vocabulary, instance stop, CLI error table, adversarial tests.
+- **Revisit-when:** Stop gains a richer asynchronous lifecycle/status model.
