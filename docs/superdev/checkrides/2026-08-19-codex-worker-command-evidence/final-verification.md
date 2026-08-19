@@ -69,3 +69,31 @@ Verbatim transcripts:
 - [successful reinstall and installed launcher checks](installed-7.2.0/install-transcript.txt)
 
 No credentials, cache contents, or durable worker records are included or deleted.
+
+## Post-fix installed-cache refresh
+
+After the final product fix, the controller measured that installed `facade.py` was
+stale while installed `commands.py` already matched the worktree. This was an
+installed-cache issue, not a source change. The controller ran this refresh sequence:
+
+- `claude plugin install superdev@superdev-dev --scope user` — reported already
+  installed.
+- `claude plugin uninstall superdev@superdev-dev --scope user --keep-data` — PASS.
+- `claude plugin install superdev@superdev-dev --scope user` — PASS.
+- `claude plugin update superdev@superdev-dev` — PASS; latest version 7.2.0.
+- `claude plugin list` — Superdev 7.2.0, user scope, enabled.
+- `cmp -s skills/subagent-driven-development/scripts/codex_worker/facade.py /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/skills/subagent-driven-development/scripts/codex_worker/facade.py`
+  — PASS, bytewise identical.
+- `cmp -s skills/subagent-driven-development/scripts/codex_worker/commands.py /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/skills/subagent-driven-development/scripts/codex_worker/commands.py`
+  — PASS, bytewise identical.
+- `test -x /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/bin/codex-worker`
+  — PASS.
+- From a controller-created external `mktemp` cwd, the installed launcher `--help`
+  and `daemon status` invocations both exited 0. Status was exactly one JSON object:
+  default instance, stopped, zero workers.
+
+The uninstall explicitly used `--keep-data`; no durable worker state or plugin data
+was deleted. The `superdev-dev` marketplace remains pointed at
+`/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade` pending branch
+integration, after which the controller will restore the main-checkout source and
+reverify installed 7.2.0.
