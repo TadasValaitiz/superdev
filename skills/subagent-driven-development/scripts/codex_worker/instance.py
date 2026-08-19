@@ -106,6 +106,8 @@ def _safe_ancestor(path: Path) -> bool:
     """Accept owner-only ancestors and sticky system temp ancestors, never links."""
     absolute = Path(os.path.abspath(str(path)))
     current = Path(absolute.anchor)
+    controlled = False
+    shared_sticky = False
     for component in absolute.parts[1:]:
         current = current / component
         try:
@@ -120,15 +122,39 @@ def _safe_ancestor(path: Path) -> bool:
             except OSError:
                 return False
         mode = stat.S_IMODE(data.st_mode)
+        sticky = bool(mode & stat.S_ISVTX)
+        shared = sticky and bool(mode & 0o022)
         if (not stat.S_ISDIR(data.st_mode)
-                or mode & 0o022 and not (mode & stat.S_ISVTX)):
+                or mode & 0o022 and not sticky):
+            return False
+        if data.st_uid == os.getuid():
+            controlled = True
+        elif shared:
+            shared_sticky = True
+            controlled = False
+        elif data.st_uid != 0 or controlled or shared_sticky:
             return False
     return True
 
 
+def _safe_nearest_ancestor(path: Path) -> bool:
+    current = Path(path)
+    while True:
+        try:
+            os.lstat(current)
+        except FileNotFoundError:
+            if current.parent == current:
+                return False
+            current = current.parent
+            continue
+        except OSError:
+            return False
+        return _safe_ancestor(current)
+
+
 def _mkdir_owner_only(path: Path) -> None:
     if path.exists() or path.is_symlink():
-        if not _safe_directory(path):
+        if not _safe_ancestor(path) or not _safe_directory(path):
             raise RuntimeError("unsafe directory %s" % path)
         return
     parent = path.parent
@@ -177,7 +203,9 @@ def load_managed_identity(state_path: Path) -> Optional[InstanceIdentity]:
     """Return verified owner-only identity for a managed registry, else ``None``."""
     registry_path = Path(state_path)
     metadata_path = registry_path.parent / "instance.json"
-    if not _safe_directory(registry_path.parent) or not _owner_regular(metadata_path, 0o600):
+    if (not _safe_ancestor(registry_path.parent)
+            or not _safe_directory(registry_path.parent)
+            or not _owner_regular(metadata_path, 0o600)):
         return None
     try:
         data = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -347,6 +375,10 @@ class InstanceManager:
                                                                      "reason": reason})
 
     def stop(self) -> DaemonStopResponse:
+        if (not _safe_nearest_ancestor(self.deps.paths.durable_dir)
+                or not _safe_nearest_ancestor(self.deps.paths.socket_path.parent)):
+            raise _lifecycle_fault(FacadeFaultCode.DAEMON_STOP_FAILED, "unsafe_parent",
+                                   self.deps.paths.socket_path)
         before = self._probe()
         if before is None:
             return DaemonStopResponse(self._view(), "stopped", "stopped", None, None,

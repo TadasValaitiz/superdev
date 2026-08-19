@@ -86,6 +86,11 @@ class LifecycleTests(unittest.TestCase):
         repeated = self.manager.stop()
         self.assertEqual(repeated.status_before, "stopped")
 
+    def test_stop_is_stopped_when_managed_directories_do_not_exist_yet(self):
+        stopped = self.manager.stop()
+        self.assertEqual(stopped.status_before, "stopped")
+        self.assertEqual(stopped.status_after, "stopped")
+
     def test_metadata_rejects_permissive_file_and_parent_hash_mismatch(self):
         self.manager.ensure_running()
         os.chmod(self.paths.metadata_path, 0o644)
@@ -314,6 +319,57 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(self.paths.socket_path.exists())
         self.assertEqual(self.spawns, [])
 
+    def test_foreign_owned_controlled_ancestor_is_refused_without_root(self):
+        self.paths.socket_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        controlled_ancestor = self.paths.socket_path.parent.parent
+        real_lstat = os.lstat
+
+        def injected_lstat(path):
+            metadata = real_lstat(path)
+            if os.fspath(path) != os.fspath(controlled_ancestor):
+                return metadata
+            return type("InjectedStat", (), {
+                "st_mode": metadata.st_mode, "st_uid": os.getuid() + 1,
+                "st_dev": metadata.st_dev, "st_ino": metadata.st_ino,
+            })()
+
+        with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
+            with self.assertRaises(RuntimeError):
+                self.manager.ensure_running()
+        self.assertEqual(self.spawns, [])
+
+    def test_stop_refuses_foreign_controlled_ancestor_and_preserves_socket(self):
+        self._leave_stale_socket()
+        self.ready = True
+        controlled_ancestor = self.paths.socket_path.parent.parent
+        real_lstat = os.lstat
+        shutdowns = []
+        original_rpc = self.manager.deps.rpc_call
+
+        def rpc(socket_path, method, params, timeout):
+            if method == "daemon/shutdown":
+                shutdowns.append(method)
+            return original_rpc(socket_path, method, params, timeout)
+
+        def injected_lstat(path):
+            metadata = real_lstat(path)
+            if os.fspath(path) != os.fspath(controlled_ancestor):
+                return metadata
+            return type("InjectedStat", (), {
+                "st_mode": metadata.st_mode, "st_uid": os.getuid() + 1,
+                "st_dev": metadata.st_dev, "st_ino": metadata.st_ino,
+            })()
+
+        self.manager.deps = InstanceDeps(self.paths, "/launcher", "codex",
+                                         self.manager.deps.spawn, rpc, lambda: 0.0)
+        with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
+            with self.assertRaises(instance_module.FacadeFault) as caught:
+                self.manager.stop()
+        self.assertEqual(caught.exception.code, instance_module.FacadeFaultCode.DAEMON_STOP_FAILED)
+        self.assertEqual(caught.exception.details["reason"], "unsafe_parent")
+        self.assertEqual(shutdowns, [])
+        self.assertTrue(self.paths.socket_path.exists())
+
 class ControlledParentTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
@@ -367,6 +423,47 @@ class ControlledParentTests(unittest.TestCase):
                     manager.ensure_running()
                 self.assertEqual(caught.exception.details["reason"], "child_exited")
 
+    def test_foreign_owned_shared_sticky_temp_parent_is_supported(self):
+        sticky_temp = self.root / "foreign-sticky-temp"
+        sticky_temp.mkdir(mode=0o1777)
+        os.chmod(sticky_temp, 0o1777)
+        manager = self._manager(self.root / "sticky-state", sticky_temp)
+        real_lstat = os.lstat
+
+        def injected_lstat(path):
+            metadata = real_lstat(path)
+            if os.fspath(path) != os.fspath(sticky_temp):
+                return metadata
+            return type("InjectedStat", (), {
+                "st_mode": metadata.st_mode, "st_uid": os.getuid() + 1,
+                "st_dev": metadata.st_dev, "st_ino": metadata.st_ino,
+            })()
+
+        with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
+            with self.assertRaises(instance_module.FacadeFault) as caught:
+                manager.ensure_running()
+        self.assertEqual(caught.exception.details["reason"], "child_exited")
+
+    def test_foreign_owned_non_shared_sticky_parent_is_refused(self):
+        sticky_private = self.root / "foreign-sticky-private"
+        sticky_private.mkdir(mode=0o1700)
+        os.chmod(sticky_private, 0o1700)
+        manager = self._manager(self.root / "sticky-private-state", sticky_private)
+        real_lstat = os.lstat
+
+        def injected_lstat(path):
+            metadata = real_lstat(path)
+            if os.fspath(path) != os.fspath(sticky_private):
+                return metadata
+            return type("InjectedStat", (), {
+                "st_mode": metadata.st_mode, "st_uid": os.getuid() + 1,
+                "st_dev": metadata.st_dev, "st_ino": metadata.st_ino,
+            })()
+
+        with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
+            with self.assertRaises(RuntimeError):
+                manager.ensure_running()
+
 
 class InstanceResolutionTests(unittest.TestCase):
     def setUp(self):
@@ -385,6 +482,32 @@ class InstanceResolutionTests(unittest.TestCase):
                                       self.state_home, self.temp_root, 501)
         self.assertLess(len(os.fsencode(paths.socket_path)), 100)
         self.assertNotIn("default", paths.socket_path.name)
+
+    def test_load_managed_identity_refuses_writable_ancestor_without_touching_metadata(self):
+        identity = resolve_instance("unsafe-load-parent", {})
+        paths = derive_instance_paths(identity, "darwin", self.state_home, self.temp_root,
+                                      os.getuid())
+        paths.durable_dir.mkdir(parents=True, mode=0o700)
+        payload = {"source": identity.source.value, "value": identity.value,
+                   "key_hash": identity.key_hash}
+        paths.metadata_path.write_text(json.dumps(payload) + "\n")
+        os.chmod(paths.metadata_path, 0o600)
+        controlled_ancestor = paths.durable_dir.parent
+        real_lstat = os.lstat
+
+        def injected_lstat(path):
+            metadata = real_lstat(path)
+            if os.fspath(path) != os.fspath(controlled_ancestor):
+                return metadata
+            return type("InjectedStat", (), {
+                "st_mode": (metadata.st_mode & ~0o777) | 0o770, "st_uid": os.getuid(),
+                "st_dev": metadata.st_dev, "st_ino": metadata.st_ino,
+            })()
+
+        before = paths.metadata_path.read_bytes()
+        with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
+            self.assertIsNone(load_managed_identity(paths.registry_path))
+        self.assertEqual(paths.metadata_path.read_bytes(), before)
 
 
 if __name__ == "__main__":
