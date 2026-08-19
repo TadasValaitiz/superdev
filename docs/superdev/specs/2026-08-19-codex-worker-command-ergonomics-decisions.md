@@ -1336,3 +1336,21 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** R8/R13, UC8/UC9, AH8/AH9; façade error translation and creation recovery.
 - **Revisit-when:** the app-server supplies a versioned catalog token or creation accepts
   a validated catalog snapshot atomically.
+
+## D61 — Publish the implemented completion-metric vocabulary
+**When:** 2026-08-19T22:44:39Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The finishing deviation audit found that the normative CLI example still
+  used early brainstorm names and source labels, while implementation, deterministic
+  tests, and the live checkride consistently exposed a different stable vocabulary.
+- **Options weighed:** rename the shipped JSON fields after the full checkride; retain a
+  contradictory example; amend the example to the already tested public response.
+- **Decided:** Keep the shipped keys `wall_duration_seconds`, `item_counts`,
+  `command_count`, `command_duration_ms`, and `token_usage`. Local wall/count evidence
+  uses source `codex-worker`; provider-derived duration and usage use source `codex`.
+  The CLI surface example now copies the exact metric values and shape from checkride
+  record F1 instead of publishing the superseded brainstorm vocabulary.
+- **Rests on:** MEASURED final checkride F1 and fresh 283-test finishing gate.
+- **Affects:** R3, AH10, the normative completion JSON example, and metric consumers.
+- **Revisit-when:** a versioned API change deliberately renames completion metrics.

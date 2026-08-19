@@ -92,10 +92,10 @@ The success response retains JSON-RPC 2.0 framing:
     ],
     "structured_output": null,
     "metrics": {
-      "wall_time_ms": {"value": 1234, "source": "codex-worker", "availability": "measured"},
-      "observed_items": {"value": 8, "source": "codex-worker:codex-items", "availability": "derived"},
-      "command_executions": {"value": 2, "source": "codex-worker:codex-items", "availability": "derived"},
-      "command_duration_ms": {"value": 450, "source": "codex:durationMs", "availability": "derived"},
+      "wall_duration_seconds": {"value": 10.856261375, "source": "codex-worker", "availability": "measured"},
+      "item_counts": {"value": {"userMessage": 1, "reasoning": 2, "agentMessage": 2, "commandExecution": 1}, "source": "codex-worker", "availability": "derived"},
+      "command_count": {"value": 1, "source": "codex-worker", "availability": "derived"},
+      "command_duration_ms": {"value": 0, "source": "codex", "availability": "derived"},
       "token_usage": {"value": null, "source": "codex", "availability": "unavailable"}
     },
     "recovery": {

@@ -238,9 +238,11 @@ Derive durable platform state on macOS under
 `~/Library/Application Support/superdev/codex-worker/instances/<sha256>` and on other
 Unix systems under
 `${XDG_STATE_HOME:-~/.local/state}/superdev/codex-worker/instances/<sha256>`. Derive
-the socket under the platform temporary directory as
-`superdev-cw-<effective-uid>/<sha256-prefix>/worker.sock`. Persist original identity
-only in owner-only metadata, not path text.
+the socket and startup lock under the platform temporary directory as
+`scw-<effective-uid>-<20-hex>/s` and `/l`. The 80-bit compact digest keeps the endpoint
+within the measured macOS AF_UNIX budget while avoiding the former six-hex alias.
+Legacy six-hex endpoints are neither adopted nor deleted. Persist original identity
+only in owner-only metadata, not path text. This is the build-phase D59 layout.
 
 Create `instance.json` beside `registry.json` before spawn with mode `0600`. Loading
 verifies owner, type, mode, exact fields, and agreement between the identity hash and
@@ -828,9 +830,17 @@ git commit -m "chore(release): bump superdev to 7.2.0"
 
 - [ ] **Step 8: Reinstall Claude plugin, verify installed launcher, and commit evidence**
 
-Run exactly:
+Because the configured local marketplace may still point at the pre-merge main
+checkout, apply build-phase D58 before the required update: temporarily point
+`superdev-dev` at the reviewed release worktree, explicitly install the plugin if the
+source change disassociates it, then run the update and verification below. After
+integration, restore the marketplace to `/Users/tadas/Projects/superdev`, reinstall
+with `--keep-data`, and repeat the version/launcher checks.
+
+Run the candidate verification sequence:
 
 ```bash
+claude plugin install superdev@superdev-dev --scope user
 claude plugin update superdev@superdev-dev
 claude plugin list
 CLAUDE_PLUGIN_ROOT="$HOME/.claude/plugins/cache/superdev-dev/superdev/7.2.0"
