@@ -859,6 +859,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual([record["session_id"] for record in payload["sessions"]], [session_id])
         self.assertFalse(_pid_exists(codex_pid))
 
+class PublicLauncherTests(unittest.TestCase):
+    def test_launcher_runs_from_an_unrelated_working_directory(self):
+        launcher = ROOT / "bin" / "codex-worker"
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([str(launcher), "--help"], cwd=directory, text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Local Unix-socket broker", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
