@@ -14,7 +14,9 @@ This enables `spawn_agent`, `wait_agent`, and `close_agent` for skills like `dis
 This section governs native Codex-harness dispatch through its multi-agent tools, not
 the local broker from Claude Code. It does not start or require the broker and does not
 change native Claude routing/main-session design. For Claude Code coordinating a local
-Codex worker, use [Codex model selection](../../subagent-driven-development/codex-model-selection.md).
+Codex worker, Codex is opt-in: only an operator or plan selects it. Then use the
+named-worker product commands in [Codex worker commands](../../subagent-driven-development/codex-worker.md)
+(`start` for the first message, `run` for follow-ups) and its [Codex model selection](../../subagent-driven-development/codex-model-selection.md).
 
 For Superdev dispatches, always set `model` and `reasoning_effort` explicitly. An
 omitted override inherits the coordinator's model and can silently spend the `very

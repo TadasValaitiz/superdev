@@ -1,77 +1,29 @@
 # Codex model selection
 
-Read this reference only when the operator or plan explicitly selects a Codex worker.
-Claude Code remains coordinator; native Claude model routing stays in `SKILL.md`.
+Read this reference only when the operator or plan selects a Codex worker. Native
+Claude Code routing remains in `SKILL.md`; this does not choose Codex by default.
 
-## The two mappings
-
-| SDD tier | Codex model | Operational meaning |
+| SDD tier | Codex model | Use |
 |---|---|---|
-| `very smart` | `gpt-5.6-sol` | Frontier choice for architecture, difficult reasoning/coding, escalation, and dispatched design/final gates. |
-| `medium` | `gpt-5.6-terra` | Balanced default for normal implementation, routine integration/debugging, and ordinary per-task review. |
+| `medium` | `gpt-5.6-terra` | Default normal implementation, integration/debugging, and ordinary review. |
+| `very-smart` | `gpt-5.6-sol` | Explicit elevation for difficult, high-risk, architecture, or final-gate work. |
 
-`very smart` → `gpt-5.6-sol`; `medium` → `gpt-5.6-terra`.
+`medium` → `gpt-5.6-terra`; `very smart` → `gpt-5.6-sol`. These are the only
+operator-facing tiers. The default effort is `medium`; it is independent of the tier
+and never inherits from `CLAUDE_EFFORT`.
 
-Sol is the higher-judgment tier; Terra is the everyday engineering tier. These are the
-only normal SDD recommendations for now. OpenAI describes Sol as its flagship for
-complex professional work and describes Terra as balancing intelligence and cost
-([model catalog](https://developers.openai.com/api/docs/models),
-[Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol), checked
-2026-08-19). Runtime selection still follows the daemon's live response.
+On `start`, resolve the tier against live discovery and confirm that its model supports
+the requested effort. If it does not, block with the CLI's typed refusal; never silently
+fall back or substitute. `--model <live-id>` is mutually exclusive with `--tier` for
+the exceptional raw-model case. The resolved model, effort, access, and cwd are fixed
+at creation; `run` continues them rather than reselecting policy.
 
-## Discover before dispatch
-
-Run:
-
-```sh
-codex-worker --socket "$SOCKET" model list
-```
-
-Confirm the exact selected ID exists and read that model's returned
-`supported_efforts`. Effort is independent of the SDD tier: choose only a
-live-supported value. If the pinned model or desired effort is absent, block and
-report it; never silently substitute another model or effort.
-
-## Pin the model and effort
-
-For a normal `medium` task:
+Use the product form, not raw session/turn commands, for normal dispatch:
 
 ```sh
-codex-worker --socket "$SOCKET" session start \
-  --cwd "$WORKTREE" --name "$ROLE" --model gpt-5.6-terra
-codex-worker --socket "$SOCKET" turn start \
-  --session "$SESSION_UUID" --prompt-file "$TASK_BRIEF" \
-  --model gpt-5.6-terra --effort "$EFFORT"
+codex-worker start --name implement-a31 --prompt-file task.md --tier medium
+codex-worker start --name review-b32 --prompt-file review.md --tier very-smart --read-only
 ```
 
-For a dispatched `very smart` task or gate:
-
-```sh
-codex-worker --socket "$SOCKET" session start \
-  --cwd "$WORKTREE" --name "$ROLE" --model gpt-5.6-sol
-codex-worker --socket "$SOCKET" turn start \
-  --session "$SESSION_UUID" --prompt-file "$TASK_BRIEF" \
-  --model gpt-5.6-sol --effort "$EFFORT"
-```
-
-`$EFFORT` means one value returned for that exact model in `supported_efforts`, not a
-remembered default. A session retains its latest model annotation; an explicit model
-on a later turn may update it. Resume reattaches the same identity and immutable cwd:
-
-```sh
-codex-worker --socket "$SOCKET" session resume --session "$SESSION_UUID"
-```
-
-Resume is not a model-selection command. After attachment, pin the selected model and
-live-supported effort on the next `turn start` when the role requires an explicit
-choice.
-
-Follow [Codex worker broker](codex-worker.md) for daemon lifecycle, session identity,
-worktrees, task handoff, status/events/wait, steer/interrupt, and recovery. That file is
-the mechanics authority; this appendix owns only model and effort choice.
-
-## Not a model catalog
-
-Do not recommend a third tier, enumerate older models, or publish static pricing and
-capability matrices. Revisit the two mappings only when a pinned ID is unavailable or
-measured SDD evaluations justify a change.
+For the live catalog or a raw-model investigation, see the technical appendix in
+[Codex worker commands](codex-worker.md). It owns advanced recovery mechanics.

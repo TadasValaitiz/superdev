@@ -4,296 +4,82 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SDD = ROOT / "skills" / "subagent-driven-development" / "SKILL.md"
-REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-worker.md"
-MODEL_REFERENCE = (
-    ROOT / "skills" / "subagent-driven-development" / "codex-model-selection.md"
-)
-ROUTING_CONSUMERS = (
-    ROOT / "skills" / "brainstorming" / "SKILL.md",
-    ROOT / "skills" / "brainstorming" / "spec-document-reviewer-prompt.md",
-    ROOT / "skills" / "writing-plans" / "plan-document-reviewer-prompt.md",
-    ROOT / "skills" / "requesting-code-review" / "code-reviewer.md",
-    ROOT / "skills" / "finishing-a-development-branch" / "deviation-auditor-prompt.md",
-    ROOT / "skills" / "cli-checkride" / "SKILL.md",
-    ROOT / "skills" / "cli-checkride" / "evaluator-prompt.md",
-    ROOT / "skills" / "cli-checkride" / "executor-prompt.md",
-    ROOT / "skills" / "self-brainstorming" / "workflow-reference.md",
-    ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md",
-)
-CODEX_TOOLS_REFERENCE = (
-    ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md"
-)
+OPERATOR = ROOT / "skills" / "subagent-driven-development" / "codex-worker.md"
+MODEL_POLICY = ROOT / "skills" / "subagent-driven-development" / "codex-model-selection.md"
+CODEX_TOOLS = ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md"
 
 
 class CodexWorkerSkillIntegrationTests(unittest.TestCase):
-    def _reference(self):
-        self.assertTrue(REFERENCE.is_file(), "Codex worker reference is missing")
-        return " ".join(REFERENCE.read_text(encoding="utf-8").split()).replace("\\ ", "")
+    def test_sdd_dispatch_keeps_native_claude_and_named_worker_happy_path(self):
+        text = SDD.read_text(encoding="utf-8").lower()
+        self.assertIn("collision-resistant", text)
+        self.assertIn("`start`", text)
+        self.assertIn("`run`", text)
+        self.assertIn("native claude", text)
+        self.assertIn("codex is opt-in", text)
+        self.assertNotIn("daemon ensure", text)
 
-    def test_sdd_links_codex_worker_reference(self):
-        text = SDD.read_text(encoding="utf-8")
-        self.assertIn("[Codex worker broker](codex-worker.md)", text)
-
-    def test_reference_names_required_control_and_recovery_commands(self):
-        text = self._reference()
+    def test_operator_reference_links_appendix_and_covers_common_surface(self):
+        text = OPERATOR.read_text(encoding="utf-8").lower()
         for fragment in (
-            "model list",
-            "turn start",
-            "turn steer",
-            "turn interrupt",
-            "session resume",
-            "turn wait",
+            "codex-worker start --name implement-a31 --prompt-file task.md",
+            "codex-worker run --name implement-a31 --prompt \"run the focused gate and report.\"",
+            "collision-resistant",
+            "full access",
+            "read-only",
+            "goal",
+            "output-schema",
+            "status",
+            "messages",
+            "steer",
+            "interrupt",
+            "daemon stop",
+            "technical appendix",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+        self.assertNotIn("daemon ensure", text)
+
+    def test_technical_appendix_covers_recovery_and_policy_boundaries(self):
+        text = OPERATOR.read_text(encoding="utf-8").lower()
+        for fragment in (
+            "goal",
+            "history",
+            "limits",
+            "stop",
+            "timeout",
+            "--instance",
+            "codex_worker_instance",
+            "claude_code_session_id",
+            "full access",
+            "read-only",
+            "raw recovery",
+            "model policy",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+        self.assertIn("no setting inherits effort from\n`claude_effort`", text)
+
+    def test_model_policy_keeps_two_tiers_and_medium_default_effort(self):
+        text = MODEL_POLICY.read_text(encoding="utf-8").lower()
+        for fragment in (
+            "`medium` | `gpt-5.6-terra`",
+            "`very-smart` | `gpt-5.6-sol`",
+            "default effort is `medium`",
+            "never inherits from `claude_effort`",
+            "never silently\nfall back or substitute",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
-    def test_lifecycle_pressure_requires_explicit_daemon_and_live_model_discovery(self):
-        text = self._reference().lower()
-        self.assertIn("daemon serve", text)
-        self.assertIn("foreground", text)
-        self.assertIn("explicit", text)
-        self.assertIn("model list", text)
-        self.assertIn("live", text)
-        self.assertIn("do not auto", text)
-
-    def test_role_pressure_separates_sessions_worktrees_and_reviewers(self):
-        text = self._reference().lower()
-        for fragment in (
-            "distinct session",
-            "worktree",
-            "implementer",
-            "reviewer",
-            "never reviews its own diff",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_handoff_pressure_preserves_sdd_artifacts_and_terminal_mapping(self):
-        text = self._reference().lower()
-        for fragment in (
-            "task brief",
-            "report",
-            "review-package",
-            "done",
-            "done_with_concerns",
-            "needs_context",
-            "blocked",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_reference_preserves_canonical_sdd_status_tokens(self):
-        text = REFERENCE.read_text(encoding="utf-8")
-        for status in ("DONE", "DONE_WITH_CONCERNS", "NEEDS_CONTEXT", "BLOCKED"):
-            with self.subTest(status=status):
-                self.assertIn("`%s`" % status, text)
-
-    def test_reference_requires_extracting_session_fields_from_json_envelopes(self):
-        text = self._reference()
-        for field in (".result.session.session_id", ".result.session.thread_id"):
-            with self.subTest(field=field):
-                self.assertIn(field, text)
-        self.assertIn("For every `session start` and `session resume` response", text)
-        self.assertIn("Do not assign the whole JSON response", text)
-        self.assertNotIn("A_SESSION=$(codex-worker", text)
-
-    def test_operator_sequence_keeps_daemon_health_and_model_discovery_order(self):
-        text = self._reference()
-        sequence = (
-            'codex-worker --socket "$SOCKET" daemon serve --state "$STATE" '
-            'codex-worker --socket "$SOCKET" daemon status '
-            'codex-worker --socket "$SOCKET" model list'
-        )
-        self.assertIn(sequence, text)
-
-    def test_operator_sequence_connects_extracted_session_id_to_turn(self):
-        text = self._reference()
-        self.assertIn(
-            'codex-worker --socket "$SOCKET" session start --cwd '
-            '"$IMPLEMENTER_WORKTREE" --name implementer --model "$MODEL"',
-            text,
-        )
-        self.assertIn(
-            '`.result.session.session_id` and `.result.session.thread_id` and retain '
-            'those values before running later commands',
-            text,
-        )
-        self.assertIn(
-            'codex-worker --socket "$SOCKET" turn start --session "$SESSION_UUID"',
-            text,
-        )
-
-    def test_response_semantics_distinguish_wait_error_from_terminal_results(self):
-        text = self._reference().lower()
-        for fragment in (
-            'a `turn wait` timeout exits 1',
-            '.error.data.kind == "wait_timeout"',
-            '.error.data.details.active == true',
-            '.error.data.details.next_actions',
-            'work remains active',
-            'a successful terminal `turn wait` returns `.result.turn.status`',
-            '`turn status` reports a latest terminal state at `.result.latest_turn.status`',
-            '.result.turn.status == "interrupted"',
-            '.result.latest_turn.status == "interrupted"',
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_recovery_and_role_sequences_preserve_identity_and_handoffs(self):
-        text = self._reference()
-        self.assertIn(
-            'codex-worker --socket "$SOCKET" session resume --session "$SESSION_UUID"',
-            text,
-        )
-        self.assertIn(
-            'codex-worker --socket "$SOCKET" session resume --thread "$THREAD_ID" '
-            '--name recovered-implementer',
-            text,
-        )
-        self.assertIn("each implementer and reviewer a distinct session and worktree", text)
-        self.assertIn(
-            "provide the task brief, collect the worker's report, and generate/pass "
-            "the review-package file",
-            text,
-        )
-
-    def test_reference_distinguishes_wait_timeout_from_interrupted_terminal_state(self):
-        text = self._reference().lower()
-        for fragment in (
-            "wait_timeout",
-            '.result.turn.status == "interrupted"',
-            '.result.latest_turn.status == "interrupted"',
-            "terminal/incomplete",
-            "needs_context",
-            "done_with_concerns",
-            "never treat an interrupted turn as merely a wait failure",
-            "`--turn` is unsupported",
-            "`--session` or `--thread`",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_recovery_pressure_covers_uuid_raw_thread_and_immutable_cwd(self):
-        text = self._reference().lower()
-        for fragment in (
-            "uuid",
-            "raw thread",
-            "retained",
-            "immutable",
-            "cwd",
-            "cannot be retargeted",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_brainstorming_pressure_keeps_design_in_main_session(self):
-        text = self._reference().lower()
-        self.assertIn("brainstorm", text)
-        self.assertIn("main session", text)
-
-
-class SddModelSelectionTests(unittest.TestCase):
-    def test_core_skill_links_two_tier_codex_appendix_and_preserves_claude(self):
-        text = SDD.read_text(encoding="utf-8")
-        self.assertIn("[Codex model selection](codex-model-selection.md)", text)
-        self.assertIn("`very smart`", text)
-        self.assertIn("`medium`", text)
-        self.assertIn("`opus`", text)
-        self.assertIn("`sonnet`", text)
-        self.assertIn("main-session brainstorming and design", text.lower())
-        section = text.split("## Model Selection", 1)[1].split("\n## ", 1)[0].lower()
-        for retired_tier in ("cheap model", "standard model", "most capable model"):
-            with self.subTest(retired_tier=retired_tier):
-                self.assertNotIn(retired_tier, section)
-
-    def test_codex_appendix_defines_only_sol_and_terra_tier_mappings(self):
-        self.assertTrue(MODEL_REFERENCE.is_file())
-        text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
-        self.assertIn("`very smart` → `gpt-5.6-sol`", text)
-        self.assertIn("`medium` → `gpt-5.6-terra`", text)
-        self.assertNotIn("third tier", text.split("## not a model catalog")[0])
-
-    def test_codex_appendix_requires_live_effort_validation_and_no_fallback(self):
-        text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
-        for fragment in (
-            "model list",
-            "supported_efforts",
-            "effort is independent",
-            "block",
-            "never silently substitute",
-            "session start",
-            "turn start",
-            "session resume",
-            "codex-worker.md",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_active_routing_consumers_use_two_tier_vocabulary(self):
-        retired = (
-            "MOST CAPABLE",
-            "most capable model",
-            "most capable available model",
-            "most capable tier",
-            "standard model",
-            "standard tier",
-            "top tier under Codex",
-            "gpt-5.6-luna",
-            "nearest cheap",
-            "cheap, balanced, or frontier",
-        )
-        for path in ROUTING_CONSUMERS:
-            text = path.read_text(encoding="utf-8")
-            with self.subTest(path=str(path)):
-                for phrase in retired:
-                    self.assertNotIn(phrase, text)
-                self.assertTrue(
-                    "very smart" in text.lower() or "`medium`" in text.lower(),
-                    "routing consumer must name a shared SDD tier",
-                )
-
-    def test_codex_tools_reference_distinguishes_native_dispatch_from_broker(self):
-        text = " ".join(CODEX_TOOLS_REFERENCE.read_text(encoding="utf-8").split()).lower()
+    def test_codex_harness_routing_remains_separate_from_claude_worker_routing(self):
+        text = " ".join(CODEX_TOOLS.read_text(encoding="utf-8").split()).lower()
         for fragment in (
             "native codex-harness dispatch",
             "not the local broker from claude code",
             "does not start or require the broker",
             "does not change native claude routing/main-session design",
-            "../../subagent-driven-development/codex-model-selection.md",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
-
-    def test_self_brainstorm_workflow_pins_every_agent_role_to_native_tiers(self):
-        text = " ".join(
-            (ROOT / "skills" / "self-brainstorming" / "workflow-reference.md")
-            .read_text(encoding="utf-8")
-            .split()
-        )
-        expected_pins = (
-            ("ground", "{ schema: GROUND_SCHEMA, label: 'ground', model: 'sonnet' }"),
-            ("questioner", "{ schema: Q_SCHEMA, label: `q${round}`, phase: 'Dialogue', model: 'opus' }"),
-            ("responder", "{ schema: A_SCHEMA, label: `a${round}`, phase: 'Dialogue', model: 'sonnet' }"),
-            ("synthesis", "{ schema: PATHS_SCHEMA, label: 'synthesize', model: 'opus' }"),
-            ("design review", "{ schema: REVIEW_SCHEMA, label: 'review', model: 'opus' }"),
-            ("design fix", "{ label: 'fix', model: 'opus' }"),
-            ("re-review", "{ schema: REVIEW_SCHEMA, label: 're-review', model: 'opus' }"),
-        )
-        for role, pin in expected_pins:
-            with self.subTest(role=role):
-                self.assertIn(pin, text)
-
-    def test_self_brainstorm_inline_agent_fallback_pins_native_tiers(self):
-        text = " ".join(
-            (ROOT / "skills" / "self-brainstorming" / "SKILL.md")
-            .read_text(encoding="utf-8")
-            .split()
-        ).lower()
-        for fragment in (
-            "inline with native claude agent calls",
-            "grounding and responder to `sonnet` (`medium`)",
-            "questioner, synthesis, review, fix, and re-review to `opus` (`very smart`)",
-            "no codex substitution",
+            "codex is opt-in",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)

@@ -13,7 +13,13 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 ## Codex workers from Claude Code
 
-When the operator or plan selects a Codex worker, read [Codex worker broker](codex-worker.md). Start its daemon explicitly, discover models live, give each implementer/reviewer a distinct session and worktree, and preserve the normal task brief/report/review-package contracts. A worker never reviews its own diff, and a resumed session never changes cwd.
+Claude Code remains a complete native SDD route. Use a local Codex worker only when the
+operator or plan explicitly selects it; Codex is opt-in, never a replacement for native
+Claude dispatch or main-session design. Read [Codex worker broker](codex-worker.md),
+give every worker a collision-resistant readable name (role plus random or numbered
+suffix), and use `start` for its first message then short `run` follow-ups. Preserve
+the normal task brief/report/review-package contracts: a worker never reviews its own
+diff, and a resumed worker keeps its creation cwd.
 
 **Narration:** between tool calls, narrate at most one short line — the
 ledger and the tool results carry the record.
@@ -134,8 +140,8 @@ are not delegated to a Codex worker. If native Claude lacks the required `sonnet
 
 When the operator or plan explicitly selects a Codex worker, resolve the same tiers
 through [Codex model selection](codex-model-selection.md), then follow [Codex worker
-broker](codex-worker.md) for lifecycle and task handoff. Codex is opt-in; native Claude
-dispatch does not require its daemon.
+broker](codex-worker.md) for the named-worker commands and task handoff. Codex is
+opt-in; native Claude dispatch does not require it.
 
 ## Handling Implementer Status
 
