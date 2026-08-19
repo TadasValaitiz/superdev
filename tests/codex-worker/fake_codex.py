@@ -6,12 +6,15 @@ import os
 import sys
 import threading
 import time
+from pathlib import Path
 
 
 class FakeCodex:
-    def __init__(self, mode, delay):
+    def __init__(self, mode, delay, scenario=None, capture_path=None):
         self.mode = mode
-        self.delay = delay
+        self.scenario = scenario or {}
+        self.delay = self.scenario.get("delay", delay)
+        self.capture_path = Path(capture_path) if capture_path else None
         self.initialized = False
         self.thread_id = "thr-fake"
         self.thread_number = 0
@@ -28,6 +31,36 @@ class FakeCodex:
         }
         self.turn_list_requests = []
 
+    def option(self, key, default=None):
+        return self.scenario.get(key, default)
+
+    def capture(self, message):
+        """Append received JSON-RPC data without making the fake's behavior implicit."""
+        if self.capture_path is None:
+            return
+        line = json.dumps({"kind": "request", "at": time.monotonic(), "method": message.get("method"),
+                           "params": message.get("params", {}),
+                           "id": message.get("id")}, separators=(",", ":")) + "\n"
+        # O_APPEND makes one short JSONL receipt indivisible for concurrent test readers.
+        fd = os.open(str(self.capture_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
+
+    def receipt(self, kind, **values):
+        if self.capture_path is None:
+            return
+        payload = {"kind": kind, "at": time.monotonic()}
+        payload.update(values)
+        fd = os.open(str(self.capture_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+            os.write(fd, (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+
     def send(self, message):
         encoded = json.dumps(message, separators=(",", ":")) + "\n"
         with self.write_lock:
@@ -38,19 +71,30 @@ class FakeCodex:
         self.send({"id": request_id, "result": result})
 
     def complete_later(self, thread_id, turn_id, prompt):
-        time.sleep(self.delay)
+        delays = self.scenario.get("turn_delays", {})
+        time.sleep(delays.get(prompt, self.delay) if isinstance(delays, dict) else self.delay)
         if self.active_turns.get(thread_id) != turn_id:
             return
-        self.send({
-            "method": "item/completed",
-            "params": {
-                "threadId": thread_id,
-                "turnId": turn_id,
-                "item": {"id": "item-%s" % turn_id, "type": "agentMessage",
-                         "text": "done:%s" % prompt, "phase": None,
-                         "tokenUsage": {"totalTokens": 7}},
-            },
-        })
+        outputs = self.option("turn_outputs", {})
+        output = outputs.get(prompt, "done:%s" % prompt) if isinstance(outputs, dict) else "done:%s" % prompt
+        phases = self.option("turn_phases", {})
+        phase = phases.get(prompt) if isinstance(phases, dict) else None
+        if self.option("no_agent_messages", False):
+            messages = []
+        elif isinstance(output, list):
+            messages = output
+        else:
+            messages = [output]
+        for index, text in enumerate(messages):
+            item = {"id": "item-%s-%d" % (turn_id, index), "type": "agentMessage", "text": text,
+                    "phase": phase if index == len(messages) - 1 else "final_answer"}
+            if self.option("usage", True): item["tokenUsage"] = {"totalTokens": 7 + index}
+            self.send({"method": "item/completed", "params": {"threadId": thread_id,
+                       "turnId": turn_id, "item": item}})
+        duration = self.option("command_duration_ms")
+        if type(duration) is int:
+            self.send({"method": "item/completed", "params": {"threadId": thread_id, "turnId": turn_id,
+                       "item": {"id": "command-%s" % turn_id, "type": "commandExecution", "durationMs": duration}}})
         self.send({
             "method": "turn/completed",
             "params": {
@@ -59,6 +103,7 @@ class FakeCodex:
             },
         })
         self.active_turns.pop(thread_id, None)
+        self.receipt("completion", prompt=prompt, thread_id=thread_id, turn_id=turn_id, output=output)
         if self.active_turn == turn_id:
             self.active_turn = None
 
@@ -119,8 +164,18 @@ class FakeCodex:
                              args=(thread_id, turn_id, prompt), daemon=True).start()
 
     def handle(self, message):
+        self.capture(message)
         method = message.get("method")
         request_id = message.get("id")
+        malformed = self.option("malformed", {})
+        if isinstance(malformed, dict) and method in malformed:
+            value = malformed[method]
+            if value == "invalid_json":
+                sys.stdout.write("{not-json\n"); sys.stdout.flush(); return
+            if value == "non_object":
+                self.send([]); return
+            if isinstance(value, dict):
+                self.response(request_id, value); return
         if method == "initialize":
             self.initialized = True
             self.response(request_id, {"userAgent": "fake-codex"})
@@ -153,6 +208,8 @@ class FakeCodex:
             self.thread_id = message["params"]["threadId"]
             self.handle_turn_start(message)
         elif method == "thread/goal/set":
+            if self.option("goal_set_failure", False):
+                self.send({"id": request_id, "error": {"code": -32001, "message": "goal rejected"}}); return
             params = message["params"]
             self.goal = {"threadId": params["threadId"], "objective": params.get("objective", "goal"),
                          "status": params.get("status", "active"), "tokenBudget": params.get("tokenBudget"),
@@ -160,14 +217,22 @@ class FakeCodex:
                          "updatedAt": "2026-01-01T00:00:00Z"}
             self.response(request_id, {"goal": self.goal})
         elif method == "thread/goal/get":
-            self.response(request_id, {"goal": self.goal})
+            self.response(request_id, {"goal": None if self.option("goal_absent", False) else self.goal})
         elif method == "thread/turns/list":
             params = message["params"]
             self.turn_list_requests.append({"threadId": params.get("threadId"), "cursor": params.get("cursor"), "limit": params.get("limit")})
-            turns, cursor = self.turn_pages.get(params.get("cursor"), ([], None))
+            pages = self.option("history_pages")
+            if isinstance(pages, dict):
+                page = pages.get(str(params.get("cursor")), pages.get("null", {"turns": [], "nextCursor": None}))
+                turns, cursor = page.get("turns", []), page.get("nextCursor")
+            else:
+                turns, cursor = self.turn_pages.get(params.get("cursor"), ([], None))
             self.response(request_id, {"turns": turns, "nextCursor": cursor})
         elif method == "account/rateLimits/read":
-            self.response(request_id, {"rateLimits": {"primary": {"usedPercent": 1}}})
+            if self.option("limits_unavailable", False):
+                self.send({"id": request_id, "error": {"code": -32601, "message": "unsupported"}})
+            else:
+                self.response(request_id, {"rateLimits": self.option("limits", {"primary": {"usedPercent": 1}})})
         elif method == "turn/steer":
             self.response(request_id, {"turnId": message["params"]["expectedTurnId"]})
         elif method == "turn/interrupt":
@@ -214,10 +279,20 @@ class FakeCodex:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("app_server", nargs="?", choices=("app-server",))
     parser.add_argument("--mode", default="normal")
     parser.add_argument("--delay", type=float, default=0.03)
+    parser.add_argument("--scenario")
+    parser.add_argument("--capture")
     args = parser.parse_args()
-    FakeCodex(args.mode, args.delay).run()
+    scenario_path = args.scenario or os.environ.get("FAKE_CODEX_SCENARIO")
+    scenario = {}
+    if scenario_path:
+        scenario = json.loads(Path(scenario_path).read_text(encoding="utf-8"))
+        if not isinstance(scenario, dict):
+            raise ValueError("scenario must be a JSON object")
+    FakeCodex(args.mode, args.delay, scenario,
+              args.capture or os.environ.get("FAKE_CODEX_CAPTURE")).run()
 
 
 if __name__ == "__main__":
