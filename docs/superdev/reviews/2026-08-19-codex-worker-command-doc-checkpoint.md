@@ -28,11 +28,15 @@
 
 ## Reviewer A — coordinator usability
 
-**Pending controller semantic review.** Append the verbatim verdict here: can a Claude
-coordinator launch, follow up, fan out, inspect/control, stop/restart, and recover
-without source inspection?
+**Original verdict (BLOCK, verbatim):**
+
+> (1) codex-worker.md fan-out commands must demonstrate each `start` executed from its assigned distinct worktree/cwd, not five commands from coordinator cwd; make harness-owned concurrency and JSON correlation clear. (2) timeout/restart recovery must explicitly show the named observation/wait sequence and say `run` is allowed only after prior turn is terminal; avoid implying restart means old active work can be overlapped. Use exact supported CLI—inspect help if needed.
+
+**Re-review:** Pending controller verdict after the correction. The reference now uses
+five backgrounded `(cd "$WORKTREE" && codex-worker start …) &` commands, correlates by
+`result.worker.name`, and requires `status` then `messages`/`history` before `run` once
+the preceding turn is terminal.
 
 ## Reviewer B — model/access/native-Claude boundaries
 
-**Pending controller semantic review.** Append the verbatim verdict here: do the docs
-agree with help on tier/effort/access and preserve native Claude as the default route?
+**Verdict (verbatim):** Reviewer B PASSed all model/access/native-Claude/help boundaries.

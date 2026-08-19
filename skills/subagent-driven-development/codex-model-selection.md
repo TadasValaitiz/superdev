@@ -18,6 +18,9 @@ fall back or substitute. `--model <live-id>` is mutually exclusive with `--tier`
 the exceptional raw-model case. The resolved model, effort, access, and cwd are fixed
 at creation; `run` continues them rather than reselecting policy.
 
+Use `codex-worker model list` only to inspect the live catalog and each model's
+`supported_efforts`; choose an effort returned for that exact selected model.
+
 Use the product form, not raw session/turn commands, for normal dispatch:
 
 ```sh
