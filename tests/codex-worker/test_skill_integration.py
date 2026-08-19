@@ -20,6 +20,9 @@ ROUTING_CONSUMERS = (
     ROOT / "skills" / "self-brainstorming" / "workflow-reference.md",
     ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md",
 )
+CODEX_TOOLS_REFERENCE = (
+    ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md"
+)
 
 
 class CodexWorkerSkillIntegrationTests(unittest.TestCase):
@@ -248,6 +251,18 @@ class SddModelSelectionTests(unittest.TestCase):
                     "very smart" in text.lower() or "`medium`" in text.lower(),
                     "routing consumer must name a shared SDD tier",
                 )
+
+    def test_codex_tools_reference_distinguishes_native_dispatch_from_broker(self):
+        text = " ".join(CODEX_TOOLS_REFERENCE.read_text(encoding="utf-8").split()).lower()
+        for fragment in (
+            "native codex-harness dispatch",
+            "not the local broker from claude code",
+            "does not start or require the broker",
+            "does not change native claude routing/main-session design",
+            "../../subagent-driven-development/codex-model-selection.md",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
 
 
 if __name__ == "__main__":
