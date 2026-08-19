@@ -218,6 +218,18 @@ manual.
   skill-documentation change while retaining independent review.
 - **Revisit-when:** A future regression shows checkpoint review misses routing failures.
 
+### D9 — Separate the two Codex dispatch mechanisms   (status: locked)
+
+- **Decision:** Native Codex-harness `spawn_agent` guidance and Claude-coordinated local
+  broker guidance share Sol/Terra mappings but retain distinct lifecycle/discovery
+  instructions and name that boundary explicitly.
+- **Alternatives:** Forcing broker mechanics into the Codex harness reference gains one
+  apparent path but breaks native dispatch; explicit separation gains correctness at
+  the cost of one extra boundary sentence.
+- **Why:** The checkpoint reviewer demonstrably conflated the two mechanisms, while
+  `using-superdev` proves the tools reference is harness-specific.
+- **Revisit-when:** Both mechanisms are actually unified.
+
 ## 7. Assumptions & open questions
 
 | ID | Assumption / question | Affects | Status |

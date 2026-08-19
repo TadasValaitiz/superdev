@@ -152,3 +152,28 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   receipts. The normal SDD task review and final whole-branch review remain required.
 - **Revisit-when:** A future behavioral regression demonstrates that checkpoint review
   is insufficient for model-routing skill changes.
+
+## D9 — Distinguish native Codex dispatch from the Claude-side broker
+**When:** 2026-08-19T07:02:56Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** coordinator from semantic checkpoint evidence
+
+- **Trigger:** A fresh reviewer read `using-superdev/references/codex-tools.md` as an
+  unconditional switch from native Claude to the local Codex-worker broker, even though
+  `using-superdev` loads that reference only when the current harness is Codex.
+- **Options weighed:**
+  - A: require broker daemon/model-list/session commands in the Codex harness reference
+    — gains one mechanism / breaks native Codex `spawn_agent` guidance and conflates two
+    distinct dispatch surfaces.
+  - B: name the mechanism boundary explicitly while sharing the two mappings — preserves
+    native Codex multi-agent dispatch and Claude-coordinated broker dispatch / requires
+    one clarification and structural assertion.
+- **Decided:** `using-superdev/references/codex-tools.md` governs native Codex-harness
+  multi-agent dispatch and does not require/start the broker. The SDD Codex model
+  appendix governs an explicitly selected local broker from Claude Code. Both use
+  Terra/Sol, but each validates effort through its own live surface.
+- **Rests on:** `skills/using-superdev/SKILL.md` Platform Adaptation routing, D3, D4,
+  D7, and the measured reviewer ambiguity.
+- **Affects:** Codex tools reference, structural test, and D8 semantic checkpoint.
+- **Revisit-when:** Native Codex dispatch and the broker are unified behind one actual
+  mechanism.
