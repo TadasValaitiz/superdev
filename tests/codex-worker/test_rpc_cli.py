@@ -818,6 +818,21 @@ class CliTests(unittest.TestCase):
                 self.assert_json_error(result, 2)
         self.assertEqual(self.rpc_calls, [])
 
+    def test_invalid_common_request_never_selects_or_starts_an_endpoint(self):
+        called = []
+        original = cli._common_endpoint
+        cli._common_endpoint = lambda instance, autostart: called.append((instance, autostart))
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(['start', '--name', 'bad/name', '--prompt', 'go'])
+        finally:
+            cli._common_endpoint = original
+        result = type("Completed", (), {"returncode": code, "stdout": out.getvalue(), "stderr": err.getvalue()})()
+        self.assert_json_error(result, 2)
+        self.assertEqual(called, [])
+        self.assertEqual(self.rpc_calls, [])
+
     def test_foreground_serve_has_no_stdout_and_shutdown_preserves_registry(self):
         script = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"
         fake_bin = self.fake_codex_bin()

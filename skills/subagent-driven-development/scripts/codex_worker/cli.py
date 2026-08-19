@@ -17,7 +17,10 @@ from .models import JsonObject, RpcFault, rpc_response
 from .registry import SessionRegistry
 from .rpc import FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe, daemon_unavailable_fault, rpc_call
 from .runtime import RuntimeStore
-from .commands import FacadeFault, FacadeFaultCode
+from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowRequest,
+                       InterruptWorkerRequest, LimitsRequest, RunWorkerRequest,
+                       StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
+                       WorkerMessagesRequest, WorkerStatusRequest)
 from .instance import InstanceDeps, InstanceManager, derive_instance_paths, resolve_instance
 
 
@@ -322,6 +325,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         method = args.method
         params = _params_for(args)
         if getattr(args, "common", False):
+            _validate_common_request(method, params)
             if args.socket:
                 raise ValueError("--socket is not valid for common worker commands")
             socket_path = _common_endpoint(args.instance, autostart=method in ("worker/start", "worker/run"))
@@ -494,6 +498,20 @@ def _output_schema(path: Optional[str]):
         raise ValueError("could not read output schema: %s" % exc) from exc
     if not isinstance(value, dict): raise ValueError("output schema must be a JSON object")
     return value
+
+
+_COMMON_REQUESTS = {
+    "worker/start": StartWorkerRequest, "worker/run": RunWorkerRequest,
+    "worker/status": WorkerStatusRequest, "worker/messages": WorkerMessagesRequest,
+    "worker/history": WorkerHistoryRequest, "worker/steer": SteerWorkerRequest,
+    "worker/interrupt": InterruptWorkerRequest, "worker/goal/set": GoalSetRequest,
+    "worker/goal/show": GoalShowRequest, "account/limits": LimitsRequest,
+}
+
+
+def _validate_common_request(method: str, params: JsonObject) -> None:
+    """Validate at the CLI lifecycle boundary before selecting an endpoint."""
+    _COMMON_REQUESTS[method].from_dict(params)
 
 
 def _managed_state_home() -> Path:
