@@ -335,15 +335,18 @@ class CodexAppServer:
             raise CodexCallError("protocol_error", "model/list", {"message": "data must be a list"})
         return data
 
-    def start_thread(self, cwd: str, model: Optional[str] = None) -> JsonObject:
+    def start_thread(self, cwd: str, model: Optional[str] = None,
+                     sandbox: str = "workspace-write", allow_provider_model_fallback: Optional[bool] = None) -> JsonObject:
         params = {
             "cwd": cwd,
             "approvalPolicy": "never",
-            "sandbox": "workspace-write",
+            "sandbox": sandbox,
             "serviceName": "superdev_codex_worker",
         }  # type: Dict[str, Any]
         if model is not None:
             params["model"] = model
+        if allow_provider_model_fallback is not None:
+            params["allowProviderModelFallback"] = allow_provider_model_fallback
         return self.call("thread/start", params)
 
     def resume_thread(self, thread_id: str, approval_policy: str = "never",
@@ -355,7 +358,8 @@ class CodexAppServer:
         })
 
     def start_turn(self, thread_id: str, prompt: str, model: Optional[str] = None,
-                   effort: Optional[str] = None) -> str:
+                   effort: Optional[str] = None, sandbox_policy: Optional[JsonObject] = None,
+                   output_schema: Optional[JsonObject] = None) -> str:
         params = {
             "threadId": thread_id,
             "input": [{"type": "text", "text": prompt}],
@@ -364,6 +368,10 @@ class CodexAppServer:
             params["model"] = model
         if effort is not None:
             params["effort"] = effort
+        if sandbox_policy is not None:
+            params["sandboxPolicy"] = sandbox_policy
+        if output_schema is not None:
+            params["outputSchema"] = output_schema
         result = self.call("turn/start", params)
         turn = result.get("turn")
         if not isinstance(turn, dict) or not isinstance(turn.get("id"), str):

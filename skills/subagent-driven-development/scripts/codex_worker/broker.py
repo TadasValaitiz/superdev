@@ -1,6 +1,8 @@
 """High-level durable session and turn contract for the Codex worker daemon."""
 import os
 import uuid
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -12,6 +14,7 @@ from .models import (
     SessionRecord,
     session_result,
 )
+from .commands import AccessMode
 from .registry import RegistryError, SessionRegistry
 from .runtime import (
     CodexProtocolError,
@@ -27,6 +30,61 @@ from .runtime import (
 class ModelSelectionError(RpcFault):
     def __init__(self, message: str, details: Optional[JsonObject] = None):
         super().__init__(-32010, message, "invalid_model_selection", details=details)
+
+
+class AnnotationPolicy(str, Enum):
+    LEGACY_MUTABLE = "legacy_mutable"
+    PRESERVE_WORKER_POLICY = "preserve_worker_policy"
+
+
+@dataclass(frozen=True)
+class SessionStartSpec:
+    cwd: str
+    name: Optional[str]
+    model: Optional[str]
+    access: AccessMode = AccessMode.FULL
+
+
+@dataclass(frozen=True)
+class SessionResumeSpec:
+    thread_id: str
+    access: AccessMode = AccessMode.FULL
+
+
+@dataclass(frozen=True)
+class TurnStartSpec:
+    session_id: str
+    prompt: str
+    model: Optional[str]
+    effort: Optional[str]
+    access: AccessMode = AccessMode.FULL
+    output_schema: Optional[JsonObject] = None
+
+
+class NativeCodexProxy:
+    """Thin, validated native calls; provider field names remain untouched."""
+    def __init__(self, codex: Any): self.codex = codex
+    def _call(self, method: str, params: JsonObject) -> JsonObject:
+        result = self.codex.call(method, params)
+        if not isinstance(result, dict):
+            raise CodexCallError("protocol_error", method, {"message": "result must be an object"})
+        return result
+    def goal_set(self, thread_id: str, objective: Optional[str] = None, status: Optional[str] = None,
+                 token_budget: Optional[int] = None) -> JsonObject:
+        params = {"threadId": thread_id}
+        if objective is not None: params["objective"] = objective
+        if status is not None: params["status"] = status
+        if token_budget is not None: params["tokenBudget"] = token_budget
+        return self._call("thread/goal/set", params)
+    def goal_get(self, thread_id: str) -> JsonObject:
+        return self._call("thread/goal/get", {"threadId": thread_id})
+    def turns_list(self, thread_id: str, cursor: Optional[str] = None, limit: Optional[int] = None) -> JsonObject:
+        params = {"threadId": thread_id, "sortDirection": "desc", "itemsView": "full"}
+        if cursor is not None: params["cursor"] = cursor
+        if limit is not None: params["limit"] = limit
+        return self._call("thread/turns/list", params)
+    def rate_limits_read(self) -> JsonObject:
+        return self._call("account/rateLimits/read", {})
 
 
 def _fault(code: int, message: str, kind: str,
@@ -66,36 +124,84 @@ class WorkerBroker:
             "session_count": len(self.registry.list()),
         }
 
+    @staticmethod
+    def _thread_sandbox(access: AccessMode) -> str:
+        return "danger-full-access" if access == AccessMode.FULL else "read-only"
+
+    @staticmethod
+    def _turn_sandbox(access: AccessMode) -> JsonObject:
+        return {"type": "dangerFullAccess"} if access == AccessMode.FULL else {"type": "readOnly", "networkAccess": False}
+
+    def start_session(self, spec: SessionStartSpec) -> JsonObject:
+        canonical_cwd = self._canonical_cwd(spec.cwd, "declared cwd")
+        self._validate_model_effort(spec.model, None)
+        session_id = str(uuid.uuid4())
+        try:
+            response = self.codex.start_thread(canonical_cwd, model=spec.model,
+                                               sandbox=self._thread_sandbox(spec.access),
+                                               allow_provider_model_fallback=False)
+            thread_id, returned_cwd = self._resume_identity(response)
+            if returned_cwd != canonical_cwd:
+                raise _fault(-32014, "Codex returned a different working directory", "session_cwd_mismatch",
+                             details={"expected_cwd": canonical_cwd, "returned_cwd": returned_cwd})
+            record = self.registry.create(thread_id, canonical_cwd, spec.name, spec.model, None, session_id=session_id)
+        except RpcFault:
+            raise
+        except CodexCallError as exc:
+            raise self._codex_fault(exc) from exc
+        except (RegistryError, OSError) as exc:
+            raise self._post_upstream_registry_fault("session_start", session_id, thread_id, None, exc) from exc
+        self.runtime.attach(record)
+        return session_result(record, attached=True)
+
+    def resume_session(self, spec: SessionResumeSpec) -> JsonObject:
+        try:
+            response = self.codex.resume_thread(spec.thread_id, approval_policy="never",
+                                                sandbox=self._thread_sandbox(spec.access))
+            thread_id, cwd = self._resume_identity(response)
+            if thread_id != spec.thread_id:
+                raise _fault(-32015, "Codex resume returned a different thread", "codex_protocol_error")
+            return response
+        except RpcFault:
+            raise
+        except CodexCallError as exc:
+            raise self._codex_fault(exc) from exc
+
+    def start_turn(self, spec: TurnStartSpec) -> JsonObject:
+        record = self._resolve(IdentifierSelector(session_id=spec.session_id), require_attached=True)
+        if not isinstance(spec.prompt, str) or not spec.prompt:
+            raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
+        validation_model = spec.model if spec.model is not None or spec.effort is None else record.model
+        effective_model = self._validate_model_effort(validation_model, spec.effort)
+        upstream_model = effective_model if spec.effort is not None else spec.model
+        try:
+            self.runtime.reserve_start(record.session_id)
+            try:
+                turn_id = self.codex.start_turn(record.thread_id, spec.prompt, model=upstream_model,
+                                                effort=spec.effort, sandbox_policy=self._turn_sandbox(spec.access),
+                                                output_schema=spec.output_schema)
+                self.runtime.reconcile_start(record.session_id, turn_id)
+            except BaseException:
+                self.runtime.cancel_start(record.session_id)
+                raise
+        except (CodexCallError, CodexProtocolError, TurnActive, SessionDetached, UnknownSession) as exc:
+            raise self._from_lower(exc, record) from exc
+        policy = AnnotationPolicy.PRESERVE_WORKER_POLICY if record.common_policy_complete else AnnotationPolicy.LEGACY_MUTABLE
+        if policy == AnnotationPolicy.LEGACY_MUTABLE:
+            annotation_model = effective_model if spec.effort is not None else spec.model or record.model
+            annotation_effort = spec.effort or record.effort
+            try:
+                self.registry.update_annotations(record.session_id, model=annotation_model, effort=annotation_effort)
+            except (RegistryError, OSError) as exc:
+                raise self._post_upstream_registry_fault("turn_start_annotations", record.session_id, record.thread_id, turn_id, exc) from exc
+        return {"session_id": record.session_id, "thread_id": record.thread_id, "turn_id": turn_id, "status": "in_progress"}
+
     def model_list(self) -> JsonObject:
         return {"models": self._models()}
 
     def session_start(self, cwd: str, name: Optional[str] = None,
                       model: Optional[str] = None) -> JsonObject:
-        canonical_cwd = self._canonical_cwd(cwd, "declared cwd")
-        self._validate_model_effort(model, None)
-        session_id = str(uuid.uuid4())
-        try:
-            response = self.codex.start_thread(canonical_cwd, model=model)
-            thread_id, returned_cwd = self._resume_identity(response)
-            if returned_cwd != canonical_cwd:
-                raise _fault(
-                    -32014, "Codex returned a different working directory", "session_cwd_mismatch",
-                    details={"expected_cwd": canonical_cwd, "returned_cwd": returned_cwd},
-                )
-        except RpcFault:
-            raise
-        except CodexCallError as exc:
-            raise self._codex_fault(exc) from exc
-        try:
-            record = self.registry.create(
-                thread_id, canonical_cwd, name, model, None, session_id=session_id
-            )
-        except (RegistryError, OSError) as exc:
-            raise self._post_upstream_registry_fault(
-                "session_start", session_id, thread_id, None, exc,
-            ) from exc
-        self.runtime.attach(record)
-        return session_result(record, attached=True)
+        return self.start_session(SessionStartSpec(cwd, name, model))
 
     def session_resume(self, selector: IdentifierSelector,
                        name: Optional[str] = None) -> JsonObject:
@@ -184,46 +290,9 @@ class WorkerBroker:
 
     def turn_start(self, selector: IdentifierSelector, prompt: str,
                    model: Optional[str] = None, effort: Optional[str] = None) -> JsonObject:
-        if not isinstance(prompt, str) or not prompt:
-            raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
         record = self._resolve(selector, require_attached=True)
-        validation_model = model
-        if validation_model is None and effort is not None:
-            validation_model = record.model
-        effective_model = self._validate_model_effort(validation_model, effort)
-        upstream_model = effective_model if effort is not None else model
-        annotation_model = (
-            effective_model if effort is not None
-            else model if model is not None
-            else record.model
-        )
-        annotation_effort = effort if effort is not None else record.effort
-        try:
-            self.runtime.reserve_start(record.session_id)
-            try:
-                turn_id = self.codex.start_turn(
-                    record.thread_id, prompt, model=upstream_model, effort=effort
-                )
-                self.runtime.reconcile_start(record.session_id, turn_id)
-            except BaseException:
-                self.runtime.cancel_start(record.session_id)
-                raise
-        except RpcFault:
-            raise
-        except (CodexCallError, CodexProtocolError, TurnActive, SessionDetached, UnknownSession) as exc:
-            raise self._from_lower(exc, record) from exc
-        try:
-            self.registry.update_annotations(
-                record.session_id, model=annotation_model, effort=annotation_effort
-            )
-        except (RegistryError, OSError) as exc:
-            raise self._post_upstream_registry_fault(
-                "turn_start_annotations", record.session_id, record.thread_id, turn_id, exc,
-            ) from exc
-        return {
-            "session_id": record.session_id, "thread_id": record.thread_id,
-            "turn_id": turn_id, "status": "in_progress",
-        }
+        return self.start_turn(TurnStartSpec(record.session_id, prompt, model, effort,
+                                             AccessMode(record.access) if record.access else AccessMode.FULL))
 
     def turn_status(self, selector: IdentifierSelector) -> JsonObject:
         record = self._resolve(selector, require_attached=False)

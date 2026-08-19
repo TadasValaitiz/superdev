@@ -18,6 +18,7 @@ class FakeCodex:
         self.active_turn = None
         self.write_lock = threading.Lock()
         self.approval_request_id = 9001
+        self.goal = None
 
     def send(self, message):
         encoded = json.dumps(message, separators=(",", ":")) + "\n"
@@ -37,7 +38,8 @@ class FakeCodex:
             "params": {
                 "threadId": self.thread_id,
                 "turnId": turn_id,
-                "item": {"id": "item-1", "type": "agentMessage", "text": "done"},
+                "item": {"id": "item-1", "type": "agentMessage", "text": "done", "phase": None,
+                         "tokenUsage": {"totalTokens": 7}},
             },
         })
         self.send({
@@ -129,6 +131,19 @@ class FakeCodex:
         elif method == "turn/start":
             self.thread_id = message["params"]["threadId"]
             self.handle_turn_start(message)
+        elif method == "thread/goal/set":
+            params = message["params"]
+            self.goal = {"threadId": params["threadId"], "objective": params.get("objective", "goal"),
+                         "status": params.get("status", "active"), "tokenBudget": params.get("tokenBudget"),
+                         "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": "2026-01-01T00:00:00Z",
+                         "updatedAt": "2026-01-01T00:00:00Z"}
+            self.response(request_id, {"goal": self.goal})
+        elif method == "thread/goal/get":
+            self.response(request_id, {"goal": self.goal})
+        elif method == "thread/turns/list":
+            self.response(request_id, {"turns": [], "nextCursor": None})
+        elif method == "account/rateLimits/read":
+            self.response(request_id, {"rateLimits": {"primary": {"usedPercent": 1}}})
         elif method == "turn/steer":
             self.response(request_id, {"turnId": message["params"]["expectedTurnId"]})
         elif method == "turn/interrupt":

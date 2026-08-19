@@ -47,8 +47,9 @@ class FakeCodex:
     def list_models(self):
         return list(self.models)
 
-    def start_thread(self, cwd, model=None):
-        self.start_calls.append({"cwd": cwd, "model": model})
+    def start_thread(self, cwd, model=None, sandbox="workspace-write", allow_provider_model_fallback=None):
+        self.start_calls.append({"cwd": cwd, "model": model, "sandbox": sandbox,
+                                 "allowProviderModelFallback": allow_provider_model_fallback})
         if self.start_exception is not None:
             raise self.start_exception
         return self.start_result or {"thread": {"id": "thr-start", "cwd": cwd}, "model": model}
@@ -61,9 +62,10 @@ class FakeCodex:
             raise AssertionError("test must provide resume_result")
         return result
 
-    def start_turn(self, thread_id, prompt, model=None, effort=None):
+    def start_turn(self, thread_id, prompt, model=None, effort=None, sandbox_policy=None, output_schema=None):
         self.turn_start_calls.append({"thread_id": thread_id, "prompt": prompt,
-                                      "model": model, "effort": effort})
+                                      "model": model, "effort": effort,
+                                      "sandboxPolicy": sandbox_policy, "outputSchema": output_schema})
         turn_id = self.response_turn_id or "turn-%d" % self._next_turn
         self._next_turn += 1
         self._active = (thread_id, turn_id)
@@ -128,6 +130,21 @@ class WorkerBrokerTests(unittest.TestCase):
             daemon_pid=1234,
         )
 
+    def test_typed_specs_use_provider_accurate_access_seams(self):
+        from codex_worker.broker import SessionStartSpec, TurnStartSpec
+        from codex_worker.commands import AccessMode
+        full = self.broker.start_session(SessionStartSpec(self.cwd, "full", "fake-model-a", AccessMode.FULL))
+        self.assertEqual(self.codex.start_calls[-1]["sandbox"], "danger-full-access")
+        self.assertFalse(self.codex.start_calls[-1]["allowProviderModelFallback"])
+        self.broker.start_turn(TurnStartSpec(full["session"]["session_id"], "go", "fake-model-a", "medium", AccessMode.FULL))
+        self.assertEqual(self.codex.turn_start_calls[-1]["sandboxPolicy"], {"type": "dangerFullAccess"})
+        self.codex.start_result = {"thread": {"id": "thr-read", "cwd": self.cwd}}
+        read = self.broker.start_session(SessionStartSpec(self.cwd, "read", "fake-model-a", AccessMode.READ_ONLY))
+        self.assertEqual(self.codex.start_calls[-1]["sandbox"], "read-only")
+        self.broker.start_turn(TurnStartSpec(read["session"]["session_id"], "go", "fake-model-a", "medium", AccessMode.READ_ONLY, {"type": "object"}))
+        self.assertEqual(self.codex.turn_start_calls[-1]["sandboxPolicy"], {"type": "readOnly", "networkAccess": False})
+        self.assertEqual(self.codex.turn_start_calls[-1]["outputSchema"], {"type": "object"})
+
     def tearDown(self):
         self.tempdir.cleanup()
 
@@ -155,7 +172,9 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertTrue(result["attached"])
         self.assertEqual(result["session"]["cwd"], self.cwd)
         self.assertEqual(result["session"]["model"], "fake-model-a")
-        self.assertEqual(self.codex.start_calls[-1], {"cwd": self.cwd, "model": "fake-model-a"})
+        self.assertEqual(self.codex.start_calls[-1], {"cwd": self.cwd, "model": "fake-model-a",
+                                                      "sandbox": "danger-full-access",
+                                                      "allowProviderModelFallback": False})
         self.assertEqual(SessionRegistry(self.state_path).list()[0].cwd, self.cwd)
 
     def test_raw_thread_recovery_uses_returned_cwd_and_persists_mapping(self):

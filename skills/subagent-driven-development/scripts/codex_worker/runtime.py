@@ -335,3 +335,22 @@ class RuntimeStore:
             selected = [event for event in retained if event.cursor > after][:limit]
             next_cursor = selected[-1].cursor if selected else after
             return EventPage(selected, next_cursor, truncated)
+
+    def agent_messages(self, session_id: str, tail: int):
+        """Return a bounded, read-only live narration view without consuming events."""
+        if type(tail) is not int or tail <= 0:
+            raise ValueError("tail must be a positive integer")
+        runtime = self._get(session_id)
+        with runtime.condition:
+            items = []
+            if runtime.active_turn_id is not None:
+                items = list(runtime.items.get(runtime.active_turn_id, []))
+            elif runtime.latest_turn is not None:
+                items = list(runtime.latest_turn.items)
+            agents = [item for item in items if item.type == "agentMessage"]
+            retained = list(runtime.events)
+            latest_cursor = retained[-1].cursor if retained else None
+            # Event eviction is the only available retention signal; callers see it
+            # explicitly instead of treating this as durable history.
+            truncated = len(agents) > tail
+            return agents[-tail:], truncated, latest_cursor
