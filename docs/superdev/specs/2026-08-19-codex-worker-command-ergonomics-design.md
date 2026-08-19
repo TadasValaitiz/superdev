@@ -42,7 +42,7 @@ steps, token usage, or completion fields.
 |----|-------------|--------|----------|-------------------|
 | R1 | A Claude Code caller can invoke the public executable from any cwd without first locating scripts, choosing transport paths, starting a daemon, or waiting for readiness. | stated + measured launch friction | must | A fresh Claude-scoped invocation reaches a ready worker with one message command. |
 | R2 | `(instance identity, required worker name)` durably identifies one conversation; creation configuration is supplied once and follow-ups continue it without repeating or changing cwd, model, effort, or access mode. | stated | must | A short follow-up resumes the same thread and returns the persisted configuration. |
-| R3 | `start` and `run` wait for terminal completion by default and return stable JSON containing all final agent messages, optional schema-governed structured output, recovery identities, and honestly sourced metrics. | stated + measured event friction | must | Multi-message completion is returned without event reconstruction; unavailable metrics remain explicitly unavailable. |
+| R3 | `start` and `run` wait for terminal completion by default and return stable JSON containing all protocol-identifiable final agent messages (with a visible terminal fallback when phase is absent), optional schema-governed structured output, recovery identities, and honestly sourced metrics. | stated + measured event friction | must | Multi-message completion is returned without event reconstruction; a nullable phase cannot erase the terminal answer; unavailable metrics remain explicitly unavailable. |
 | R4 | Independent named workers execute concurrently through one daemon, while simultaneous first-use callers cannot spawn competing daemons or corrupt shared instance state. | stated | must | Five simultaneous named runs complete with uncrossed identities, outputs, and working directories. |
 | R5 | A caller can observe, steer, or explicitly interrupt a named active worker from another command without knowing session, thread, turn, socket, or registry identifiers. | stated | must | Active progress and controls work by name and return typed idle/race outcomes. |
 | R6 | Runtime stop is non-destructive: it terminates the daemon and Codex child but preserves named conversations, logs, configuration, and recovery identities for later continuation. | stated | must | After stop, a later run restarts the runtime and continues the same Codex thread. |
@@ -141,14 +141,15 @@ conversations that can fan out independently.
   durable write. If persistence then fails, return typed `registry_error` with operation,
   `durable_state: not_persisted`, every known ID, and an exact raw-thread resume path.
   Never claim rollback of upstream side effects.
-- **Naming:** Names are required, non-empty, bounded, and safe as data rather than path
-  fragments. Skill guidance uses readable role names with a number or random suffix to
-  prevent same-Claude-session fan-out collisions.
+- **Naming:** Names match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` (1–128 characters), are
+  compared exactly, and remain data rather than path fragments. Skill guidance uses
+  readable role names with a number or random suffix to prevent same-Claude-session
+  fan-out collisions.
 - **Interface / contract:** `(instance, name)` is stable until an explicitly future
   deletion feature exists. No common command deletes or reconfigures a worker.
 - **Depends on:** instance manager, versioned registry, existing session start/resume.
 - **Serves:** R2, R4, R6, R7, R8, R11, R13 · **Governed by:** D11–D12, D19–D23,
-  D28, D36 · **Realizes:** UC1–UC3, UC5, UC8–UC9
+  D28, D36, D42 · **Realizes:** UC1–UC3, UC5, UC8–UC9
 
 ### 5.3 Turn execution, goals, and model/access policy
 
@@ -163,9 +164,12 @@ messages short without allowing silent configuration drift.
 - **Policy:** `--tier medium` maps to the live-discovered Terra policy; `--tier
   very-smart` maps to Sol; `--model` is mutually exclusive with tier. Default tier and
   effort are medium. The resolved model must advertise the effort; absence or mismatch
-  is a typed refusal with discovered alternatives, never a fallback. Full access maps
-  to Codex `dangerFullAccess`; `--read-only` maps to `readOnly`; approvals remain
-  `never`. Cwd is canonical existing-directory context and never a filesystem boundary.
+  is a typed refusal with discovered alternatives, never a fallback. Access maps at
+  two distinct measured protocol seams: thread start/resume use `sandbox` values
+  `danger-full-access` or `read-only`, while every turn start uses `sandboxPolicy`
+  `{type: dangerFullAccess}` or `{type: readOnly, networkAccess: false}`. Thread start
+  sets `allowProviderModelFallback: false`; approvals remain `never`. Cwd is canonical
+  existing-directory context and never a filesystem boundary.
 - **Messages:** `start` and `run` require exactly one non-empty UTF-8 prompt source.
   `--output-schema` loads and validates one JSON Schema object and forwards it only to
   that turn. `--timeout` bounds only the local wait. Timeout or client disconnect does
@@ -175,7 +179,7 @@ messages short without allowing silent configuration drift.
   name, prompt source, per-turn schema, and local timeout.
 - **Depends on:** named-worker service, model discovery, goal proxy, existing turn API.
 - **Serves:** R2, R3, R7, R8, R9, R13 · **Governed by:** D13–D17, D19–D24, D29–D30,
-  D32 · **Realizes:** UC1–UC2, UC6, UC8–UC9
+  D32, D44 · **Realizes:** UC1–UC2, UC6, UC8–UC9
 
 ### 5.4 Observation, control, history, and native proxies
 
@@ -193,7 +197,8 @@ while retaining the advanced event and raw-recovery escape hatch.
   reset native usage exactly as Codex documents, and the response says so. `goal show`
   returns the native goal or typed absence. `history` pages `thread/turns/list` newest
   first until it has the requested tail, then returns those turns chronologically with
-  native status and final agent messages. `limits` returns the full authoritative
+  native status and completion messages selected by D41's phase/fallback rule. `limits`
+  returns the full authoritative
   `account/rateLimits/read` payload, or typed `unavailable` for unsupported auth.
 - **Retention boundary:** `messages` is a bounded live convenience view and declares
   truncation. `history` is the durable read-back path after retained events roll off.
@@ -201,7 +206,7 @@ while retaining the advanced event and raw-recovery escape hatch.
 - **Interface / contract:** All common selectors are `--name`; none accept session,
   thread, turn, socket, or state paths. None of these commands starts a stopped daemon.
 - **Depends on:** runtime store, named-worker lookup, app-server proxy methods.
-- **Serves:** R5, R9, R12, R13 · **Governed by:** D25–D27, D29, D31, D38 ·
+- **Serves:** R5, R9, R12, R13 · **Governed by:** D25–D27, D29, D31, D38, D41 ·
   **Realizes:** UC4, UC6, UC9–UC10
 
 ### 5.5 Completion and result projection
@@ -211,16 +216,18 @@ single stable terminal result with all final messages and honest evidence.
 
 - **Design:** Keep the outer JSON-RPC 2.0 success/error envelope. A completed high-level
   result contains `worker`, `turn`, `messages`, `structured_output`, `metrics`, and
-  `recovery`. `messages` is an ordered extensible array; every observed
-  `agentMessage` with `phase: final_answer` is included verbatim with item ID and phase.
-  A terminal successful turn with no final message and no schema output is a typed
-  `incomplete_completion` protocol refusal rather than an empty success.
+  `recovery`. `messages` is an ordered extensible array. If completed agent messages
+  include `phase: final_answer`, include all such messages verbatim. Because Codex
+  0.147.0 permits a null phase, if none is explicitly final select the last completed
+  agent message, preserve its actual null/unknown phase, and mark
+  `selection: terminal_fallback`. A terminal successful turn with no agent message and
+  no schema output is `incomplete_completion`, not an empty success.
 - **Structured output:** Generated Codex 0.147.0 schemas expose schema-governed final
   message text, not a separate parsed-output field. When a schema was requested, JSON
-  decode the last `final_answer` text into `structured_output` while retaining the
-  original message verbatim. Never decode or classify ordinary prose. A caller needing
+  decode the last selected completion message into `structured_output` while retaining
+  the original message verbatim. Never decode or classify ordinary prose. A caller needing
   verdict/report/review supplies a schema requiring them. Decode/schema-mode mismatch
-  is a typed upstream protocol failure with final messages retained for diagnosis.
+  is typed `incomplete_completion` with selected messages retained for diagnosis.
 - **Metrics:** Always report local wall duration with source `codex-worker` and
   availability `measured`. Report selected tier/model/effort under worker configuration,
   not as measured work. Observed item counts and command counts are locally `derived`
@@ -231,7 +238,7 @@ single stable terminal result with all final messages and honest evidence.
   changes whitespace only. Result additions are backward-compatible; existing fields
   never change meaning silently.
 - **Depends on:** terminal runtime snapshots, native items/schema output, timing seam.
-- **Serves:** R3, R8, R9, R13 · **Governed by:** D15–D17, D24, D35, D39 · **Realizes:**
+- **Serves:** R3, R8, R9, R13 · **Governed by:** D15–D17, D24, D35, D39, D41 · **Realizes:**
   UC1–UC2, UC6, UC8–UC9
 
 ### 5.6 Errors, recovery, and security boundaries
@@ -292,13 +299,17 @@ stranding raw recovery users or requiring nested script paths.
 - **Compatibility:** Keep `daemon serve/status/shutdown`, `model list`, `session
   start/resume/list/show`, and `turn start/status/wait/events/steer/interrupt`. The
   common surface adds `daemon stop` as the preferred spelling; legacy `shutdown`
-  remains an advanced alias. Existing `--socket`, `--state`, raw session/thread
-  selectors, and JSON-RPC methods retain their meaning.
+  remains advanced. Advanced clients accept at most one explicit endpoint override,
+  `--instance` or `--socket`; raw legacy environment/default-socket resolution remains
+  when neither is supplied in legacy mode. Explicit `--socket daemon status/shutdown`
+  preserves the existing wire response, while instance-selected `daemon status/stop`
+  uses the new response models. Existing `--state`, raw session/thread selectors, and
+  JSON-RPC methods retain their meaning.
 - **Documentation:** Update `codex-worker.md`, model-selection examples, SDD worker
   dispatch guidance, top-level help, and every touched subcommand help in the same
   change. Common examples lead; advanced mechanics are a separate recovery appendix.
 - **Depends on:** plugin PATH packaging and current CLI/RPC methods.
-- **Serves:** R1, R10, R12, R13 · **Governed by:** D1–D2, D25, D28, D37–D38 ·
+- **Serves:** R1, R10, R12, R13 · **Governed by:** D1–D2, D25, D28, D37–D38, D43 ·
   **Realizes:** UC1, UC7, UC9–UC10
 
 ### 5.9 Domain model
@@ -345,7 +356,8 @@ classDiagram
   }
   class AgentMessage {
     <<upstream item — identity: item_id>>
-    phase: MessagePhase
+    phase: MessagePhase?
+    selection: CompletionSelection?
     text: str
   }
   class MetricEvidence {
@@ -354,14 +366,78 @@ classDiagram
     source: MetricSource
     availability: Availability
   }
-  class CompletionResult {
+  class CompletionResponse {
     <<response model>>
     worker: WorkerRecord
     turn: TurnSnapshot
     messages: AgentMessage[]
     structured_output: JsonValue?
-    metrics: MetricEvidence[]
+    metrics: map[str, MetricEvidence]
     recovery: RecoveryLinks
+  }
+  class WorkerStatusResponse {
+    <<CLI response — status>>
+    worker: WorkerRecord
+    daemon_status: ready
+    attached: bool
+    active_turn_id: str?
+    latest_turn: TurnSnapshot?
+  }
+  class WorkerMessagesResponse {
+    <<CLI response — messages>>
+    worker: WorkerRecord
+    messages: AgentMessage[]
+    requested_tail: int
+    truncated: bool
+  }
+  class WorkerHistoryResponse {
+    <<CLI response — history>>
+    worker: WorkerRecord
+    turns: HistoryTurnView[]
+    requested_tail: int
+    older_available: bool
+  }
+  class ControlResponse {
+    <<CLI response — steer/interrupt>>
+    worker: WorkerRecord
+    action: ControlAction
+    accepted: true
+    turn_id: str
+  }
+  class GoalResponse {
+    <<CLI response — goal set/show>>
+    worker: WorkerRecord
+    availability: GoalAvailability
+    goal: GoalState?
+  }
+  class LimitsResponse {
+    <<CLI response — limits>>
+    availability: available
+    rate_limits: JsonObject
+  }
+  class DaemonStatusResponse {
+    <<CLI response — daemon status>>
+    instance: InstanceIdentity
+    status: DaemonStatus
+    daemon_pid: int?
+    codex_pid: int?
+    worker_count: int
+  }
+  class DaemonStopResponse {
+    <<CLI response — daemon stop>>
+    instance: InstanceIdentity
+    status_after: stopped
+    durable_state: preserved
+    worker_count: int
+  }
+  class RpcErrorData {
+    <<error response model>>
+    kind: ErrorKind
+    retryable: bool
+    source: str
+    details: JsonObject
+    known_ids: KnownIds
+    next_actions: NextAction[]
   }
   class StartWorkerRequest { <<CLI request — start>> }
   class RunWorkerRequest { <<CLI request — run>> }
@@ -389,9 +465,16 @@ classDiagram
   GoalSetRequest --> WorkerRecord
   GoalShowRequest --> WorkerRecord
   GoalState --> WorkerRecord
-  CompletionResult --> WorkerRecord
-  CompletionResult --> AgentMessage
-  CompletionResult --> MetricEvidence
+  CompletionResponse --> WorkerRecord
+  CompletionResponse --> AgentMessage
+  CompletionResponse --> MetricEvidence
+  WorkerStatusResponse --> WorkerRecord
+  WorkerMessagesResponse --> AgentMessage
+  WorkerHistoryResponse --> AgentMessage
+  ControlResponse --> WorkerRecord
+  GoalResponse --> GoalState
+  DaemonStatusResponse --> InstanceIdentity
+  DaemonStopResponse --> InstanceIdentity
   DaemonStatusRequest --> InstanceIdentity
   DaemonStopRequest --> InstanceIdentity
   LimitsRequest --> InstanceIdentity
@@ -410,7 +493,7 @@ models and strings only at render/wire edges.
 | Claude scope vs worker conversation | `CLAUDE_CODE_SESSION_ID`, instance ID, worker `session_id`, Codex `thread_id` | environment / instance / registry / upstream | D5, D11: Claude ID selects the daemon; name selects the worker; daemon/session/thread IDs remain distinct recovery evidence. |
 | Worker instruction | `--prompt`, `--prompt-file`, upstream `text` input | CLI / adapter | D23: both CLI forms become one validated `prompt` value before the service seam. |
 | Goal objective | `--goal`, `objective` | start/goal CLI / upstream | D29, D32: CLI uses operator word `goal`; request model and upstream record use `objective`. |
-| Full access | default access, `dangerFullAccess`, `--read-only` | CLI / upstream sandbox | D20: `AccessMode.full` maps only at the adapter boundary; cwd never implies access. |
+| Full access | default access, thread `danger-full-access`, turn `dangerFullAccess`, `--read-only` | CLI / upstream sandbox seams | D20, D44: `AccessMode.full` maps separately at thread and turn adapters; cwd never implies access. |
 | Model policy | `tier`, `model` | CLI / registry / upstream | D21–D22: tier is policy annotation; resolved model is authoritative execution configuration. |
 | Daemon termination | `stop`, legacy `shutdown` | common / advanced CLI | D18, D38: `stop` is preferred; `shutdown` remains compatibility alias with identical non-destructive effect. |
 | Live messages vs durable history | `messages`, `history`, `turn events` | common / native proxy / advanced | D26, D31: bounded narration, durable turn projection, and raw events are intentionally different views. |
@@ -423,7 +506,7 @@ models and strings only at render/wire edges.
 | RETYPE | session name | optional annotation | required unique worker key inside instance | D11–D12 |
 | ADD | `WorkerRecord.tier/access` | not durably represented | persisted immutable creation policy | D20–D23 |
 | ADD | `StartWorkerRequest` / `RunWorkerRequest` | session + turn choreography | composed high-level commands | D23, D28 |
-| ADD | completion projection | callers inspect snapshots/events | ordered finals + native structured output + sourced metrics | D15–D17, D35 |
+| ADD | completion projection | callers inspect snapshots/events | ordered phase-aware completion messages + schema-mode structured output + sourced metrics | D15–D17, D35, D39, D41 |
 | ADD | goal/history/limits requests | raw app-server only | named/common native proxies | D29, D31–D32 |
 | ADD | first-use registry invariant | empty file fails parsing | missing/zero-byte initializes; malformed non-empty preserved | D36 |
 | ADD | launcher | nested script invocation | public `bin/codex-worker` | D37 |
@@ -436,7 +519,7 @@ models and strings only at render/wire edges.
 | Invariant | Enforcer |
 |---|---|
 | Exactly one instance source wins in D34 precedence. | Pure resolver plus table-driven precedence tests. |
-| `(instance, name)` is unique and names never become path fragments. | Frozen request validation, registry lock/uniqueness check, path derivation from instance hash only. |
+| `(instance, name)` is unique; name matches `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` and never becomes a path fragment. | Frozen request validation, registry lock/uniqueness check, path derivation from instance hash only. |
 | `start` creates only; `run` continues only. | Service result codes and concurrent same-name creation test. |
 | Cwd/model/effort/access are immutable on common follow-ups. | Frozen `WorkerRecord`, strict `RunWorkerRequest` with no such fields, adapter request assertions. |
 | Prompt source is exactly one, readable UTF-8, and non-empty. | Request constructor validators and CLI refusal tests. |
@@ -457,22 +540,29 @@ plugin PATH command would make first use non-portable. Extra fields are rejected
 
 | CLI command(s) | Request model | Consumes / produces |
 |---|---|---|
-| `start` | `StartWorkerRequest` | `InstanceIdentity`, new `WorkerRecord`, optional `GoalState`, `CompletionResult` |
-| `run` | `RunWorkerRequest` | existing `WorkerRecord`, `CompletionResult` |
-| `status` | `WorkerStatusRequest` | `WorkerRecord`, `TurnSnapshot` |
-| `messages` | `WorkerMessagesRequest` | `WorkerRecord`, `AgentMessage[]` |
-| `history` | `WorkerHistoryRequest` | `WorkerRecord`, durable turn summaries |
-| `steer` | `SteerWorkerRequest` | `WorkerRecord`, active `TurnSnapshot`, control result |
-| `interrupt` | `InterruptWorkerRequest` | `WorkerRecord`, active `TurnSnapshot`, control result |
-| `goal set` | `GoalSetRequest` | `WorkerRecord`, `GoalState` |
-| `goal show` | `GoalShowRequest` | `WorkerRecord`, optional `GoalState` |
-| `limits` | `LimitsRequest` | `InstanceIdentity`, native rate-limit response |
-| `daemon status` | `DaemonStatusRequest` | `InstanceIdentity`, runtime state |
-| `daemon stop` | `DaemonStopRequest` | `InstanceIdentity`, runtime state |
-| advanced `model/session/turn/daemon serve` | existing strict RPC request models | existing broker records and responses, unchanged |
+| `start` | `StartWorkerRequest` | `InstanceIdentity`, new `WorkerRecord`, optional `GoalState` → `CompletionResponse` |
+| `run` | `RunWorkerRequest` | existing `WorkerRecord` → `CompletionResponse` |
+| `status` | `WorkerStatusRequest` | `WorkerRecord`, `TurnSnapshot` → `WorkerStatusResponse` |
+| `messages` | `WorkerMessagesRequest` | `WorkerRecord`, retained `AgentMessage[]` → `WorkerMessagesResponse` |
+| `history` | `WorkerHistoryRequest` | `WorkerRecord`, durable turns → `WorkerHistoryResponse` |
+| `steer` | `SteerWorkerRequest` | active `WorkerRecord`/`TurnSnapshot` → `ControlResponse` |
+| `interrupt` | `InterruptWorkerRequest` | active `WorkerRecord`/`TurnSnapshot` → `ControlResponse` |
+| `goal set` | `GoalSetRequest` | `WorkerRecord`, native `GoalState` → `GoalResponse` |
+| `goal show` | `GoalShowRequest` | `WorkerRecord`, optional native `GoalState` → `GoalResponse` |
+| `limits` | `LimitsRequest` | `InstanceIdentity`, native rate limits → `LimitsResponse` |
+| instance-selected `daemon status` | `DaemonStatusRequest` | `InstanceIdentity`, runtime state → `DaemonStatusResponse` |
+| `daemon stop` | `DaemonStopRequest` | `InstanceIdentity`, runtime state → `DaemonStopResponse` |
+| advanced `daemon serve` | existing foreground composition args | foreground process exit; no client response |
+| advanced socket `daemon status/shutdown` | existing strict RPC request models | existing daemon responses unchanged |
+| advanced `model/session/turn` | existing strict RPC request models | existing broker records and responses unchanged |
+
+The field-level definitions in CLI companion §8 are normative for every response model
+above, including nullability, enums, ordering, and the closed error-data envelope. This
+domain section owns their relationships; the CLI companion owns their serialized field
+contract. Any change must update both in one commit.
 
 - **Serves:** R1–R13 · **Governed by:** D5, D8, D11–D12, D15–D17, D19–D23,
-  D29–D40 · **Realizes:** UC1–UC10
+  D29–D44 · **Realizes:** UC1–UC10
 
 ## 6. Decisions
 
@@ -483,7 +573,9 @@ implementation-facing distillation.
 |---|---|---|---|
 | D1–D2 | locked | Design the end-to-end CLI product, not a skill-only patch. | The measured failure spans packaging through completion; revisit if scope becomes documentation-only. |
 | D3 | superseded by D6 | Earlier explicit `daemon ensure`. | Environment-derived identity made it ceremony. |
-| D4–D6 | locked | Independent instances; Claude-derived default; implicit lifecycle on message commands. | Supports concurrent sessions without caller bookkeeping; revisit if native Codex supplies safe multi-tenancy/readiness. |
+| D4 | locked | Independent daemon instances coexist. | Supports concurrent isolated sessions; revisit if native Codex supplies safe multi-tenancy. |
+| D5 | refined by D9 | Claude session UUID derives default instance; durable files do not use Claude job storage. | Preserves inherited identity without harness-owned storage; revisit if Claude identity changes. |
+| D6 | refined by D18/D23 | Message commands own implicit lifecycle; diagnostics/control stay explicit and non-destructive. | Removes setup ceremony; revisit if implicit startup cannot stay legible and safe. |
 | D7 | superseded by D23 | Earlier create-or-continue `run`. | Split creation from continuation to prevent drift. |
 | D8–D9 | locked, D9 refined by D33 | Reuse Claude session UUID and process cwd only; keep separate Superdev-owned storage. | High-value inherited facts without accidental effort/config inheritance; revisit if Claude publishes a dedicated worker contract. |
 | D10 | superseded by D11 | Earlier optional names. | Fan-out makes anonymity ambiguous. |
@@ -503,8 +595,12 @@ implementation-facing distillation.
 | D36 | locked | Bootstrap missing/empty state; preserve malformed non-empty state. | First-use convenience without destructive repair; revisit when safe versioned migrations exist. |
 | D37 | locked | Install public PATH launcher. | Nested script discovery was measured friction; revisit for manifest-native executables. |
 | D38 | locked | Keep lower-level RPC commands as advanced compatibility. | Recovery and migration remain possible; revisit only in a separately versioned removal. |
-| D39 | locked | JSON-decode final text only when an output schema was explicitly supplied. | Current protocol has no separate parsed field; revisit when Codex adds one. |
+| D39 | refined by D41 | JSON-decode selected completion text only when an output schema was explicitly supplied. | Current protocol has no separate parsed field; revisit when Codex adds one. |
 | D40 | locked | Use strict frozen stdlib seam models as a scoped dependency-free exception. | Plugin install has no Python dependency mechanism; revisit if one is added. |
+| D41 | locked | Prefer explicit final phases; otherwise select the last agent message as a visible terminal fallback. | Phase is protocol-nullable; revisit if upstream makes it reliable. |
+| D42 | locked | Worker keys are shell-safe 1–128 character tokens. | Makes validation and registry identity exact; revisit by adding a separate label if needed. |
+| D43 | locked | Advanced clients explicitly select instance or socket; socket daemon status/shutdown retain legacy responses. | Preserves compatibility while reaching managed instances; revisit in a major raw-surface removal. |
+| D44 | locked | Map full/read-only at both thread sandbox and turn sandboxPolicy seams. | Current protocol uses two encodings; revisit if upstream unifies them. |
 
 ## 7. Assumptions & open questions
 
@@ -557,7 +653,7 @@ handled as typed unavailability rather than an assumption of support.
 | AH7 | Explicit and environment-selected non-Claude instances resolve predictably without raw socket/state arguments. | UC7 / R1, R10 | fast | |
 | AH8 | Full-access and read-only workers enforce distinct upstream sandbox policies while both retain their resolved starting cwd and validated model/effort. | UC8 / R7, R8 | slow | |
 | AH9 | Every common client path emits one JSON object, and name, timeout, model, startup, and malformed-state refusals preserve state and name the next safe action. | UC9 / R3, R11, R13 | fast + slow | |
-| AH10 | All final agent messages are returned in order; requested structured verdict/report/review fields come only from native schema output; every metric states its source or unavailability. | UC1, UC6 / R3 | fast + slow | |
+| AH10 | All explicit final agent messages are returned in order; a protocol-valid null phase still yields a visibly marked terminal fallback; requested structured verdict/report/review fields come only from schema-mode JSON; every metric states its source or unavailability. | UC1, UC6 / R3 | fast + slow | |
 | AH11 | Missing or zero-byte first-use state initializes atomically and owner-only, while non-empty malformed state remains unchanged. | UC9 / R11 | fast | |
 | AH12 | Existing model/session/turn/raw-thread recovery workflows retain their meaning and the public launcher works from outside the repository. | UC10 / R12, R13 | fast + slow | |
 

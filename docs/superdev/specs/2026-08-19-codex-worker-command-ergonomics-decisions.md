@@ -99,7 +99,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ## D5 — Derive the default daemon instance from the Claude session environment
 **When:** 2026-08-19T13:09:12Z · **Phase:** brainstorm ·
-**Status:** locked
+**Status:** refined-by D9
 **Decided by:** Tadas
 
 - **Trigger:** Requiring Claude to retain and pass a daemon handle repeats information
@@ -115,7 +115,9 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Decided:** Take option B. The parent Claude session and its child commands share one
   default Codex-worker instance through inherited environment; separate Claude sessions
   naturally resolve separate instances. Explicit flags remain for other harnesses and
-  exceptional isolation, but normal Claude commands carry no daemon identifier.
+  exceptional isolation, but normal Claude commands carry no daemon identifier. D9
+  later retains the identity rule while replacing `CLAUDE_JOB_DIR` storage with a
+  separate Superdev-owned folder.
 - **Rests on:** MEASURED Claude environment transcript showing inherited
   `CLAUDE_CODE_SESSION_ID`, `CLAUDE_JOB_DIR`, and identical child command environments.
 - **Affects:** default socket/PID/log paths, configuration precedence, PATH packaging,
@@ -125,7 +127,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ## D6 — Make lifecycle implicit on the primary run command
 **When:** 2026-08-19T13:10:42Z · **Phase:** brainstorm ·
-**Status:** locked
+**Status:** refined-by D18 and D23
 **Decided by:** Tadas
 
 - **Trigger:** Once daemon identity is safely derived from the Claude environment,
@@ -137,9 +139,10 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: let the primary message/run command resolve, bootstrap, and start or reuse the
     environment-scoped daemon internally — gains zero-friction dispatch / requires
     deterministic autostart errors and concurrency-safe startup.
-- **Decided:** Take option B and supersede D3. Explicit daemon status/stop/clean remain
-  for diagnostics and control, but normal dispatch begins with the message command and
-  returns the finished result without a separate lifecycle step.
+- **Decided:** Take option B and supersede D3. Explicit daemon diagnostics and control
+  remain, but normal dispatch begins with the message command and returns the finished
+  result without a separate lifecycle step. D18 later narrowed lifecycle control to
+  non-destructive `status`/`stop`; D23 split the primary message path into `start`/`run`.
 - **Rests on:** D5's environment-derived instance identity and direct operator
   preference for implicit startup.
 - **Affects:** primary command composition, autostart locking/readiness, registry
@@ -904,7 +907,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ## D39 — Decode structured output only in explicit schema mode
 **When:** 2026-08-19 (recorded at MEASURED 16:39:52Z) · **Phase:** brainstorm self-review ·
-**Status:** locked
+**Status:** refined-by D41
 **Decided by:** Codex under Tadas's autonomous handoff
 
 - **Trigger:** Generated Codex 0.147.0 schemas confirm `turn/start.outputSchema` and
@@ -921,7 +924,8 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
     ordinary prose.
 - **Decided:** Take option C. Codex remains responsible for schema-constrained
   generation; the CLI performs JSON decoding, not heuristic extraction or semantic
-  classification. `structured_output` is null when no schema was requested.
+  classification. `structured_output` is null when no schema was requested. D41 later
+  defines the protocol-nullable message selected for decoding.
 - **Rests on:** Local generated Codex 0.147.0 request/notification schemas.
 - **Affects:** completion projection, output provenance, error handling, result models,
   and schema-mode acceptance evidence.
@@ -952,3 +956,92 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   and the implementation plan's engineering-pattern constraints.
 - **Revisit-when:** The plugin platform supports declared Python dependencies or this
   executable becomes an installed Python package.
+
+## D41 — Fall back to the last agent message when completion phase is unknown
+**When:** 2026-08-19T16:47:02Z (MEASURED) · **Phase:** spec review ·
+**Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Codex 0.147.0 declares `agentMessage.phase` nullable, so requiring an
+  explicit `final_answer` phase can discard a valid terminal response and break schema
+  decoding.
+- **Options weighed:**
+  - A: require explicit final phase — gains a simple filter / produces false incomplete
+    results for protocol-valid providers.
+  - B: return every agent narration as final — avoids loss / floods normal completion
+    and mislabels commentary.
+  - C: select all explicit final-answer messages when present; otherwise select the last
+    completed agent message as `terminal_fallback` while preserving its null/unknown
+    phase — gains protocol compatibility with a visible fallback rule.
+- **Decided:** Take option C for live completion and durable history. Schema mode decodes
+  the last selected completion message. Only a terminal turn with no agent message at
+  all is `incomplete_completion`.
+- **Rests on:** Generated Codex 0.147.0 `AgentMessageThreadItem.phase` schema.
+- **Affects:** completion/history projection, result fields, schema decoding, metrics,
+  and acceptance evidence.
+- **Revisit-when:** Codex makes completion role non-null and consistent across providers.
+
+## D42 — Use one bounded shell-safe worker-name contract
+**When:** 2026-08-19T16:47:02Z (MEASURED) · **Phase:** spec review ·
+**Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** A required unique name without a field-level bound leaves validation,
+  registry identity, help, and tests free to diverge.
+- **Options weighed:**
+  - A: accept arbitrary Unicode strings — gains expressiveness / creates shell,
+    rendering, and normalization ambiguity.
+  - B: require `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` — gains a portable 1–128 character
+    token suitable for shell commands while still allowing readable randomized names.
+- **Decided:** Take option B. Names remain data and never become path fragments.
+- **Rests on:** D11–D12's role/collision use and the machine-harness CLI boundary.
+- **Affects:** every name-selected command model, registry uniqueness, help, errors,
+  skill examples, and tests.
+- **Revisit-when:** A supported harness requires human-language labels distinct from
+  the stable worker key; add a separate annotation rather than weakening identity.
+
+## D43 — Make advanced endpoint selection additive and explicit
+**When:** 2026-08-19T16:47:02Z (MEASURED) · **Phase:** spec review ·
+**Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The draft both promised unchanged raw socket commands and declared
+  `--instance` for advanced commands without listing it exhaustively; `daemon status`
+  also needs both a new instance view and the old raw RPC response.
+- **Options weighed:**
+  - A: remove advanced instance selection — preserves old parsing / makes raw recovery
+    awkward against an implicitly managed daemon.
+  - B: silently change old socket-selected responses to new shapes — gains uniformity /
+    breaks compatibility.
+  - C: allow exactly one explicit endpoint override (`--instance` or `--socket`) on
+    advanced clients, retain legacy environment/default-socket behavior when neither is
+    supplied in legacy mode, and let explicit `--socket daemon status/shutdown` keep the
+    old wire response while instance-selected status/stop use new models.
+- **Decided:** Take option C. Every advanced CLI row lists both selectors explicitly;
+  common commands reject `--socket`.
+- **Rests on:** R12, D34, D38, and the existing global socket contract.
+- **Affects:** parser dispatch, exhaustive CLI tables, daemon dual-mode status,
+  environment precedence, response models, and regression tests.
+- **Revisit-when:** A major version removes the raw surface after consumer migration.
+
+## D44 — Map access mode at both distinct Codex protocol seams
+**When:** 2026-08-19T16:47:02Z (MEASURED) · **Phase:** spec review ·
+**Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Codex 0.147.0 uses kebab-case `sandbox` enum values on thread
+  start/resume and tagged camel-case `sandboxPolicy` objects on turn start.
+- **Options weighed:**
+  - A: document one generic mapping — gains brevity / is wrong at one protocol seam.
+  - B: map `full` to thread `danger-full-access` and turn
+    `{type: dangerFullAccess}`, and map `read_only` to thread `read-only` and turn
+    `{type: readOnly, networkAccess: false}` — gains exact, testable enforcement.
+- **Decided:** Take option B. Thread creation/resume also sets
+  `allowProviderModelFallback: false`; turn start resends the persisted policy so sticky
+  upstream configuration cannot drift.
+- **Rests on:** Local generated Codex 0.147.0 `SandboxMode`, `SandboxPolicy`,
+  `ThreadStartParams`, `ThreadResumeParams`, and `TurnStartParams` schemas.
+- **Affects:** app-server adapter, worker start/resume/run, access metadata, and
+  protocol-fixture/live acceptance tests.
+- **Revisit-when:** Codex unifies the two request encodings or replaces them with named
+  permissions profiles.
