@@ -1052,3 +1052,30 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   protocol-fixture/live acceptance tests.
 - **Revisit-when:** Codex unifies the two request encodings or replaces them with named
   permissions profiles.
+
+## D45 — Release the additive command façade as Superdev 7.2.0
+**When:** 2026-08-19T17:06:37Z (MEASURED) · **Phase:** plan ·
+**Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The command façade adds a new public CLI surface, durable schema version,
+  and behavior-shaping skill guidance while preserving the advanced compatibility
+  surface. The implementation plan needs an exact publish target rather than leaving
+  release scope to the final task.
+- **Options weighed:**
+  - A: keep 7.1.0 — avoids a release / leaves installed Claude Code unable to discover
+    the new commands through normal plugin update semantics.
+  - B: publish a 7.1.x patch — minimizes the numeric change / understates the additive
+    public feature set and registry evolution.
+  - C: publish 7.2.0 — identifies the work as a backward-compatible feature release and
+    gives package, cache-buster, and installed-launcher checks one exact target.
+- **Decided:** Take option C after the live CLI checkride passes. The release task bumps
+  every versioned plugin surface to 7.2.0, packages it, reinstalls the development
+  plugin, and verifies the launcher from outside the repository.
+- **Rests on:** Existing version 7.1.0 in the Claude and Codex manifests (MEASURED),
+  R12 compatibility, D43's additive endpoint contract, and the plugin release tooling.
+- **Affects:** Task 8, release notes, manifests, package checks, cache busting, and the
+  installed-surface receipt.
+- **Revisit-when:** A blocking implementation or checkride finding requires removing or
+  breaking an existing public command; redesign and choose the appropriate major/minor
+  boundary before publishing.
