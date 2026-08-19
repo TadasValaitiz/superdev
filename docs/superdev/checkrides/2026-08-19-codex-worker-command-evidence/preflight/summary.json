@@ -1,7 +1,7 @@
 {
   "result": {
     "codex_version": "codex-cli 0.147.0",
-    "daemon_pid": 3415,
+    "daemon_pid": 5099,
     "models": [
       {
         "id": "gpt-5.6-sol",
@@ -92,5 +92,5 @@
   },
   "scenario": "preflight",
   "status": "PASS",
-  "transcript": ".superdev/codex-worker-live/20260819T203231.193783Z-3409-preflight/transcript.jsonl"
+  "transcript": ".superdev/codex-worker-live/20260819T212756.399212Z-5094-preflight/transcript.jsonl"
 }

@@ -3,14 +3,14 @@
     "first_turn": {
       "error": null,
       "status": "completed",
-      "turn_id": "01a01bba-a892-7b11-be60-fdfad23bf922"
+      "turn_id": "01a01bec-7bf1-7881-957a-9b77d20f85d7"
     },
     "follow_turn": {
       "error": null,
       "status": "completed",
-      "turn_id": "01a01bba-d868-7cc0-ae12-7559a842128c"
+      "turn_id": "01a01bec-8e8d-7a33-b517-43bf310b414b"
     },
-    "instance": "task8-common-3fdcfff57794",
+    "instance": "task8-common-c93b391f3025",
     "messages_returned": 1,
     "metric_evidence": {
       "command_count": {
@@ -39,24 +39,24 @@
       "wall_duration_seconds": {
         "availability": "measured",
         "source": "codex-worker",
-        "value": 4.879949417
+        "value": 4.203415958
       }
     },
     "restart_turn": {
       "error": null,
       "status": "completed",
-      "turn_id": "01a01bba-e598-7610-bb28-e28d0911052c"
+      "turn_id": "01a01bec-98fc-7f11-ac95-76351a9791c9"
     },
     "same_recovery_identity": true,
     "stop": {
-      "codex_pid": 4520,
-      "daemon_pid": 4516,
+      "codex_pid": 5155,
+      "daemon_pid": 5151,
       "durable_state": "preserved",
       "instance": {
-        "durable_dir": "/Users/tadas/Library/Application Support/superdev/codex-worker/instances/3e934c69c707f3e42f8f42d5cfc6a3ae803580de11c1b1e7ef14a30874b82243",
-        "instance": "task8-common-3fdcfff57794",
-        "log_path": "/Users/tadas/Library/Application Support/superdev/codex-worker/instances/3e934c69c707f3e42f8f42d5cfc6a3ae803580de11c1b1e7ef14a30874b82243/daemon.log",
-        "socket_path": "/var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/superdev-cw-501/3e934c/worker.sock",
+        "durable_dir": "/Users/tadas/Library/Application Support/superdev/codex-worker/instances/c90d744fd72f99cabde8761e12bc9cfd04b6c932b1edbd46a66d0999e1e305f8",
+        "instance": "task8-common-c93b391f3025",
+        "log_path": "/Users/tadas/Library/Application Support/superdev/codex-worker/instances/c90d744fd72f99cabde8761e12bc9cfd04b6c932b1edbd46a66d0999e1e305f8/daemon.log",
+        "socket_path": "/var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/superdev-cw-501/c90d74/worker.sock",
         "source": "flag"
       },
       "status_after": "stopped",
@@ -65,17 +65,17 @@
     },
     "worker": {
       "access": "full",
-      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203331.692227Z-4509-common-journey/common-workspace",
+      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212757.912140Z-5094-common-journey/common-workspace",
       "effort": "medium",
-      "instance": "task8-common-3fdcfff57794",
+      "instance": "task8-common-c93b391f3025",
       "model": "gpt-5.6-terra",
-      "name": "common-0ce3c884",
-      "session_id": "aea461b9-3fb1-4019-8ff3-4d870720d183",
-      "thread_id": "01a01bba-a82c-7462-b6ff-559c115432ae",
+      "name": "common-75ee484c",
+      "session_id": "07f419be-d2d0-4c9e-9159-8a377cd70850",
+      "thread_id": "01a01bec-7ba4-7c41-861a-ef6a1d206c97",
       "tier": "medium"
     }
   },
   "scenario": "common-journey",
   "status": "PASS",
-  "transcript": ".superdev/codex-worker-live/20260819T203331.692227Z-4509-common-journey/transcript.jsonl"
+  "transcript": ".superdev/codex-worker-live/20260819T212757.912140Z-5094-common-journey/transcript.jsonl"
 }

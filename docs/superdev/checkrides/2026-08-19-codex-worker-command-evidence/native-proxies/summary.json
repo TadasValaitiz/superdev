@@ -28,54 +28,54 @@
       "wall_duration_seconds": {
         "availability": "measured",
         "source": "codex-worker",
-        "value": 5.2412536670000005
+        "value": 7.733714584000001
       }
     },
     "goal_initial": {
       "availability": "present",
       "goal": {
-        "created_at": 1787172084,
+        "created_at": 1787174912,
         "objective": "Complete the Task 8 native proxy check",
         "status": "active",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
-        "time_used_seconds": 5,
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
+        "time_used_seconds": 7,
         "token_budget": 20000,
-        "tokens_used": 9431,
-        "updated_at": 1787172090
+        "tokens_used": 6167,
+        "updated_at": 1787174919
       },
       "worker": {
         "access": "full",
-        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/native-workspace",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/native-workspace",
         "effort": "medium",
-        "instance": "task8-native-8733044b3185",
+        "instance": "task8-native-094c4b402c7f",
         "model": "gpt-5.6-terra",
-        "name": "native-e8fff047",
-        "session_id": "af6980af-19b1-4201-8d14-33c93e729364",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
+        "name": "native-2f19b0d8",
+        "session_id": "19329092-726c-497f-82b4-fca43ea2a9dc",
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
         "tier": "medium"
       }
     },
     "goal_updated": {
       "availability": "present",
       "goal": {
-        "created_at": 1787172084,
+        "created_at": 1787174912,
         "objective": "Complete the Task 8 native proxy check",
         "status": "paused",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
-        "time_used_seconds": 5,
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
+        "time_used_seconds": 7,
         "token_budget": 25000,
-        "tokens_used": 9431,
-        "updated_at": 1787172090
+        "tokens_used": 6167,
+        "updated_at": 1787174920
       },
       "worker": {
         "access": "full",
-        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/native-workspace",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/native-workspace",
         "effort": "medium",
-        "instance": "task8-native-8733044b3185",
+        "instance": "task8-native-094c4b402c7f",
         "model": "gpt-5.6-terra",
-        "name": "native-e8fff047",
-        "session_id": "af6980af-19b1-4201-8d14-33c93e729364",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
+        "name": "native-2f19b0d8",
+        "session_id": "19329092-726c-497f-82b4-fca43ea2a9dc",
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
         "tier": "medium"
       }
     },
@@ -85,7 +85,7 @@
       "returned": 2,
       "turns": [
         {
-          "completed_at": 1787172090,
+          "completed_at": 1787174919,
           "error": null,
           "messages": [
             {
@@ -96,28 +96,28 @@
               "type": "agent_message"
             }
           ],
-          "started_at": 1787172084,
+          "started_at": 1787174912,
           "status": "completed",
-          "turn_id": "2b88c3c7-4364-4f88-9e57-d9799704b4e9"
+          "turn_id": "c95c0ed2-5a79-46a1-92a2-bf95547733da"
         },
         {
           "completed_at": null,
           "error": null,
           "messages": [],
-          "started_at": 1787172090,
+          "started_at": 1787174919,
           "status": "in_progress",
-          "turn_id": "d6195b7d-f08c-4836-9822-5edf5d1a78d3"
+          "turn_id": "d731f753-9de8-4212-a950-b5ce3a44c742"
         }
       ],
       "worker": {
         "access": "full",
-        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/native-workspace",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/native-workspace",
         "effort": "medium",
-        "instance": "task8-native-8733044b3185",
+        "instance": "task8-native-094c4b402c7f",
         "model": "gpt-5.6-terra",
-        "name": "native-e8fff047",
-        "session_id": "af6980af-19b1-4201-8d14-33c93e729364",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
+        "name": "native-2f19b0d8",
+        "session_id": "19329092-726c-497f-82b4-fca43ea2a9dc",
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
         "tier": "medium"
       }
     },
@@ -127,11 +127,13 @@
         "code": -32028,
         "data": {
           "details": {
+            "capacity": "unknown",
+            "inference": "do_not_infer",
             "reason": "account/rateLimits/read: protocol_error: malformed rate limits"
           },
           "kind": "limits_unavailable",
           "known_ids": {
-            "instance": "task8-native-8733044b3185",
+            "instance": "task8-native-094c4b402c7f",
             "name": null,
             "session_id": null,
             "thread_id": null,
@@ -145,39 +147,39 @@
       }
     },
     "status_after_pause": {
-      "active_turn_id": "d6195b7d-f08c-4836-9822-5edf5d1a78d3",
+      "active_turn_id": "d731f753-9de8-4212-a950-b5ce3a44c742",
       "attached": true,
       "daemon_status": "ready",
       "latest_turn": {
         "error": null,
         "status": "completed",
-        "turn_id": "2b88c3c7-4364-4f88-9e57-d9799704b4e9"
+        "turn_id": "c95c0ed2-5a79-46a1-92a2-bf95547733da"
       },
       "worker": {
         "access": "full",
-        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/native-workspace",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/native-workspace",
         "effort": "medium",
-        "instance": "task8-native-8733044b3185",
+        "instance": "task8-native-094c4b402c7f",
         "model": "gpt-5.6-terra",
-        "name": "native-e8fff047",
-        "session_id": "af6980af-19b1-4201-8d14-33c93e729364",
-        "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
+        "name": "native-2f19b0d8",
+        "session_id": "19329092-726c-497f-82b4-fca43ea2a9dc",
+        "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
         "tier": "medium"
       }
     },
     "worker": {
       "access": "full",
-      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/native-workspace",
+      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/native-workspace",
       "effort": "medium",
-      "instance": "task8-native-8733044b3185",
+      "instance": "task8-native-094c4b402c7f",
       "model": "gpt-5.6-terra",
-      "name": "native-e8fff047",
-      "session_id": "af6980af-19b1-4201-8d14-33c93e729364",
-      "thread_id": "01a01bc1-dbe2-7a51-acd2-89571ffcf3b2",
+      "name": "native-2f19b0d8",
+      "session_id": "19329092-726c-497f-82b4-fca43ea2a9dc",
+      "thread_id": "01a01bec-ffc5-7a93-a2d8-0f74c1b2184a",
       "tier": "medium"
     }
   },
   "scenario": "native-proxies",
   "status": "PASS",
-  "transcript": ".superdev/codex-worker-live/20260819T204123.803245Z-27066-native-proxies/transcript.jsonl"
+  "transcript": ".superdev/codex-worker-live/20260819T212831.731323Z-5094-native-proxies/transcript.jsonl"
 }

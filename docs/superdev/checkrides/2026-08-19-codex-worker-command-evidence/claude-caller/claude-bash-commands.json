@@ -1,8 +1,8 @@
 [
-  "codex-worker start --name claude-caller-f85d07de --prompt 'Reply with exactly CLAUDE-FIRST and no other text.'",
-  "codex-worker run --name claude-caller-f85d07de --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'",
-  "codex-worker goal show --name claude-caller-f85d07de",
-  "codex-worker history --name claude-caller-f85d07de --tail 2",
-  "codex-worker status --name claude-caller-f85d07de",
+  "codex-worker start --name claude-caller-36fa86cf --prompt 'Reply with exactly CLAUDE-FIRST and no other text.'",
+  "codex-worker run --name claude-caller-36fa86cf --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'",
+  "codex-worker goal show --name claude-caller-36fa86cf",
+  "codex-worker history --name claude-caller-36fa86cf --tail 2",
+  "codex-worker status --name claude-caller-36fa86cf",
   "codex-worker daemon stop"
 ]

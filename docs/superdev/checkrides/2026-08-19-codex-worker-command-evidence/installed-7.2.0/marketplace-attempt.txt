@@ -1,0 +1,87 @@
+COMMAND: claude plugin marketplace list
+Configured marketplaces:
+
+  ❯ claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+  ❯ obsidian-skills
+    Source: GitHub (kepano/obsidian-skills)
+
+  ❯ langsmith-skills
+    Source: GitHub (langchain-ai/langsmith-skills)
+
+  ❯ langchain-skills
+    Source: GitHub (langchain-ai/langchain-skills)
+
+  ❯ superdev-dev
+    Source: Directory (/Users/tadas/Projects/superdev)
+
+  ❯ claude-code-warp
+    Source: GitHub (warpdotdev/claude-code-warp)
+
+
+COMMAND: claude plugin marketplace remove superdev-dev --scope user
+✔ Successfully removed marketplace: superdev-dev (from user settings)
+
+COMMAND: claude plugin marketplace add /Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade --scope user
+Adding marketplace…✔ Successfully added marketplace: superdev-dev (declared in user settings)
+
+COMMAND: claude plugin marketplace list
+Configured marketplaces:
+
+  ❯ claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+  ❯ obsidian-skills
+    Source: GitHub (kepano/obsidian-skills)
+
+  ❯ langsmith-skills
+    Source: GitHub (langchain-ai/langsmith-skills)
+
+  ❯ langchain-skills
+    Source: GitHub (langchain-ai/langchain-skills)
+
+  ❯ claude-code-warp
+    Source: GitHub (warpdotdev/claude-code-warp)
+
+  ❯ superdev-dev
+    Source: Directory (/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade)
+
+
+COMMAND: jq -r .plugins[0].version /Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.claude-plugin/marketplace.json
+7.2.0
+
+COMMAND: claude plugin update superdev@superdev-dev
+Checking for updates for plugin "superdev@superdev-dev" at user scope…
+✘ Failed to update plugin "superdev@superdev-dev": Plugin "superdev" is not installed
+
+COMMAND: claude plugin marketplace remove superdev-dev --scope user
+✔ Successfully removed marketplace: superdev-dev (from user settings)
+
+COMMAND: claude plugin marketplace add /Users/tadas/Projects/superdev --scope user
+Adding marketplace…✔ Successfully added marketplace: superdev-dev (declared in user settings)
+
+COMMAND: claude plugin marketplace list
+Configured marketplaces:
+
+  ❯ claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+  ❯ obsidian-skills
+    Source: GitHub (kepano/obsidian-skills)
+
+  ❯ langsmith-skills
+    Source: GitHub (langchain-ai/langsmith-skills)
+
+  ❯ langchain-skills
+    Source: GitHub (langchain-ai/langchain-skills)
+
+  ❯ claude-code-warp
+    Source: GitHub (warpdotdev/claude-code-warp)
+
+  ❯ superdev-dev
+    Source: Directory (/Users/tadas/Projects/superdev)
+
+
+RESTORE_STATUS: remove=0 add=0 list=0 original_command_status=1
+RAW_EVIDENCE: .superdev/codex-worker-live/installed-7.2.0-fbsYIX/transcript.txt

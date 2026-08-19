@@ -1,0 +1,143 @@
+COMMAND: claude plugin marketplace list
+Configured marketplaces:
+
+  ❯ claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+  ❯ obsidian-skills
+    Source: GitHub (kepano/obsidian-skills)
+
+  ❯ langsmith-skills
+    Source: GitHub (langchain-ai/langsmith-skills)
+
+  ❯ langchain-skills
+    Source: GitHub (langchain-ai/langchain-skills)
+
+  ❯ claude-code-warp
+    Source: GitHub (warpdotdev/claude-code-warp)
+
+  ❯ superdev-dev
+    Source: Directory (/Users/tadas/Projects/superdev)
+
+
+COMMAND: claude plugin marketplace remove superdev-dev --scope user
+✔ Successfully removed marketplace: superdev-dev (from user settings)
+
+COMMAND: claude plugin marketplace add /Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade --scope user
+Adding marketplace…✔ Successfully added marketplace: superdev-dev (declared in user settings)
+
+COMMAND: claude plugin marketplace list
+Configured marketplaces:
+
+  ❯ claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+  ❯ obsidian-skills
+    Source: GitHub (kepano/obsidian-skills)
+
+  ❯ langsmith-skills
+    Source: GitHub (langchain-ai/langsmith-skills)
+
+  ❯ langchain-skills
+    Source: GitHub (langchain-ai/langchain-skills)
+
+  ❯ claude-code-warp
+    Source: GitHub (warpdotdev/claude-code-warp)
+
+  ❯ superdev-dev
+    Source: Directory (/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade)
+
+
+COMMAND: jq -r .plugins[0].version /Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.claude-plugin/marketplace.json
+7.2.0
+
+COMMAND: claude plugin install superdev@superdev-dev --scope user
+Installing plugin "superdev@superdev-dev"...✔ Successfully installed plugin: superdev@superdev-dev (scope: user)
+
+COMMAND: claude plugin update superdev@superdev-dev
+Checking for updates for plugin "superdev@superdev-dev" at user scope…
+✔ superdev is already at the latest version (7.2.0).
+
+COMMAND: claude plugin list
+Installed plugins:
+
+  ❯ frontend-design@claude-plugins-official
+    Version: unknown
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ langchain-skills@langchain-skills
+    Version: 0.1.0
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ langsmith-skills@langsmith-skills
+    Version: 0.1.0
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ obsidian@obsidian-skills
+    Version: 1.0.1
+    Scope: user
+    Status: ✘ disabled
+
+  ❯ pydantic-ai@claude-plugins-official
+    Version: 0.1.0
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ skill-creator@claude-plugins-official
+    Version: unknown
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ superdev@superdev-dev
+    Version: 7.2.0
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ superpowers@claude-plugins-official
+    Version: 6.3.0
+    Scope: user
+    Status: ✘ disabled
+
+  ❯ warp@claude-code-warp
+    Version: 2.2.0
+    Scope: user
+    Status: ✔ enabled
+
+
+COMMAND: test -x /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/bin/codex-worker
+
+COMMAND: jq -r .version /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/.claude-plugin/plugin.json
+7.2.0
+
+INSTALLED_CHECK_DIR: /var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/tmp.vLKUmXWCOq
+
+COMMAND: (cd /var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/tmp.vLKUmXWCOq && /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/bin/codex-worker --help)
+usage: codex-worker [-h] [--socket SOCKET] [--instance INSTANCE] [--pretty]
+                    {start,run,status,messages,history,interrupt,steer,goal,limits,daemon,model,session,turn}
+                    ...
+
+Local Unix-socket broker for durable Codex worker sessions.
+
+positional arguments:
+  {start,run,status,messages,history,interrupt,steer,goal,limits,daemon,model,session,turn}
+    start               create a named worker and send its first message
+    run                 send a follow-up to a named worker
+    daemon              broker lifecycle
+    model               live Codex model discovery
+    session             durable conversation identity
+    turn                start, observe, steer, or interrupt turns
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --socket SOCKET       Unix socket path (default:
+                        SUPERDEV_CODEX_WORKER_SOCKET or user temp path)
+  --instance INSTANCE   selected managed worker instance
+  --pretty              Pretty-print JSON responses for client commands
+
+COMMAND: (cd /var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/tmp.vLKUmXWCOq && /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.2.0/bin/codex-worker daemon status)
+{"jsonrpc":"2.0","id":"cli","result":{"instance":{"instance":"default","source":"default","durable_dir":"/Users/tadas/Library/Application Support/superdev/codex-worker/instances/37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f","socket_path":"/var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/superdev-cw-501/37a8ee/worker.sock","log_path":"/Users/tadas/Library/Application Support/superdev/codex-worker/instances/37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f/daemon.log"},"status":"stopped","daemon_pid":null,"codex_pid":null,"worker_count":0,"readiness":null,"last_error":null}}
+
+RAW_EVIDENCE: .superdev/codex-worker-live/installed-7.2.0-success-MK6KVp/transcript.txt
