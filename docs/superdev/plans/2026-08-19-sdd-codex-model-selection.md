@@ -87,6 +87,8 @@ discover” and “Scope boundary”; `skills/writing-skills/SKILL.md` testing r
 - Modify: `skills/cli-checkride/evaluator-prompt.md` model placeholder
 - Modify: `skills/cli-checkride/executor-prompt.md` model placeholder
 - Modify: `skills/self-brainstorming/workflow-reference.md` role mappings
+- Final-review amendment D10: Modify `skills/self-brainstorming/SKILL.md` inline Agent
+  fallback with the same native Claude role pins.
 - Modify: `skills/using-superdev/references/codex-tools.md` Codex subagent routing
 - Modify: `tests/codex-worker/test_skill_integration.py`
 - Modify at gate: `docs/superdev/specs/2026-08-19-sdd-codex-model-selection-design.md` §9 receipt cells only
@@ -94,6 +96,18 @@ discover” and “Scope boundary”; `skills/writing-skills/SKILL.md` testing r
 **Interfaces:**
 - Consumes: semantic tiers and mappings from spec §5.1–§5.3; existing `codex-worker` CLI commands and live `model list` response.
 - Produces: core contract `very smart|medium -> provider-specific explicit model`; all active routing consumers on that vocabulary; `codex-model-selection.md` as the conditional Codex policy/CLI appendix; unchanged `codex-worker.md` as mechanics authority; a structural receipt ready for independent semantic checkpoint review.
+
+#### Final-review amendment — D10 (added after original Task 1 scope)
+
+Final review found that the original Task 1 migration described self-brainstorm role
+tiers without pinning its executable Workflow calls or inline Agent fallback. Amend the
+completed scope as follows: grounding and responder pin native Claude `sonnet`
+(`medium`); questioner, synthesis, design review, design-fix, and re-review pin native
+Claude `opus` (`very smart`). Apply those exact seven Workflow pins in
+`skills/self-brainstorming/workflow-reference.md` and the equivalent mapping, with no
+Codex substitution, in `skills/self-brainstorming/SKILL.md`'s inline fallback. Add
+focused structural coverage for both paths. This is a logged D10 final-review amendment,
+not original plan scope.
 
 - [ ] **Step 1: Add structural assertions that expose the missing contract**
 

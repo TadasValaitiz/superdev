@@ -3,7 +3,7 @@
 **Date:** 2026-08-19 · **Status:** approved
 **Mode:** human-in-loop
 **Decision log:** ./2026-08-19-sdd-codex-model-selection-decisions.md
-**Companions:** `skills/subagent-driven-development/codex-worker.md`; planned `skills/subagent-driven-development/codex-model-selection.md`
+**Companions:** `skills/subagent-driven-development/codex-worker.md`; `skills/subagent-driven-development/codex-model-selection.md`
 **Origin:** brainstorm with Tadas
 
 ## 1. Problem & intent   [ANCHOR]
@@ -229,6 +229,21 @@ manual.
 - **Why:** The checkpoint reviewer demonstrably conflated the two mechanisms, while
   `using-superdev` proves the tools reference is harness-specific.
 - **Revisit-when:** Both mechanisms are actually unified.
+
+### D10 — Pin self-brainstorm Workflow and inline fallback roles   (status: locked; final-review amendment)
+
+- **Decision:** The seven executable Workflow `agent()` calls pin grounding and responder
+  to native Claude `sonnet` (`medium`), and questioner, synthesis, design review,
+  design-fix, and re-review to native Claude `opus` (`very smart`). The inline Agent
+  fallback carries the same role mapping and no Codex substitution.
+- **Alternatives:** Prose-only model guidance keeps the skeleton shorter but permits
+  inherited model routing; per-call and fallback pinning makes the existing two-tier
+  policy executable but requires the seven call sites and fallback to stay aligned.
+- **Why:** Final review found the original Task 1 migration had updated role prose
+  without pinning the Workflow calls or its inline Agent fallback.
+- **Provenance:** Added after the original Task 1 scope as final-review amendment D10;
+  see the append-only decision log for its complete build record.
+- **Revisit-when:** Workflow or native Claude Agent model selection changes.
 
 ## 7. Assumptions & open questions
 
