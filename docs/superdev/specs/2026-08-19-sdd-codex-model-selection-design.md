@@ -207,6 +207,17 @@ manual.
   they use different words from the central policy.
 - **Revisit-when:** The anchor intentionally adds a model or tier.
 
+### D8 — Validate through checkpoint reviewers   (status: locked)
+
+- **Decision:** Use a focused structural RED/GREEN check plus fresh semantic reviewers
+  at the documentation checkpoint instead of a large repeated model-call campaign.
+- **Alternatives:** Repeated control/before/after calls gain variance measurements but
+  cost disproportionate time; checkpoint reviewers gain focused application and
+  consistency judgment but do not produce a statistical distribution.
+- **Why:** The operator explicitly calibrated the validation method for this focused
+  skill-documentation change while retaining independent review.
+- **Revisit-when:** A future regression shows checkpoint review misses routing failures.
+
 ## 7. Assumptions & open questions
 
 | ID | Assumption / question | Affects | Status |

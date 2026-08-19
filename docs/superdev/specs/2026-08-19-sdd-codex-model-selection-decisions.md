@@ -128,3 +128,27 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** §5.1 consumer boundary, plan file map, Step 5, and structural tests.
 - **Revisit-when:** The routing contract intentionally adds another model or tier via an
   anchor amendment.
+
+## D8 — Use checkpoint reviewers instead of a large model-call campaign
+**When:** 2026-08-19T06:51:49Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human
+
+- **Trigger:** The planned 45-call control/before/after campaign was disproportionate
+  to a focused skill-documentation change.
+- **Options weighed:**
+  - A: run three scenarios five times across three variants — gains distributional
+    evidence / sacrifices time and attention far beyond this change's risk.
+  - B: keep one small structural RED/GREEN check, then use fresh reviewer agents at the
+    documentation checkpoint — gains focused semantic review and normal SDD independence
+    / sacrifices repetition statistics.
+- **Decided:** Remove the large Claude CLI campaign and its harness. Use the focused
+  structural check for the missing/present contract, then dispatch quick fresh reviewer
+  agents after the documentation checkpoint to apply scenarios and inspect the complete
+  routing surface.
+- **Rests on:** Human direction: “replace testing with small reviewer agents, quick after
+  some checkpoint.”
+- **Affects:** Implementation plan test lane, task steps, file map, and acceptance
+  receipts. The normal SDD task review and final whole-branch review remain required.
+- **Revisit-when:** A future behavioral regression demonstrates that checkpoint review
+  is insufficient for model-routing skill changes.
