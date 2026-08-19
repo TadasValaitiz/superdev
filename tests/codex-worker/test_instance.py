@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "script
 
 from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                                    load_managed_identity, resolve_instance)
+import codex_worker.instance as instance_module
 
 
 @dataclass
@@ -85,6 +87,53 @@ class LifecycleTests(unittest.TestCase):
         self.paths.metadata_path.write_text(json.dumps(payload))
         os.chmod(self.paths.metadata_path, 0o600)
         self.assertIsNone(load_managed_identity(self.paths.registry_path))
+
+    def test_delayed_readiness_polls_until_daemon_reports_ready(self):
+        clock = [0.0]
+        calls = [0]
+        def rpc(socket_path, method, params, timeout):
+            calls[0] += 1
+            if method == "daemon/status" and calls[0] >= 3:
+                return {"result": {"ready": True, "daemon_pid": 11, "codex_pid": 12, "session_count": 0}}
+            raise OSError("not ready")
+        manager = InstanceManager(InstanceDeps(self.paths, "/launcher", "codex", lambda a, b: Process(), rpc,
+                                                lambda: clock[0], lambda _: clock.__setitem__(0, clock[0] + 1)), self.identity)
+        self.assertEqual(manager.ensure_running().status, "ready")
+        self.assertGreaterEqual(calls[0], 3)
+
+    def test_readiness_timeout_reports_typed_log_path(self):
+        clock = [0.0]
+        manager = InstanceManager(InstanceDeps(self.paths, "/launcher", "codex", lambda a, b: Process(),
+                                                lambda *args: (_ for _ in ()).throw(OSError("absent")),
+                                                lambda: clock[0], lambda _: clock.__setitem__(0, clock[0] + 3)), self.identity)
+        with self.assertRaises(Exception) as caught:
+            manager.ensure_running()
+        self.assertEqual(caught.exception.kind, "daemon_start_failed")
+        self.assertEqual(caught.exception.details["reason"], "readiness_timeout")
+        self.assertEqual(caught.exception.details["log_path"], str(self.paths.log_path))
+
+    def test_stop_retains_metadata_when_reported_pid_is_alive(self):
+        self.manager.ensure_running()
+        clock = [0.0]
+        self.manager.deps = InstanceDeps(self.paths, "/launcher", "codex", self.manager.deps.spawn,
+            self.manager.deps.rpc_call, lambda: clock[0], lambda _: clock.__setitem__(0, clock[0] + 3))
+        with mock.patch.object(instance_module, "_pid_alive", return_value=True):
+            with self.assertRaises(Exception) as caught:
+                self.manager.stop()
+        self.assertEqual(caught.exception.code.value, -32030)
+        self.assertEqual(caught.exception.details["durable_state"], "preserved")
+        self.assertTrue(self.paths.metadata_path.exists())
+
+    def test_unsafe_existing_lock_is_refused_without_replacement(self):
+        self.paths.lock_path.parent.mkdir(parents=True, mode=0o700)
+        self.paths.lock_path.symlink_to(self.paths.lock_path.parent / "target")
+        with self.assertRaises(RuntimeError): self.manager.ensure_running()
+        self.assertTrue(self.paths.lock_path.is_symlink())
+
+    def test_status_surfaces_protocol_failure_as_failed(self):
+        manager = InstanceManager(InstanceDeps(self.paths, "/launcher", "codex", lambda a, b: Process(),
+            lambda *args: (_ for _ in ()).throw(ValueError("malformed")), lambda: 0.0), self.identity)
+        self.assertEqual(manager.status().status, "failed")
 
 
 class InstanceResolutionTests(unittest.TestCase):

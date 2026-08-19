@@ -868,6 +868,16 @@ class PublicLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Local Unix-socket broker", result.stdout)
 
+    def test_launcher_resolves_a_symlink_before_finding_the_plugin_root(self):
+        launcher = ROOT / "bin" / "codex-worker"
+        with tempfile.TemporaryDirectory() as directory:
+            link = Path(directory) / "codex-worker"
+            link.symlink_to(launcher)
+            result = subprocess.run([str(link), "--help"], cwd=directory, text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Local Unix-socket broker", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
