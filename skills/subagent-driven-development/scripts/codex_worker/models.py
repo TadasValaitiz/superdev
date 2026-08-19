@@ -1,8 +1,10 @@
 """Python 3.9-compatible wire and domain models."""
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
+import re
 
 JsonObject = Dict[str, Any]
+_WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 @dataclass(frozen=True)
@@ -123,23 +125,38 @@ class SessionRecord:
     name: Optional[str] = None
     model: Optional[str] = None
     effort: Optional[str] = None
+    tier: Optional[str] = None
+    access: Optional[str] = None
+
+    @property
+    def common_policy_complete(self) -> bool:
+        return all(value is not None for value in (self.name, self.tier, self.model, self.effort, self.access))
 
     def to_dict(self) -> JsonObject:
         return {"session_id": self.session_id, "thread_id": self.thread_id, "cwd": self.cwd,
                 "created_at": self.created_at, "updated_at": self.updated_at,
-                "name": self.name, "model": self.model, "effort": self.effort}
+                "name": self.name, "model": self.model, "effort": self.effort,
+                "tier": self.tier, "access": self.access}
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        required = {"session_id", "thread_id", "cwd", "created_at", "updated_at", "name", "model", "effort"}
-        if not isinstance(value, dict) or set(value) != required:
+        v1_fields = {"session_id", "thread_id", "cwd", "created_at", "updated_at", "name", "model", "effort"}
+        required = v1_fields | {"tier", "access"}
+        if not isinstance(value, dict) or set(value) not in (v1_fields, required):
             raise ValueError("invalid session record")
         strings = ("session_id", "thread_id", "cwd", "created_at", "updated_at")
         if any(not isinstance(value.get(key), str) for key in strings):
             raise ValueError("invalid session record field")
-        if any(value.get(key) is not None and not isinstance(value.get(key), str) for key in ("name", "model", "effort")):
+        if any(value.get(key) is not None and not isinstance(value.get(key), str) for key in ("name", "model", "effort", "tier", "access")):
             raise ValueError("invalid session annotation")
-        return cls(**value)
+        if value.get("name") is not None and not _WORKER_NAME_RE.fullmatch(value["name"]):
+            raise ValueError("invalid worker name")
+        if value.get("tier") not in (None, "medium", "very-smart") or value.get("access") not in (None, "full", "read_only"):
+            raise ValueError("invalid common policy")
+        copied = dict(value)
+        copied.setdefault("tier", None)
+        copied.setdefault("access", None)
+        return cls(**copied)
 
 
 @dataclass(frozen=True)

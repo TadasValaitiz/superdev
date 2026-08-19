@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -43,6 +44,36 @@ class RegistryTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
+    def write_v1_record(self, name):
+        self.state_path.parent.mkdir(exist_ok=True)
+        self.state_path.write_text(json.dumps({"schema_version": 1, "sessions": [{
+            "session_id": "12345678-1234-5678-1234-567812345678", "thread_id": "thr-1",
+            "cwd": self.cwd, "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+            "name": name, "model": "legacy-model", "effort": "medium",
+        }]}))
+
+    def test_missing_and_zero_byte_registry_initialize_v2_owner_only(self):
+        for seed in (None, b""):
+            path = Path(self.cwd) / ("state-%s.json" % ("missing" if seed is None else "empty"))
+            if seed is not None:
+                path.write_bytes(seed)
+            registry = SessionRegistry(path)
+            self.assertEqual(registry.list(), [])
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual(json.loads(path.read_text())["schema_version"], 2)
+
+    def test_v1_records_load_without_loss_and_upgrade_on_next_write(self):
+        self.write_v1_record(name="legacy")
+        registry = SessionRegistry(self.state_path)
+        legacy = registry.resolve_name("legacy")
+        self.assertIsNone(legacy.tier)
+        self.assertIsNone(legacy.access)
+        self.assertFalse(legacy.common_policy_complete)
+        registry.create_worker("thr-2", self.cwd, "new-a31", "medium", "gpt-5.6-terra", "medium", "full")
+        payload = json.loads(self.state_path.read_text())
+        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["sessions"][0]["model"], "legacy-model")
+
     def test_registry_rejects_duplicate_thread_ids(self):
         registry = SessionRegistry(self.state_path)
         first = registry.create("thr-1", self.cwd, "one", None, None)
@@ -61,6 +92,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_snapshot_syncs_file_then_replacement_directory(self):
         events = []
+        SessionRegistry(self.state_path)
 
         class RecordingFile:
             def __init__(self, fd):
@@ -163,7 +195,7 @@ class RegistryTests(unittest.TestCase):
     def test_snapshot_is_schema_versioned_and_owner_only(self):
         record = SessionRegistry(self.state_path).create("thr-1", self.cwd, None, "m", "e")
         payload = json.loads(self.state_path.read_text())
-        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["sessions"][0]["session_id"], record.session_id)
         self.assertEqual(os.stat(self.state_path).st_mode & 0o777, 0o600)
 
@@ -203,7 +235,7 @@ class RegistryTests(unittest.TestCase):
     def test_state_path_symlink_is_rejected(self):
         self.state_path.parent.mkdir()
         target = self.state_path.parent / "real.json"
-        target.write_text(json.dumps({"schema_version": 1, "sessions": []}))
+        target.write_text(json.dumps({"schema_version": 2, "sessions": []}))
         self.state_path.symlink_to(target)
         with self.assertRaises(ValueError):
             SessionRegistry(self.state_path)
