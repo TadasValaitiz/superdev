@@ -1199,3 +1199,19 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** broker start seam, registry completeness, façade start, raw compatibility,
   post-upstream recovery tests.
 - **Revisit-when:** Registry creation becomes transactional with upstream thread start.
+
+## D54 — Treat the deterministic fake as an owned Task 5 process-test dependency
+**When:** 2026-08-19T19:31:58Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Task 5 explicitly required five simultaneous clean-state client processes,
+  but its Files block omitted `fake_codex.py`, whose single fixed thread ID made that
+  acceptance path impossible without correctly triggering broker uniqueness checks.
+- **Options weighed:** defer the process test; weaken broker uniqueness; allow Task 5 to
+  extend its named fake dependency with deterministic per-thread identities.
+- **Decided:** Task 5 owns the minimal fake extension. It mints deterministic unique
+  thread/turn/item IDs and retains the original first-call fixture identity and existing
+  modes. Production uniqueness remains strict.
+- **Affects:** Task 5 Files block, process concurrency/disconnect/timeout tests, Task 6
+  deterministic fixtures.
+- **Revisit-when:** Process tests move to a dedicated fixture package.

@@ -506,6 +506,7 @@ git commit -m "feat(codex-worker): compose named worker workflows"
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/rpc.py`
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/cli.py`
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/__init__.py`
+- Modify: `tests/codex-worker/fake_codex.py`
 - Modify: `tests/codex-worker/test_rpc_cli.py`
 
 **Interfaces:**
