@@ -34,7 +34,8 @@ the provider did not expose account capacity; neither value is inferred.
 
 Direct records:
 
-- [Complete sanitized-verbatim executor transcript](2026-08-19-codex-worker-command-evidence/executor-transcript.md)
+- [Final executor transcript — 47 records: 35 happy, 12 refusal](2026-08-19-codex-worker-command-evidence/executor-final-transcript.md)
+- [Historical precursor transcript](2026-08-19-codex-worker-command-evidence/executor-transcript.md)
 - [Independent evaluator PASS verdict](2026-08-19-codex-worker-command-evidence/evaluator-verdict.md)
 
 ## Stage 1 live evidence
