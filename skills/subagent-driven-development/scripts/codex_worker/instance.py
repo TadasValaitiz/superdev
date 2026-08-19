@@ -13,6 +13,8 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .commands import (DaemonStatusResponse, DaemonStopResponse, FacadeFault,
                        FacadeFaultCode, InstanceSource, InstanceView)
+from .models import RpcFault
+from .rpc import _socket_accepts_connections
 
 
 def validate_instance_id(value: str) -> str:
@@ -102,20 +104,26 @@ def _safe_directory(path: Path) -> bool:
 
 def _safe_ancestor(path: Path) -> bool:
     """Accept owner-only ancestors and sticky system temp ancestors, never links."""
-    current = Path(path).resolve()
-    while True:
+    absolute = Path(os.path.abspath(str(path)))
+    current = Path(absolute.anchor)
+    for component in absolute.parts[1:]:
+        current = current / component
         try:
             data = os.lstat(current)
         except OSError:
             return False
+        if stat.S_ISLNK(data.st_mode):
+            if current.parent != Path(absolute.anchor) or data.st_uid != 0:
+                return False
+            try:
+                data = os.stat(current)
+            except OSError:
+                return False
         mode = stat.S_IMODE(data.st_mode)
-        if not stat.S_ISDIR(data.st_mode) or stat.S_ISLNK(data.st_mode):
+        if (not stat.S_ISDIR(data.st_mode)
+                or mode & 0o022 and not (mode & stat.S_ISVTX)):
             return False
-        if mode & 0o022 and not (mode & stat.S_ISVTX):
-            return False
-        if current.parent == current:
-            return True
-        current = current.parent
+    return True
 
 
 def _mkdir_owner_only(path: Path) -> None:
@@ -219,6 +227,48 @@ def acquire_start_lock(lock_path: Path, timeout: float = 2.0):
             os.close(fd)
 
 
+def _lifecycle_fault(code: FacadeFaultCode, reason: str, socket_path: Path) -> FacadeFault:
+    stopping = code == FacadeFaultCode.DAEMON_STOP_FAILED
+    return FacadeFault(
+        code,
+        "Codex worker daemon could not be stopped safely" if stopping
+        else "Codex worker daemon could not be started safely",
+        "daemon_stop_failed" if stopping else "daemon_start_failed",
+        details={"reason": reason, "socket_path": str(socket_path),
+                 "durable_state": "preserved"},
+    )
+
+
+def _verified_socket(path: Path, code: FacadeFaultCode):
+    try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise _lifecycle_fault(code, "unsafe_socket", path) from exc
+    if (not stat.S_ISSOCK(metadata.st_mode) or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600):
+        raise _lifecycle_fault(code, "unsafe_socket", path)
+    return metadata
+
+
+def _unlink_verified_socket(path: Path, expected: Any, code: FacadeFaultCode) -> None:
+    if _socket_accepts_connections(str(path)):
+        raise _lifecycle_fault(code, "socket_peer_active", path)
+    try:
+        current = os.lstat(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise _lifecycle_fault(code, "unsafe_socket", path) from exc
+    if ((current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
+            or not stat.S_ISSOCK(current.st_mode)
+            or current.st_uid != os.getuid()
+            or stat.S_IMODE(current.st_mode) != 0o600):
+        raise _lifecycle_fault(code, "socket_changed", path)
+    os.unlink(path)
+
+
 class InstanceManager:
     def __init__(self, deps: InstanceDeps, identity: Optional[InstanceIdentity] = None):
         self.deps = deps
@@ -238,6 +288,10 @@ class InstanceManager:
             return result if result.get("ready") is True else None
         except OSError:
             return None
+        except RpcFault as exc:
+            if exc.kind == "daemon_unavailable":
+                return None
+            raise
 
     def _status_response(self, status: str, result: Optional[dict] = None,
                          last_error: Optional[dict] = None) -> DaemonStatusResponse:
@@ -264,6 +318,14 @@ class InstanceManager:
             if ready is not None:
                 return self._status_response("ready", ready)
             _write_metadata(self.deps.paths, self.identity)
+            stale_socket = _verified_socket(self.deps.paths.socket_path,
+                                             FacadeFaultCode.DAEMON_START_FAILED)
+            if stale_socket is not None:
+                if _socket_accepts_connections(str(self.deps.paths.socket_path)):
+                    raise _lifecycle_fault(FacadeFaultCode.DAEMON_START_FAILED,
+                                           "socket_peer_active", self.deps.paths.socket_path)
+                _unlink_verified_socket(self.deps.paths.socket_path, stale_socket,
+                                        FacadeFaultCode.DAEMON_START_FAILED)
             try:
                 process = self.deps.spawn(self._serve_argv(), str(self.deps.paths.log_path))
             except Exception as exc:
@@ -289,12 +351,8 @@ class InstanceManager:
         if before is None:
             return DaemonStopResponse(self._view(), "stopped", "stopped", None, None,
                                       "preserved", 0)
-        try:
-            observed_socket = os.lstat(self.deps.paths.socket_path)
-            if not stat.S_ISSOCK(observed_socket.st_mode) or observed_socket.st_uid != os.getuid():
-                raise RuntimeError("unsafe socket")
-        except FileNotFoundError:
-            observed_socket = None
+        observed_socket = _verified_socket(self.deps.paths.socket_path,
+                                           FacadeFaultCode.DAEMON_STOP_FAILED)
         try:
             self.deps.rpc_call(str(self.deps.paths.socket_path), "daemon/shutdown", {}, 2.0)
         except Exception:
@@ -310,13 +368,9 @@ class InstanceManager:
                                   next_actions=[{"command": "codex-worker daemon status", "reason": "Inspect the remaining daemon state"},
                                                 {"command": "codex-worker daemon stop", "reason": "Retry graceful shutdown"}])
             self.deps.wait(0.01)
-        try:
-            metadata = os.lstat(self.deps.paths.socket_path)
-            if observed_socket is not None and (metadata.st_dev, metadata.st_ino) != (observed_socket.st_dev, observed_socket.st_ino):
-                raise RuntimeError("socket changed during shutdown")
-            if stat.S_ISSOCK(metadata.st_mode) and metadata.st_uid == os.getuid(): os.unlink(self.deps.paths.socket_path)
-        except FileNotFoundError:
-            pass
+        if observed_socket is not None:
+            _unlink_verified_socket(self.deps.paths.socket_path, observed_socket,
+                                    FacadeFaultCode.DAEMON_STOP_FAILED)
         return DaemonStopResponse(self._view(), "ready", "stopped", before.get("daemon_pid"),
                                   before.get("codex_pid"), "preserved", before.get("session_count", 0))
 
