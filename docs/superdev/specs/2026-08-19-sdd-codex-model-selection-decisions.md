@@ -196,7 +196,8 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   re-review use `opus`. No third tier or Codex substitution is introduced.
 - **Rests on:** D2, D4, D5, the final-review finding, and verified installed Workflow
   examples using per-call `model: 'opus'` and `model: 'sonnet'`.
-- **Affects:** `skills/self-brainstorming/workflow-reference.md` and focused structural
-  coverage for all seven calls.
+- **Affects:** `skills/self-brainstorming/workflow-reference.md`,
+  `skills/self-brainstorming/SKILL.md`, and focused structural coverage for all seven
+  calls and the inline fallback.
 - **Revisit-when:** Workflow removes or changes its supported per-call model option, or
   the native Claude aliases change.

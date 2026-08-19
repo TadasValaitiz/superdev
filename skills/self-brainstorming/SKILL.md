@@ -14,8 +14,10 @@ ratification — never a design that pretends it was ratified.
 
 **Invoking this skill is the user's opt-in to multi-agent orchestration** — it is built
 on the Workflow tool. If the Workflow tool is unavailable in the current harness, fall
-back to running the same loop inline with the Agent tool (one questioner call, one
-responder call per round, you as the scribe); the roles, rules, and artifacts below are
+back to running the same loop inline with native Claude Agent calls (one questioner
+call, one responder call per round, you as the scribe). Pin grounding and responder to
+`sonnet` (`medium`); pin questioner, synthesis, review, fix, and re-review to `opus`
+(`very smart`). No Codex substitution: the roles, rules, and artifacts below are
 identical either way.
 
 <HARD-GATE>

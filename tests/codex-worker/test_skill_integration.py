@@ -283,6 +283,21 @@ class SddModelSelectionTests(unittest.TestCase):
             with self.subTest(role=role):
                 self.assertIn(pin, text)
 
+    def test_self_brainstorm_inline_agent_fallback_pins_native_tiers(self):
+        text = " ".join(
+            (ROOT / "skills" / "self-brainstorming" / "SKILL.md")
+            .read_text(encoding="utf-8")
+            .split()
+        ).lower()
+        for fragment in (
+            "inline with native claude agent calls",
+            "grounding and responder to `sonnet` (`medium`)",
+            "questioner, synthesis, review, fix, and re-review to `opus` (`very smart`)",
+            "no codex substitution",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
 
 if __name__ == "__main__":
     unittest.main()
