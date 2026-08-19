@@ -1,5 +1,30 @@
 # Superdev Release Notes
 
+## v7.2.0 (2026-08-20)
+
+### Named Codex worker command façade
+
+- **One-command named workers:** `codex-worker start` and `run` compose managed
+  runtime startup, durable policy, native turns, synchronous completion, sourced
+  metrics, and recovery commands. Named `status`, `messages`, `history`, `steer`,
+  `interrupt`, `goal`, `limits`, and non-destructive `daemon` commands cover ordinary
+  observation and control while the raw compatibility families remain available.
+- **Stable policy and honest failures:** creation fixes cwd, full/read-only access,
+  effort, and either `medium` → `gpt-5.6-terra` or `very-smart` → `gpt-5.6-sol`.
+  There is no model fallback. Active overlap, unavailable limits, unsupported effort,
+  stopped runtimes, invalid state, and incomplete completion return typed JSON with
+  known identities and safe recovery where one exists. Unknown capacity and unavailable
+  token usage remain explicitly unavailable.
+- **MEASURED real-surface evidence:** Codex CLI 0.147.0 passed the fresh aggregate
+  broker journey, including exactly five simultaneous named workers (not a capacity
+  claim), goal/history/control, full/read-only enforcement, schema output, and preserved
+  stop/restart. Claude Code 2.1.236 independently used six PATH common commands with no
+  MCP, direct Codex, or raw-worker invocation and preserved durable state. The independent
+  command-by-command evaluator returned PASS across UC1–UC10 and AH1–AH12.
+- **Portable release packaging:** the Codex packager now accepts linked Git worktrees,
+  fixes ZIP timestamps to UTC, and validates tar timestamps numerically so deterministic
+  archive checks do not depend on the operator's timezone.
+
 ## v7.1.0 (2026-08-19)
 
 ### Local Codex workers and explicit two-tier model routing
