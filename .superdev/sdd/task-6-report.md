@@ -85,15 +85,15 @@ it as sufficient.
   capture-authoritative completion order. `tests/codex-worker/fake_codex.py:49` is the
   instance-scoped sequence/PID receipt and `:72` is the bounded five-request barrier.
 - Exact composed native calls:
-  `tests/codex-worker/test_facade_integration.py:200` asserts `thread/goal/get` and the
-  empty `account/rateLimits/read` params; `:217` is the dedicated exact output-schema
-  forwarding case; `:246` asserts both history pages' thread/cursor/limit and fixed
-  provider fields; `:279` asserts exact `thread/goal/set` and `thread/goal/get` params.
+  `tests/codex-worker/test_facade_integration.py:204` asserts `thread/goal/get` and the
+  empty `account/rateLimits/read` params; `:221` is the dedicated exact output-schema
+  forwarding case; `:277` asserts both history pages' thread/cursor/limit and fixed
+  provider fields; `:310` asserts exact `thread/goal/set` and `thread/goal/get` params.
 - Registry durability:
   `tests/codex-worker/test_models_registry.py:56` covers missing and zero-byte owner-only
-  bootstrap; `:89` preserves malformed-record bytes; `:106` injects replace failure and
-  proves the previous snapshot survives; `:230` preserves malformed and truncated
-  non-empty bytes exactly; `:278` deterministically injects foreign ownership and
+  bootstrap; `:90` preserves malformed-record bytes; `:107` injects replace failure and
+  proves the previous snapshot survives; `:247` preserves malformed and truncated
+  non-empty bytes exactly; `:295` deterministically injects foreign ownership and
   proves bytes survive. Post-upstream replace failures retain code/kind, operation,
   durable state, and all raw IDs in `tests/codex-worker/test_broker.py:531`, `:544`, and
   `:559`; the exact raw-resume next action (including hostile-ID shell quoting) is
@@ -106,7 +106,7 @@ it as sufficient.
 - §10 exactness and state preservation:
   the exhaustive code/kind vocabulary remains table-driven at
   `tests/codex-worker/test_rpc_cli.py:687`. The new composed table at
-  `tests/codex-worker/test_facade_integration.py:164` asserts exact
+  `tests/codex-worker/test_facade_integration.py:168` asserts exact
   `worker_name_exists`, `worker_not_found`, `model_unavailable`, and
   `effort_unsupported` codes/kinds and byte-identical registry state after every row.
 
@@ -120,3 +120,45 @@ it as sufficient.
 - `python3 -m py_compile tests/codex-worker/fake_codex.py
   tests/codex-worker/test_facade_integration.py
   tests/codex-worker/test_models_registry.py` and `git diff --check` — passed.
+
+## Final evidence closure — 2026-08-19
+
+### Composed completion and metrics
+
+- `tests/codex-worker/test_facade_integration.py:239` drives a real installed-command
+  scenario with `turn_outputs` containing two messages, both explicitly phased
+  `final_answer`, `usage: false`, and `command_duration_ms: 37`.
+- The composed result asserts both final texts and both `explicit_final` selections in
+  provider order. It also asserts the complete metric evidence objects:
+  `command_count = {value: 1, source: codex-worker, availability: derived}`;
+  `command_duration_ms = {value: 37, source: codex, availability: derived}`; and
+  `token_usage = {value: null, source: codex, availability: unavailable}`.
+- This evidence-only test was GREEN against the existing scenario driver, so no fake
+  behavior was changed for this case.
+
+### Deterministic unwritable registry RED → GREEN
+
+- RED command:
+  `python3 -W error::ResourceWarning -m unittest tests/codex-worker/test_facade_integration.py tests/codex-worker/test_models_registry.py -v`
+  ran 30 tests with one error. The new
+  `test_permission_denied_replace_is_typed_and_preserves_disk_and_memory` received raw
+  `PermissionError: write denied` from `os.replace`, proving the write boundary did not
+  produce the required registry-domain error.
+- GREEN: `skills/subagent-driven-development/scripts/codex_worker/registry.py:137`
+  now removes any temporary file best-effort and translates only `PermissionError` to
+  `RegistryError("registry write permission denied at <path>")`; other failures retain
+  their prior type and behavior. The deterministic test at
+  `tests/codex-worker/test_models_registry.py:116` injects the permission failure at
+  replace and proves the original bytes, `registry.list()` snapshot, and resolved model
+  all remain unchanged. Focused rerun: `Ran 30 tests in 14.030s` — `OK`.
+- The five-worker `ps` proof is now guarded at
+  `tests/codex-worker/test_facade_integration.py:48` for POSIX, AF_UNIX, and an available
+  `ps` executable, matching the feature's platform target.
+
+### Final verification
+
+- Warning-strict fast lane:
+  `python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py' -q`
+  — `Ran 251 tests in 28.858s` — `OK`.
+- `python3 -m py_compile` over the touched registry/fake/integration/registry-test files
+  and `git diff --check` — passed.

@@ -134,6 +134,13 @@ class SessionRegistry:
                 os.fsync(directory_fd)
             finally:
                 os.close(directory_fd)
+        except PermissionError as exc:
+            if os.path.exists(temp_name):
+                try:
+                    os.unlink(temp_name)
+                except OSError:
+                    pass
+            raise RegistryError("registry write permission denied at %s" % self.path) from exc
         except BaseException:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)

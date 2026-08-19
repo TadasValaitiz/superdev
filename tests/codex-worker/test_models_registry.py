@@ -16,6 +16,7 @@ from codex_worker.models import (
 )
 from codex_worker.registry import (
     RegistryConflict,
+    RegistryError,
     SessionRegistry,
 )
 import codex_worker.registry as registry_module
@@ -111,6 +112,22 @@ class RegistryTests(unittest.TestCase):
                 registry.update_annotations(record.session_id, model="changed")
         restored = SessionRegistry(self.state_path)
         self.assertIsNone(restored.resolve(IdentifierSelector(session_id=record.session_id)).model)
+
+    def test_permission_denied_replace_is_typed_and_preserves_disk_and_memory(self):
+        registry = SessionRegistry(self.state_path)
+        record = registry.create("thr-1", self.cwd, None, "original", "medium")
+        original_bytes = self.state_path.read_bytes()
+        original_records = registry.list()
+
+        with mock.patch("codex_worker.registry.os.replace",
+                        side_effect=PermissionError("write denied")):
+            with self.assertRaisesRegex(RegistryError, "registry write permission denied"):
+                registry.update_annotations(record.session_id, model="changed")
+
+        self.assertEqual(self.state_path.read_bytes(), original_bytes)
+        self.assertEqual(registry.list(), original_records)
+        self.assertEqual(registry.resolve(IdentifierSelector(
+            session_id=record.session_id)).model, "original")
 
     def test_snapshot_syncs_file_then_replacement_directory(self):
         events = []

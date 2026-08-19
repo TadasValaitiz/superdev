@@ -1,6 +1,8 @@
 """Real-process deterministic receipts for the named worker command façade."""
 import json
 import os
+import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -43,6 +45,9 @@ class FacadeIntegrationTests(unittest.TestCase):
                               cwd=str(cwd or ROOT), env=self.env, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12)
 
+    @unittest.skipUnless(os.name == "posix" and hasattr(socket, "AF_UNIX")
+                         and shutil.which("ps") is not None,
+                         "requires POSIX AF_UNIX and ps process inspection")
     def test_five_fresh_processes_converge_on_one_daemon_without_crossing_outputs(self):
         self.set_scenario({"turn_barrier": 5, "turn_delays": {
             "prompt-0": 0.50, "prompt-1": 0.40, "prompt-2": 0.30,
@@ -229,6 +234,33 @@ class FacadeIntegrationTests(unittest.TestCase):
             "threadId": thread_id, "input": [{"type": "text", "text": "structured"}],
             "model": "fake-model-a", "effort": "medium",
             "sandboxPolicy": {"type": "dangerFullAccess"}, "outputSchema": schema_value,
+        })
+
+    def test_multiple_explicit_finals_and_command_metrics_are_composed_exactly(self):
+        self.set_scenario({
+            "turn_outputs": {"metrics": ["first final", "second final"]},
+            "turn_phases": {"metrics": "final_answer"},
+            "usage": False,
+            "command_duration_ms": 37,
+        })
+        completed = self.command([
+            "start", "--name", "metrics", "--prompt", "metrics",
+            "--cwd", str(ROOT), "--model", "fake-model-a",
+        ])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)["result"]
+        self.assertEqual([message["text"] for message in result["messages"]],
+                         ["first final", "second final"])
+        self.assertEqual([message["selection"] for message in result["messages"]],
+                         ["explicit_final", "explicit_final"])
+        self.assertEqual(result["metrics"]["command_count"], {
+            "value": 1, "source": "codex-worker", "availability": "derived",
+        })
+        self.assertEqual(result["metrics"]["command_duration_ms"], {
+            "value": 37, "source": "codex", "availability": "derived",
+        })
+        self.assertEqual(result["metrics"]["token_usage"], {
+            "value": None, "source": "codex", "availability": "unavailable",
         })
 
     def test_no_agent_and_schema_decode_refusals_preserve_completed_message_evidence(self):
