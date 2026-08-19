@@ -1258,3 +1258,43 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   translation, exhaustive vocabulary and recovery tests.
 - **Revisit-when:** Common commands gain an explicit wait/join command or upstream
   provides a richer active-turn conflict object.
+
+## D57 — Make release packaging semantic across worktrees and timezones
+**When:** 2026-08-19T21:42:01Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Task 8's required package gate rejected a valid linked worktree, then
+  compared a REF-built archive with dirty worktree version text and asserted localized
+  ZIP/tar timestamp renderings. The release candidate could not pass outside one checkout
+  layout and timezone despite correct archive semantics.
+- **Options weighed:** commit early or package dirty source; special-case this worktree;
+  test the declared REF and semantic Git/archive metadata independent of host rendering.
+- **Decided:** Detect repositories with `git rev-parse --is-inside-work-tree`, keep the
+  documented REF-based archive contract, compare packaged version with that REF, create
+  ZIP metadata under UTC, and assert tar member mtime numerically. No public CLI/JSON
+  behavior changes.
+- **Rests on:** MEASURED package failures in the linked worktree under EEST followed by
+  the exact marketplace/package/sync suite passing after focused changes.
+- **Affects:** D49 release gates, `scripts/package-codex-plugin.sh`, package tests, and
+  deterministic local release reproducibility.
+- **Revisit-when:** Packaging moves to a tool that normalizes Git source and archive
+  timestamps internally.
+
+## D58 — Reinstall from the release worktree until reviewed integration reaches main
+**When:** 2026-08-19T21:42:01Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The configured local Claude marketplace pointed at main's 7.1.0 manifest,
+  so `plugin update` could not see the 7.2.0 branch. Removing/re-adding the marketplace
+  also disassociated the installed plugin, making update alone impossible.
+- **Options weighed:** merge an unreviewed branch into main; pretend the 7.1.0 update was
+  sufficient; temporarily source the reviewed candidate worktree and explicitly reinstall.
+- **Decided:** Do not integrate before review. Point `superdev-dev` at the release
+  worktree, explicitly install then run the required update, and verify the installed
+  7.2.0 launcher externally. Keep that source only through final review/integration;
+  afterward restore `/Users/tadas/Projects/superdev` and reverify 7.2.0 remains enabled.
+- **Rests on:** MEASURED Claude Code marketplace/update behavior and the operator's
+  explicit approval to bump and reinstall the plugin.
+- **Affects:** D49 local install sequence, Task 8 evidence, final integration cleanup.
+- **Revisit-when:** Claude Code can update a local plugin from an explicit candidate path
+  without changing marketplace association.
