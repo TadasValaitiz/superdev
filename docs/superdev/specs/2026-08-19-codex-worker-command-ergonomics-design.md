@@ -650,6 +650,7 @@ implementation-facing distillation.
 | D43 | locked | Advanced model/session/turn accept instance or socket overrides and otherwise retain legacy socket defaults; daemon serve/shutdown stay raw, while status is dual-mode. | Preserves compatibility while reaching managed instances; revisit in a major raw-surface removal. |
 | D44 | locked | Map full/read-only at both thread sandbox and turn sandboxPolicy seams. | Current protocol uses two encodings; revisit if upstream unifies them. |
 | D55 | locked | Preserve native goal/history timestamps as upstream `int64` values and normalize the measured turns-list `data` envelope at the adapter seam. | Real Codex 0.147.0 schema and authenticated pagination contradicted the speculative fixture shape; revisit on supported-provider schema drift. |
+| D56 | locked | Preserve broker `-32004 turn_active` through the common façade with full known identity and named observation/control recovery. | A generic checkride refusal stranded the operator even though the lower layer already had a precise conflict; revisit when common wait/join exists. |
 
 ## 7. Assumptions & open questions
 

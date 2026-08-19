@@ -1237,3 +1237,24 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   `commands.py`, `broker.py`, projection, fake fixtures, and native-proxy tests.
 - **Revisit-when:** A supported Codex version changes these generated schemas or live
   response shapes.
+
+## D56 — Preserve the broker's active-turn refusal on the common surface
+**When:** 2026-08-19T21:14:13Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The real command checkride showed that a second named `run` during active
+  work surfaced as generic `-32020 codex_failure` with no safe action. Root-cause tracing
+  found that the broker already emitted precise `-32004 turn_active`, but the common
+  façade's closed enum omitted it and discarded the resolved record while translating.
+- **Options weighed:** retain generic upstream failure; overload `timeout_active`; add a
+  new code; preserve the already-established broker code/kind across the façade.
+- **Decided:** Add `-32004` / `turn_active` to the common closed vocabulary. Preserve
+  instance, name, session, thread, and available active-turn identity and return named
+  status/messages/steer/interrupt actions. This is a refusal, not cancellation; the
+  existing turn remains active.
+- **Rests on:** MEASURED executor transcript plus focused RED (`expected -32004, got
+  -32020`) and the existing broker `TurnActive` mapping.
+- **Affects:** R3/R13, UC4/UC9, AH4/AH9; CLI §10, strict façade faults, run exception
+  translation, exhaustive vocabulary and recovery tests.
+- **Revisit-when:** Common commands gain an explicit wait/join command or upstream
+  provides a richer active-turn conflict object.
