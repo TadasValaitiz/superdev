@@ -264,7 +264,7 @@ class StartWorkerRequest(StrictModel):
         validate_worker_name(self.name); validate_prompt(self.prompt); validate_canonical_cwd(self.cwd)
         if self.tier is not None: _enum(self.tier, Tier, "tier")
         if self.model is not None and (not isinstance(self.model, str) or not self.model): raise ValueError("model must be a non-empty string")
-        if self.model is not None and self.tier is not None: raise ValueError("--tier and --model are mutually exclusive")
+        if (self.tier is None) == (self.model is None): raise ValueError("exactly one of tier or model is required")
         if not isinstance(self.effort, str) or not self.effort: raise ValueError("effort must be a non-empty string")
         _enum(self.access, AccessMode, "access")
         if self.goal is not None and (not isinstance(self.goal, str) or not self.goal or len(self.goal) > 4000): raise ValueError("goal must be a non-empty string of at most 4000 characters")

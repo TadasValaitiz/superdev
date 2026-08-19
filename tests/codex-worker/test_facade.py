@@ -245,6 +245,15 @@ class FacadeTests(unittest.TestCase):
             AccessMode.FULL, schema))
         self.assertEqual(result.value.structured_output, {"answer": "yes"})
 
+    def test_invalid_empty_model_selection_is_rejected_before_facade_effects(self):
+        with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
+            request = StartWorkerRequest(
+                "invalid-selection", "begin", self.cwd, tier=None, model=None)
+            self._facade().start(request)
+        self.assertEqual(self.broker.calls, [])
+        self.assertEqual(self.native.native_calls, [])
+        self.assertEqual(self.registry.list(), [])
+
     def test_no_timeout_uses_one_indefinite_runtime_wait(self):
         waits = []
         original = self.runtime.wait
@@ -329,6 +338,29 @@ class FacadeTests(unittest.TestCase):
             ],
             "requested_tail": 2, "returned": 2, "older_available": False,
         })
+
+    def test_history_pages_twice_with_exact_cursors_and_chronological_tail(self):
+        record = self._record("history-pages")
+        self.native.pages = {
+            None: ([{"id": "new", "status": "completed", "items": []}], "older"),
+            "older": ([
+                {"id": "middle", "status": "completed", "items": []},
+                {"id": "old", "status": "completed", "items": []},
+            ], None),
+        }
+
+        result = self._facade().history(WorkerHistoryRequest("history-pages", 3))
+
+        self.assertIsInstance(result, Ok)
+        history_calls = [params for method, params in self.native.native_calls
+                         if method == "thread/turns/list"]
+        self.assertEqual([params.get("cursor") for params in history_calls], [None, "older"])
+        self.assertTrue(all(params["threadId"] == record.thread_id for params in history_calls))
+        self.assertTrue(all(params["limit"] == 3 for params in history_calls))
+        self.assertEqual([turn.turn_id for turn in result.value.turns], ["old", "middle", "new"])
+        self.assertEqual(result.value.requested_tail, 3)
+        self.assertEqual(result.value.returned, 3)
+        self.assertFalse(result.value.older_available)
 
     def test_control_success_responses_assert_every_field(self):
         record = self._record("control-all")

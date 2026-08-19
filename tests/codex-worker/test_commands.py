@@ -51,6 +51,23 @@ class CommandModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             StartWorkerRequest("review-a31", "x", self.cwd, goal=None, token_budget=1)
 
+    def test_start_requires_exactly_one_tier_or_raw_model_selection(self):
+        defaulted = StartWorkerRequest("review-a31", "x", self.cwd)
+        self.assertEqual((defaulted.tier, defaulted.model), (Tier.MEDIUM, None))
+        raw = StartWorkerRequest("review-raw", "x", self.cwd, tier=None, model="raw-model")
+        self.assertEqual((raw.tier, raw.model), (None, "raw-model"))
+        with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
+            StartWorkerRequest("review-none", "x", self.cwd, tier=None, model=None)
+        invalid_wire = defaulted.to_dict()
+        invalid_wire["tier"] = None
+        invalid_wire["model"] = None
+        with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
+            StartWorkerRequest.from_dict(invalid_wire)
+        invalid_wire["tier"] = Tier.MEDIUM.value
+        invalid_wire["model"] = "raw-model"
+        with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
+            StartWorkerRequest.from_dict(invalid_wire)
+
     def test_response_models_recursively_reject_bad_shapes_and_round_trip(self):
         worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
