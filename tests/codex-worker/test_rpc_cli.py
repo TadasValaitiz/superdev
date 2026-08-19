@@ -686,7 +686,7 @@ class RpcServerTests(unittest.TestCase):
 
     def test_cli_section_10_code_kind_pairs_are_exhaustive_and_exact(self):
         expected = {
-            -32602: "invalid_params", -32005: "turn_not_active",
+            -32602: "invalid_params", -32004: "turn_active", -32005: "turn_not_active",
             -32011: "registry_error", -32015: "codex_protocol_error",
             -32020: "codex_failure", -32021: "worker_name_exists",
             -32022: "worker_not_found", -32023: "daemon_stopped",

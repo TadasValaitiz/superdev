@@ -164,7 +164,10 @@ Goal state is not duplicated in the worker registry. `set` and `show` directly p
 Codex's persistent thread goal, resolving only the worker name. A new objective can
 reset native usage accounting; the response returns the upstream goal after mutation
 so the caller sees that consequence. Status/budget-only updates preserve native usage
-according to Codex semantics. There is no `goal clear`: this release has no destructive
+according to Codex semantics and return the authoritative provider state. Provider
+budget invariants can determine that returned state—for example, a budget below
+already-reported `tokens_used` can produce `budgetLimited` despite a requested status—so
+callers must inspect the returned goal. There is no `goal clear`: this release has no destructive
 common commands, and status `complete` expresses ordinary closure (D18, D29, D32).
 
 `start --goal [--token-budget]` is the one-command initial form and always uses status
@@ -180,7 +183,8 @@ common commands, and status `complete` expresses ordinary closure (D18, D29, D32
 
 The command returns the native payload rather than deriving a launch count or policy.
 Unsupported authentication returns the stable `limits_unavailable` operational refusal;
-it never substitutes guessed capacity. It does not autostart, so a fresh caller checks
+its details mark `capacity` as `unknown` and `inference` as `do_not_infer`, with no
+fabricated executable recovery action. It never substitutes guessed capacity. It does not autostart, so a fresh caller checks
 it after the first normal worker start or while the runtime is already active (D27,
 D31).
 
@@ -358,9 +362,10 @@ rolled back. Preserve the reported IDs and log/state paths.
 | `-32024` | `daemon_start_failed` | Implicit startup failed readiness. | Inspect the returned log/path/cause; no arbitrary sleep retry. |
 | `-32030` | `daemon_stop_failed` | Graceful stop did not terminate every reported process before its bounded deadline. | Inspect returned PIDs/status, then retry stop; durable state and verified runtime markers were preserved. |
 | `-32025` | `timeout_active` | Local wait expired while turn remains active. | Use returned status/messages/interrupt commands. |
+| `-32004` | `turn_active` | A new `start`/`run` turn was refused because the named worker already has active work. | Use returned status/messages/steer/interrupt commands; do not assume the existing turn stopped. |
 | `-32005` | `turn_not_active` | No matching active turn, including exact already-finished race. | Inspect status/history; start a later `run` if more work is needed. |
 | `-32026` | `model_unavailable` | Requested tier/raw model is absent from live discovery. | Choose from returned discovery data; no fallback occurred. |
-| `-32027` | `effort_unsupported` | Selected model does not advertise the effort. | Choose one returned for that exact model; no fallback occurred. |
+| `-32027` | `effort_unsupported` | Selected model does not advertise the effort. | Use the shell-safe corrected `start` action for the first returned supported effort, or choose another returned effort; tier/raw model and name are preserved and no fallback occurred. |
 | `-32011` | `registry_error` | Durable state malformed/unwritable or post-upstream persistence failed. | Preserve file/IDs; use returned raw recovery path. |
 | `-32028` | `limits_unavailable` | Current authentication/provider does not expose limits. | Treat capacity as unknown; do not infer it. |
 | `-32029` | `incomplete_completion` | Terminal success had no agent message or schema-mode JSON was undecodable. | Inspect returned turn/history and upstream details. |

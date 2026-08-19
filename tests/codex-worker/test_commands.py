@@ -121,6 +121,7 @@ class CommandModelTests(unittest.TestCase):
     def test_every_common_fault_code_has_only_its_exact_kind(self):
         expected = {
             FacadeFaultCode.INVALID_PARAMS: "invalid_params",
+            FacadeFaultCode.TURN_ACTIVE: "turn_active",
             FacadeFaultCode.TURN_NOT_ACTIVE: "turn_not_active",
             FacadeFaultCode.REGISTRY_ERROR: "registry_error",
             FacadeFaultCode.CODEX_PROTOCOL_ERROR: "codex_protocol_error",

@@ -151,6 +151,55 @@ class FacadeTests(unittest.TestCase):
         self.assertIsNone(record.tier)
         self.assertEqual((record.model, record.effort), ("raw-model", "high"))
 
+    def test_unsupported_effort_offers_shell_safe_corrected_raw_model_start(self):
+        self.broker.model_list = lambda: {"models": [{
+            "id": "raw model; no", "is_default": False,
+            "supported_efforts": ["low", "high"],
+        }]}
+        request = StartWorkerRequest(
+            name="retry-effort", prompt="continue; printf no", cwd=self.cwd,
+            tier=None, model="raw model; no", effort="medium",
+            access=AccessMode.READ_ONLY, goal="finish safely", token_budget=123,
+            timeout=2.5,
+        )
+
+        result = self._facade().start(request)
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.EFFORT_UNSUPPORTED)
+        self.assertEqual(result.error.details, {
+            "model": "raw model; no", "supported_efforts": ["low", "high"],
+        })
+        self.assertEqual(result.error.known_ids, {
+            "instance": "verified-instance", "name": "retry-effort",
+            "session_id": None, "thread_id": None, "turn_id": None,
+        })
+        self.assertEqual(len(result.error.next_actions), 1)
+        self.assertEqual(shlex.split(result.error.next_actions[0]["command"]), [
+            "codex-worker", "--instance", "verified-instance", "start",
+            "--name", "retry-effort", "--prompt", "continue; printf no",
+            "--cwd", self.cwd, "--model", "raw model; no", "--effort", "low",
+            "--read-only", "--goal", "finish safely", "--token-budget", "123",
+            "--timeout", "2.5",
+        ])
+
+    def test_unsupported_effort_corrected_start_preserves_tier_selection(self):
+        self.broker.model_list = lambda: {"models": [{
+            "id": "gpt-5.6-terra", "is_default": True,
+            "supported_efforts": ["low"],
+        }]}
+
+        result = self._facade().start(StartWorkerRequest(
+            name="retry-tier", prompt="continue", cwd=self.cwd, effort="high"))
+
+        self.assertIsInstance(result, Err)
+        command = shlex.split(result.error.next_actions[0]["command"])
+        self.assertEqual(command[3:], [
+            "start", "--name", "retry-tier", "--prompt", "continue",
+            "--cwd", self.cwd, "--tier", "medium", "--effort", "low",
+        ])
+        self.assertNotIn("--model", command)
+
     def _facade(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         return WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"),
@@ -283,6 +332,32 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual([shlex.split(action["command"])[3] for action in result.error.next_actions],
                          ["status", "messages", "interrupt"])
 
+    def test_run_active_turn_refusal_preserves_common_identity_and_controls(self):
+        record = self._record("already-active")
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": record.thread_id,
+            "turn": {"id": "active-turn", "status": "inProgress"},
+        }})
+        self.broker.start_turn = lambda spec: (_ for _ in ()).throw(RpcFault(
+            -32004, "session already has an active turn", "turn_active",
+            details={"session_id": record.session_id},
+        ))
+
+        result = self._facade().run(RunWorkerRequest("already-active", "continue"))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code.value, -32004)
+        self.assertEqual(result.error.kind, "turn_active")
+        self.assertEqual(result.error.known_ids, {
+            "instance": "verified-instance", "name": "already-active",
+            "session_id": record.session_id, "thread_id": record.thread_id,
+            "turn_id": "active-turn",
+        })
+        self.assertEqual(
+            [shlex.split(action["command"])[3] for action in result.error.next_actions],
+            ["status", "messages", "steer", "interrupt"],
+        )
+
     def test_status_response_asserts_every_field(self):
         record = self._record("status-all")
         self.runtime.on_notification({"method": "turn/started", "params": {
@@ -403,6 +478,21 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(result.value.to_dict(), {
             "availability": "available", "rate_limits": {"primary": {"usedPercent": 1}},
         })
+
+    def test_limits_unavailable_marks_capacity_unknown_without_fake_action(self):
+        self.native.call = lambda method, params: (_ for _ in ()).throw(
+            RuntimeError("authentication does not expose limits"))
+
+        result = self._facade().limits(LimitsRequest())
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.LIMITS_UNAVAILABLE)
+        self.assertEqual(result.error.details, {
+            "reason": "authentication does not expose limits",
+            "capacity": "unknown",
+            "inference": "do_not_infer",
+        })
+        self.assertEqual(result.error.next_actions, [])
 
     def test_unknown_name_and_incomplete_legacy_are_closed_actionable_faults(self):
         facade = self._facade()

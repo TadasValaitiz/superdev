@@ -73,7 +73,7 @@ class WorkerFacade:
                 existing = None
             if existing is not None:
                 return Err(self._exists_fault(existing))
-            model = self._select_model(request.tier, request.model, request.effort)
+            model = self._select_model(request)
             self.deps.broker.start_session(SessionStartSpec(
                 request.cwd, request.name, model, request.access,
                 request.tier.value if request.tier else None, request.effort,
@@ -92,6 +92,7 @@ class WorkerFacade:
             return Err(self._effect_fault(exc, None, request.name))
 
     def run(self, request: RunWorkerRequest) -> Result[CompletionResponse, FacadeFault]:
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault):
@@ -105,7 +106,7 @@ class WorkerFacade:
             return self._start_and_wait(record, self._worker(record), request.prompt,
                                         request.output_schema, request.timeout)
         except BaseException as exc:
-            return Err(self._effect_fault(exc, None, request.name))
+            return Err(self._effect_fault(exc, record, request.name))
 
     def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
         try:
@@ -214,17 +215,47 @@ class WorkerFacade:
     def _wait(self, session_id, timeout):
         return self.deps.runtime.wait(session_id, timeout)
 
-    def _select_model(self, tier, raw_model, effort):
-        model = raw_model if raw_model is not None else _TIER_MODELS[tier]
+    def _select_model(self, request):
+        model = request.model if request.model is not None else _TIER_MODELS[request.tier]
         models = self.deps.broker.model_list()["models"]
         found = next((item for item in models if item["id"] == model), None)
         if found is None:
             raise FacadeFault(FacadeFaultCode.MODEL_UNAVAILABLE, "Requested model is unavailable",
                               "model_unavailable", details={"model": model, "models": models})
-        if effort not in found["supported_efforts"]:
+        if request.effort not in found["supported_efforts"]:
+            supported = found["supported_efforts"]
             raise FacadeFault(FacadeFaultCode.EFFORT_UNSUPPORTED, "Requested effort is unsupported",
-                              "effort_unsupported", details={"model": model, "supported_efforts": found["supported_efforts"]})
+                              "effort_unsupported",
+                              details={"model": model, "supported_efforts": supported},
+                              known_ids=self._known(name=request.name),
+                              next_actions=self._corrected_start_actions(request, supported))
         return model
+
+    def _corrected_start_actions(self, request, supported_efforts):
+        if not supported_efforts:
+            return []
+        args = [
+            "start", "--name", shlex.quote(request.name),
+            "--prompt", shlex.quote(request.prompt),
+            "--cwd", shlex.quote(request.cwd),
+        ]
+        if request.model is not None:
+            args.extend(("--model", shlex.quote(request.model)))
+        else:
+            args.extend(("--tier", request.tier.value))
+        args.extend(("--effort", shlex.quote(supported_efforts[0])))
+        if request.access == AccessMode.READ_ONLY:
+            args.append("--read-only")
+        if request.goal is not None:
+            args.extend(("--goal", shlex.quote(request.goal)))
+        if request.token_budget is not None:
+            args.extend(("--token-budget", str(request.token_budget)))
+        if request.timeout is not None:
+            args.extend(("--timeout", str(request.timeout)))
+        return [{
+            "command": self._command(" ".join(args)),
+            "reason": "Retry with provider-supported effort %s; no fallback has run" % supported_efforts[0],
+        }]
 
     def _resolve_policy(self, name):
         try: record = self.deps.registry.resolve_name(name)
@@ -352,6 +383,18 @@ class WorkerFacade:
                            known_ids=self._known(record, turn_id=turn_id), next_actions=[
                                {"command": self._command("status --name %s" % record.name), "reason": "Inspect the latest turn"}])
 
+    def _active_turn_actions(self, name):
+        return [
+            {"command": self._command("status --name %s" % name),
+             "reason": "Inspect the active turn"},
+            {"command": self._command("messages --name %s" % name),
+             "reason": "Read retained narration"},
+            {"command": self._command("steer --name %s --prompt <text>" % name),
+             "reason": "Append an instruction to the active turn"},
+            {"command": self._command("interrupt --name %s" % name),
+             "reason": "Cancel only if deliberate"},
+        ]
+
     def _effect_fault(self, exc, record, name, limits=False):
         if isinstance(exc, FacadeFault): return exc
         if isinstance(exc, WaitTimeout): return self._timeout_fault(record, exc.turn_id)
@@ -364,6 +407,15 @@ class WorkerFacade:
                 for key in ("session_id", "thread_id", "turn_id"):
                     if isinstance(exc.details.get(key), str):
                         known[key] = exc.details[key]
+            if code == FacadeFaultCode.TURN_ACTIVE:
+                if known["turn_id"] is None and record is not None:
+                    try:
+                        known["turn_id"] = self.deps.runtime.status(record.session_id).active_turn_id
+                    except (UnknownSession, SessionDetached):
+                        pass
+                next_actions = self._active_turn_actions(known["name"])
+                return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
+                                   known_ids=known, next_actions=next_actions)
             next_actions = []
             if isinstance(known["thread_id"], str):
                 next_actions.append(self._raw_resume_action(known["thread_id"]))
@@ -371,8 +423,11 @@ class WorkerFacade:
                                known_ids=known, next_actions=next_actions)
         if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name)
         code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
+        details = {"reason": str(exc)}
+        if limits:
+            details.update({"capacity": "unknown", "inference": "do_not_infer"})
         return FacadeFault(code, "Codex operation failed" if not limits else "Codex limits are unavailable",
-                           self._kind(code), details={"reason": str(exc)}, known_ids=self._known(record, name))
+                           self._kind(code), details=details, known_ids=self._known(record, name))
 
     @staticmethod
     def _kind(code):

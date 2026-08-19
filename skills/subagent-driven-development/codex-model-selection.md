@@ -14,7 +14,9 @@ and never inherits from `CLAUDE_EFFORT`.
 
 On `start`, resolve the tier against live discovery and confirm that its model supports
 the requested effort. If it does not, block with the CLI's typed refusal; never silently
-fall back or substitute. `--model <live-id>` is mutually exclusive with `--tier` for
+fall back or substitute. The refusal includes a shell-safe corrected `start` action
+using the first advertised supported effort while preserving the name and original
+tier/raw-model choice; callers may select another returned effort instead. `--model <live-id>` is mutually exclusive with `--tier` for
 the exceptional raw-model case. The resolved model, effort, access, and cwd are fixed
 at creation; `run` continues them rather than reselecting policy.
 

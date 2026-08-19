@@ -74,7 +74,10 @@ preserves workers, logs, configuration, and recovery identities; a later `run`
 continues the same worker. `daemon status` diagnoses the selected instance.
 
 `goal set`/`goal show` proxy Codex's native objective and budget state; `limits` returns
-the authoritative native account limits or an explicit unavailable result. These
+the authoritative native account limits or an explicit unavailable result. A status-
+or budget-only goal update also returns authoritative provider state: inspect it rather
+than assuming the requested status won over provider budget invariants. An unavailable
+limits result means capacity is unknown and must not be inferred. These
 commands, as well as `status`, `messages`, `history`, `steer`, and `interrupt`, do not
 start a stopped runtime.
 
@@ -93,6 +96,12 @@ turn; explicitly `interrupt --name …` only if cancellation is intended. Do not
 stored conversation and must not overlap an active old turn. If durable persistence
 reports known session/thread IDs, preserve them and the reported log/state paths. Do
 not overwrite malformed state or assume an upstream thread was rolled back.
+
+If `start` reports `effort_unsupported`, use its shell-safe corrected `start` action or
+choose another advertised effort. The action preserves the original name and tier/raw
+model choice; the provider was not silently substituted. If `run` reports
+`turn_active`, use its returned named status/messages/steer/interrupt actions instead
+of overlapping the existing turn.
 
 For raw recovery, foreground supervision, live model diagnosis, or cursor-level event
 inspection, use the advanced compatibility families: `daemon serve`/`shutdown`,

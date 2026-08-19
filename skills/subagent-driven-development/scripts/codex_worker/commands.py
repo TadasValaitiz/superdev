@@ -44,6 +44,7 @@ class MetricAvailability(str, Enum):
 
 class FacadeFaultCode(int, Enum):
     INVALID_PARAMS = -32602
+    TURN_ACTIVE = -32004
     TURN_NOT_ACTIVE = -32005
     REGISTRY_ERROR = -32011
     CODEX_PROTOCOL_ERROR = -32015
@@ -62,6 +63,7 @@ class FacadeFaultCode(int, Enum):
 
 FACADE_FAULT_KINDS = {
     FacadeFaultCode.INVALID_PARAMS: "invalid_params",
+    FacadeFaultCode.TURN_ACTIVE: "turn_active",
     FacadeFaultCode.TURN_NOT_ACTIVE: "turn_not_active",
     FacadeFaultCode.REGISTRY_ERROR: "registry_error",
     FacadeFaultCode.CODEX_PROTOCOL_ERROR: "codex_protocol_error",
