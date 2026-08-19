@@ -264,6 +264,25 @@ class SddModelSelectionTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
+    def test_self_brainstorm_workflow_pins_every_agent_role_to_native_tiers(self):
+        text = " ".join(
+            (ROOT / "skills" / "self-brainstorming" / "workflow-reference.md")
+            .read_text(encoding="utf-8")
+            .split()
+        )
+        expected_pins = (
+            ("ground", "{ schema: GROUND_SCHEMA, label: 'ground', model: 'sonnet' }"),
+            ("questioner", "{ schema: Q_SCHEMA, label: `q${round}`, phase: 'Dialogue', model: 'opus' }"),
+            ("responder", "{ schema: A_SCHEMA, label: `a${round}`, phase: 'Dialogue', model: 'sonnet' }"),
+            ("synthesis", "{ schema: PATHS_SCHEMA, label: 'synthesize', model: 'opus' }"),
+            ("design review", "{ schema: REVIEW_SCHEMA, label: 'review', model: 'opus' }"),
+            ("design fix", "{ label: 'fix', model: 'opus' }"),
+            ("re-review", "{ schema: REVIEW_SCHEMA, label: 're-review', model: 'opus' }"),
+        )
+        for role, pin in expected_pins:
+            with self.subTest(role=role):
+                self.assertIn(pin, text)
+
 
 if __name__ == "__main__":
     unittest.main()

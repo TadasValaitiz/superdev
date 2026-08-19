@@ -91,7 +91,7 @@ const ground = await agent(
    Repo: ${args.repoRoot}. Read the relevant code, docs, prior specs and decision logs
    (${args.specDir}). Report ONLY what you actually read — cite paths. List the
    load-bearing unknowns a designer must resolve.`,
-  { schema: GROUND_SCHEMA, label: 'ground' })
+  { schema: GROUND_SCHEMA, label: 'ground', model: 'sonnet' })
 
 phase('Dialogue')
 const ledger = [], assumptions = []
@@ -101,7 +101,7 @@ while (!saturated && round < (args.maxRounds ?? 12)
        && (!budget.total || budget.remaining() > 30000)) {
   round++
   const q = await agent(questionerPrompt(ground, ledger, assumptions, last),
-                        { schema: Q_SCHEMA, label: `q${round}`, phase: 'Dialogue' })
+                        { schema: Q_SCHEMA, label: `q${round}`, phase: 'Dialogue', model: 'opus' })
   for (const lock of q.locks) {              // script-enforced ratchet hygiene
     const n = parseInt(lock.id.slice(1), 10)
     if (!(n > dHwm)) throw new Error(`non-monotonic lock id ${lock.id}`)
@@ -112,7 +112,7 @@ while (!saturated && round < (args.maxRounds ?? 12)
   }
   if (q.saturated) { saturated = true; break }
   last = await agent(responderPrompt(q, ledger, ground),
-                     { schema: A_SCHEMA, label: `a${round}`, phase: 'Dialogue' })
+                     { schema: A_SCHEMA, label: `a${round}`, phase: 'Dialogue', model: 'sonnet' })
   if (last.tier === 'ASSUMPTION')
     assumptions.push({ id: `A${assumptions.length + 1}`, text: last.assumptionText, round })
   log(`round ${round}: ${ledger.length} locked, ${assumptions.length} assumptions`)
@@ -135,15 +135,15 @@ const paths = await agent(
    opening every §5 area).
    Header: Origin: self-brainstorm. Save under ${args.repoRoot}/${args.specDir}/.
    Do NOT commit.`,
-  { schema: PATHS_SCHEMA, label: 'synthesize' })
+  { schema: PATHS_SCHEMA, label: 'synthesize', model: 'opus' })
 
 phase('Review')
-let review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 'review' })
+let review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 'review', model: 'opus' })
 if (review.status === 'IssuesFound') {
   await agent(`Fix these blocking issues in ${paths.specPath} and ${paths.logPath},
     amending (never erasing) per the templates: ${JSON.stringify(review.blocking)}`,
-    { label: 'fix' })
-  review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 're-review' })
+    { label: 'fix', model: 'opus' })
+  review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 're-review', model: 'opus' })
 }
 
 return { ...paths, rounds: round, saturated, locked: ledger.length,
@@ -204,9 +204,9 @@ DECISION_LOG_PATH=paths.logPath; request the REVIEW_SCHEMA fields as the output.
   from cached calls at zero cost.
 - **Budget scaling:** with a token directive, the `budget.remaining()` guard paces
   depth; without one, `maxRounds` is the knob. Report which limit ended the run.
-- **Model/effort:** the Questioner (design authority) and the synthesis agent (writes
-  the design doc) are native Claude Code `opus` (`very smart`) roles, matching
-  brainstorming's design reasoning. The `review` agent reuses the spec-reviewer
-  template, which already pins the `very smart` tier. The Responder needs tool
-  diligence more than brilliance: native Claude Code `sonnet` (`medium`) is the
-  calibrated choice there. These are native Claude roles, not Codex-worker dispatches.
+- **Model/effort:** Workflow supports the exact per-call `model` option used in the
+  script skeleton. Grounding and the Responder pin native Claude Code `sonnet`
+  (`medium`). The Questioner, synthesis, design review, design-fix, and re-review pin
+  native Claude Code `opus` (`very smart`). These are native Claude roles, not
+  Codex-worker dispatches; do not substitute Codex for main-session brainstorming or
+  design.

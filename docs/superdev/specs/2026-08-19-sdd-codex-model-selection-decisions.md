@@ -177,3 +177,26 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Codex tools reference, structural test, and D8 semantic checkpoint.
 - **Revisit-when:** Native Codex dispatch and the broker are unified behind one actual
   mechanism.
+
+## D10 — Pin self-brainstorm Workflow roles per call
+**When:** 2026-08-19T07:18:59Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** coordinator from final-review finding
+
+- **Trigger:** `workflow-reference.md` described native Claude tiers but left every
+  executable Workflow `agent()` call to inherit its model, allowing the documented
+  role mapping to be bypassed at execution.
+- **Options weighed:**
+  - A: retain prose-only role guidance — keeps the skeleton shorter / leaves inherited
+    model selection unprotected.
+  - B: pin every Workflow call with its role's native Claude alias — makes the two-tier
+    policy executable / requires maintaining the seven call sites.
+- **Decided:** Use Workflow's supported per-call `model` option: grounding and
+  responder use `sonnet`; questioner, synthesis, design review, design-fix, and
+  re-review use `opus`. No third tier or Codex substitution is introduced.
+- **Rests on:** D2, D4, D5, the final-review finding, and verified installed Workflow
+  examples using per-call `model: 'opus'` and `model: 'sonnet'`.
+- **Affects:** `skills/self-brainstorming/workflow-reference.md` and focused structural
+  coverage for all seven calls.
+- **Revisit-when:** Workflow removes or changes its supported per-call model option, or
+  the native Claude aliases change.
