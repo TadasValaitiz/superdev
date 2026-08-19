@@ -60,7 +60,7 @@ class FacadeFaultCode(int, Enum):
     DAEMON_STOP_FAILED = -32030
 
 
-_FACADE_FAULT_KINDS = {
+FACADE_FAULT_KINDS = {
     FacadeFaultCode.INVALID_PARAMS: "invalid_params",
     FacadeFaultCode.TURN_NOT_ACTIVE: "turn_not_active",
     FacadeFaultCode.REGISTRY_ERROR: "registry_error",
@@ -416,7 +416,7 @@ class FacadeFault(Exception):
             raise ValueError("invalid façade fault code") from exc
         if not isinstance(self.message, str) or not self.message or not isinstance(self.kind, str) or not self.kind:
             raise ValueError("fault message and kind must be non-empty strings")
-        if self.kind != _FACADE_FAULT_KINDS[code]:
+        if self.kind != FACADE_FAULT_KINDS[code]:
             raise ValueError("fault code and kind do not match")
         if type(self.retryable) is not bool or not isinstance(self.source, str) or not self.source:
             raise ValueError("invalid façade fault metadata")

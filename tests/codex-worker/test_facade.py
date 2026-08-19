@@ -31,6 +31,9 @@ class _Broker:
         return {"models": [{"id": "gpt-5.6-terra", "is_default": True,
                              "supported_efforts": ["medium"]}]}
 
+    def daemon_status(self):
+        return {"ready": True}
+
     def start_session(self, spec):
         self.calls.append("session_start")
         record = self.registry.create_worker("thread-1", spec.cwd, spec.name, spec.tier,
@@ -201,6 +204,17 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(refused.error.code, FacadeFaultCode.REGISTRY_ERROR)
         self.assertEqual(refused.error.known_ids["session_id"], "12345678-1234-5678-1234-567812345678")
         self.assertEqual(refused.error.known_ids["thread_id"], "upstream-thread")
+
+    def test_recovery_commands_pin_the_verified_shell_quoted_instance(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "scope; echo no"),
+                                       self.registry, self.broker, self.runtime,
+                                       __import__("codex_worker.projection", fromlist=["x"]), lambda: 1.0))
+        missing = facade.status(WorkerStatusRequest("absent"))
+        self.assertIsInstance(missing, Err)
+        self.assertEqual(missing.error.next_actions, [{
+            "command": "codex-worker --instance 'scope; echo no' start --name absent",
+            "reason": "Create this worker in the selected instance"}])
 
 
 if __name__ == "__main__":
