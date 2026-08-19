@@ -463,6 +463,34 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["latest_turn"]["turn_id"], "turn-1")
         self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
 
+    def test_expected_steer_turn_refuses_successor_before_upstream_dispatch(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "successor", model="fake-model-a", effort="medium")
+
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_steer(session, "late steer", expected_turn_id="turn-1")
+
+        self.assertEqual(caught.exception.kind, "turn_not_active")
+        self.assertEqual(caught.exception.details["turn_id"], "turn-1")
+        self.assertEqual(self.codex.steer_calls, [])
+        self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
+
+    def test_expected_interrupt_turn_refuses_successor_before_upstream_dispatch(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")
+        self.codex.complete_active_turn()
+        self.broker.turn_start(session, "successor", model="fake-model-a", effort="medium")
+
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_interrupt(session, expected_turn_id="turn-1")
+
+        self.assertEqual(caught.exception.kind, "turn_not_active")
+        self.assertEqual(caught.exception.details["turn_id"], "turn-1")
+        self.assertEqual(self.codex.interrupt_calls, [])
+        self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-2")
+
     def test_upstream_idle_steer_response_before_delayed_completion_is_typed_with_both_identities(self):
         session = self.start_session()
         self.broker.turn_start(session, "first", model="fake-model-a", effort="medium")

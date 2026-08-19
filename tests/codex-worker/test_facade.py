@@ -13,7 +13,7 @@ from codex_worker.commands import (AccessMode, Err, FacadeFaultCode, GoalSetRequ
                                    Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
                                    WorkerHistoryRequest, WorkerMessagesRequest,
                                    WorkerStatusRequest)
-from codex_worker.broker import TurnStartSpec
+from codex_worker.broker import ModelSelectionError, TurnStartSpec
 from codex_worker.facade import BrokerPort, ProjectorPort, RegistryPort, RuntimePort
 from codex_worker.instance import InstanceIdentity
 from codex_worker.commands import InstanceSource
@@ -64,17 +64,17 @@ class _Broker:
         record = self.registry.resolve(selector)
         self.runtime.attach(record)
 
-    def turn_steer(self, selector, prompt):
+    def turn_steer(self, selector, prompt, expected_turn_id=None):
         if self.control_fault is not None:
             raise self.control_fault
         self.calls.append("steer")
-        return {"accepted": True}
+        return {"accepted": True, "turn_id": expected_turn_id}
 
-    def turn_interrupt(self, selector):
+    def turn_interrupt(self, selector, expected_turn_id=None):
         if self.control_fault is not None:
             raise self.control_fault
         self.calls.append("interrupt")
-        return {"accepted": True}
+        return {"accepted": True, "turn_id": expected_turn_id}
 
 
 class _Native:
@@ -566,6 +566,111 @@ class FacadeTests(unittest.TestCase):
                 self.assertEqual(result.error.code, expected_code)
                 self.assertEqual(result.error.known_ids["session_id"], record.session_id)
                 self.assertEqual(result.error.known_ids["thread_id"], record.thread_id)
+
+    def test_control_passes_captured_turn_and_returns_broker_confirmed_identity(self):
+        record = self._record("captured-control")
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": record.thread_id, "turn": {"id": "captured", "status": "inProgress"}}})
+        seen = []
+
+        def steer(selector, prompt, expected_turn_id=None):
+            seen.append((prompt, expected_turn_id))
+            return {"accepted": True, "turn_id": expected_turn_id}
+
+        self.broker.turn_steer = steer
+        result = self._facade().steer(SteerWorkerRequest("captured-control", "focus"))
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(seen, [("focus", "captured")])
+        self.assertEqual(result.value.turn_id, "captured")
+
+    def test_steer_refuses_successor_started_after_facade_capture(self):
+        record = self._record("steer-barrier")
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": record.thread_id,
+            "turn": {"id": "predecessor", "status": "inProgress"}}})
+        upstream = []
+
+        def steer(selector, prompt, expected_turn_id=None):
+            self.runtime.on_notification({"method": "turn/completed", "params": {
+                "threadId": record.thread_id,
+                "turn": {"id": "predecessor", "status": "completed"}}})
+            self.runtime.on_notification({"method": "turn/started", "params": {
+                "threadId": record.thread_id,
+                "turn": {"id": "successor", "status": "inProgress"}}})
+            if self.runtime.status(record.session_id).active_turn_id != expected_turn_id:
+                raise RpcFault(-32005, "turn is not active", "turn_not_active", details={
+                    "session_id": record.session_id, "thread_id": record.thread_id,
+                    "turn_id": expected_turn_id, "latest_turn": None,
+                })
+            upstream.append(expected_turn_id)
+            return {"accepted": True, "turn_id": expected_turn_id}
+
+        self.broker.turn_steer = steer
+        result = self._facade().steer(SteerWorkerRequest("steer-barrier", "late"))
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.TURN_NOT_ACTIVE)
+        self.assertEqual(result.error.known_ids["turn_id"], "predecessor")
+        self.assertEqual(upstream, [])
+        self.assertEqual(self.runtime.status(record.session_id).active_turn_id, "successor")
+
+    def test_interrupt_refuses_successor_started_after_facade_capture(self):
+        record = self._record("interrupt-barrier")
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": record.thread_id,
+            "turn": {"id": "predecessor", "status": "inProgress"}}})
+        upstream = []
+
+        def interrupt(selector, expected_turn_id=None):
+            self.runtime.on_notification({"method": "turn/completed", "params": {
+                "threadId": record.thread_id,
+                "turn": {"id": "predecessor", "status": "completed"}}})
+            self.runtime.on_notification({"method": "turn/started", "params": {
+                "threadId": record.thread_id,
+                "turn": {"id": "successor", "status": "inProgress"}}})
+            if self.runtime.status(record.session_id).active_turn_id != expected_turn_id:
+                raise RpcFault(-32005, "turn is not active", "turn_not_active", details={
+                    "session_id": record.session_id, "thread_id": record.thread_id,
+                    "turn_id": expected_turn_id, "latest_turn": None,
+                })
+            upstream.append(expected_turn_id)
+            return {"accepted": True, "turn_id": expected_turn_id}
+
+        self.broker.turn_interrupt = interrupt
+        result = self._facade().interrupt(InterruptWorkerRequest("interrupt-barrier"))
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.TURN_NOT_ACTIVE)
+        self.assertEqual(result.error.known_ids["turn_id"], "predecessor")
+        self.assertEqual(upstream, [])
+        self.assertEqual(self.runtime.status(record.session_id).active_turn_id, "successor")
+
+    def test_catalog_disappearance_maps_model_unavailable_without_creation(self):
+        starts = []
+
+        def refuse(spec):
+            starts.append(spec)
+            raise ModelSelectionError("model is not available from live discovery",
+                                      {"model": spec.model})
+
+        self.broker.start_session = refuse
+        result = self._facade().start(StartWorkerRequest("catalog-model", "go", self.cwd))
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.MODEL_UNAVAILABLE)
+        self.assertEqual(result.error.details["model"], "gpt-5.6-terra")
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(self.registry.list(), [])
+
+    def test_catalog_effort_change_maps_effort_unsupported_without_creation(self):
+        def refuse(spec):
+            raise ModelSelectionError("effort is not supported by selected live model", {
+                "model": spec.model, "effort": spec.effort, "supported_efforts": ["low"],
+            })
+
+        self.broker.start_session = refuse
+        result = self._facade().start(StartWorkerRequest("catalog-effort", "go", self.cwd))
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.EFFORT_UNSUPPORTED)
+        self.assertEqual(result.error.details["supported_efforts"], ["low"])
+        self.assertEqual(self.registry.list(), [])
 
     def test_incomplete_legacy_policy_refusal_preserves_ids_and_exact_actions(self):
         hostile_thread = "legacy thread; no"

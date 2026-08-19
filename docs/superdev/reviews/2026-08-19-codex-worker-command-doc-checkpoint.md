@@ -1,6 +1,6 @@
 # Codex worker command documentation checkpoint
 
-**Date:** 2026-08-19  
+**Date:** 2026-08-19
 **Scope:** Task 7 named-worker documentation checkpoint
 
 ## Ownership map

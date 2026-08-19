@@ -3,7 +3,8 @@ from dataclasses import dataclass
 import shlex
 from typing import Callable, Optional, Protocol, runtime_checkable
 
-from .broker import AnnotationPolicy, NativeCodexProxy, SessionStartSpec, TurnStartSpec
+from .broker import (AnnotationPolicy, ModelSelectionError, NativeCodexProxy,
+                     SessionStartSpec, TurnStartSpec)
 from .commands import (AccessMode, CompletionResponse, ControlResponse, FacadeFault,
                        FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
                        GoalView, InterruptWorkerRequest, LimitsRequest, LimitsResponse,
@@ -32,8 +33,10 @@ class BrokerPort(Protocol):
     def start_turn(self, spec: TurnStartSpec) -> dict: ...
     def session_resume(self, selector: IdentifierSelector) -> dict: ...
     def daemon_status(self) -> dict: ...
-    def turn_steer(self, selector: IdentifierSelector, prompt: str) -> dict: ...
-    def turn_interrupt(self, selector: IdentifierSelector) -> dict: ...
+    def turn_steer(self, selector: IdentifierSelector, prompt: str,
+                   expected_turn_id: Optional[str] = None) -> dict: ...
+    def turn_interrupt(self, selector: IdentifierSelector,
+                       expected_turn_id: Optional[str] = None) -> dict: ...
 
 @runtime_checkable
 class RuntimePort(Protocol):
@@ -284,8 +287,13 @@ class WorkerFacade:
             if turn_id is None:
                 return Err(self._turn_not_active(record, None))
             method = self.deps.broker.turn_steer if action == "steer" else self.deps.broker.turn_interrupt
-            result = method(IdentifierSelector(session_id=record.session_id), request.prompt) if action == "steer" else method(IdentifierSelector(session_id=record.session_id))
-            return Ok(ControlResponse(self._worker(record), action, result["accepted"], turn_id,
+            result = (method(IdentifierSelector(session_id=record.session_id), request.prompt,
+                             expected_turn_id=turn_id)
+                      if action == "steer"
+                      else method(IdentifierSelector(session_id=record.session_id),
+                                  expected_turn_id=turn_id))
+            return Ok(ControlResponse(self._worker(record), action, result["accepted"],
+                                      result["turn_id"],
                                       "interrupted" if action == "interrupt" else "in_progress"))
         except BaseException as exc:
             return Err(self._effect_fault(exc, record, request.name))
@@ -405,6 +413,21 @@ class WorkerFacade:
     def _effect_fault(self, exc, record, name, limits=False):
         if isinstance(exc, FacadeFault): return exc
         if isinstance(exc, WaitTimeout): return self._timeout_fault(record, exc.turn_id)
+        if isinstance(exc, ModelSelectionError):
+            details = exc.details or {}
+            code = (FacadeFaultCode.EFFORT_UNSUPPORTED
+                    if "effort" in details or "supported_efforts" in details
+                    else FacadeFaultCode.MODEL_UNAVAILABLE)
+            return FacadeFault(
+                code,
+                "Requested effort is unsupported" if code == FacadeFaultCode.EFFORT_UNSUPPORTED
+                else "Requested model is unavailable",
+                self._kind(code), details=details, known_ids=self._known(record, name),
+                next_actions=[{
+                    "command": self._command("model list"),
+                    "reason": "Inspect the current live model catalog; no fallback has run",
+                }],
+            )
         if isinstance(exc, RpcFault):
             try: code = FacadeFaultCode(exc.code)
             except ValueError:

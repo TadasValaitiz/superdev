@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.models import IdentifierSelector, RpcFault
+from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
+                                   resolve_instance)
 from codex_worker.commands import (
     AccessMode,
     AgentMessageView,
@@ -953,6 +955,32 @@ class CliTests(unittest.TestCase):
             "kind", "retryable", "source", "details", "known_ids", "next_actions",
         })
 
+    def test_main_unsafe_managed_lock_is_one_json_without_traceback(self):
+        identity = resolve_instance("unsafe-main-lock", {})
+        root = Path(self.tempdir.name)
+        paths = derive_instance_paths(identity, sys.platform, root / "state", root / "tmp",
+                                      os.getuid())
+        paths.lock_path.parent.mkdir(parents=True, mode=0o700)
+        paths.lock_path.symlink_to(paths.lock_path.parent / "target")
+        manager = InstanceManager(InstanceDeps(
+            paths, "/launcher", "codex", lambda *args: None,
+            lambda *args: (_ for _ in ()).throw(OSError("absent")), time.monotonic,
+        ), identity)
+        original = cli._instance_manager
+        cli._instance_manager = lambda selected: manager
+        try:
+            completed = self.run_cli(
+                ["--instance", identity.value, "start", "--name", "worker-a",
+                 "--prompt", "go", "--cwd", self.cwd], include_socket=False,
+            )
+        finally:
+            cli._instance_manager = original
+        payload = self.assert_json_error(completed, 1, "daemon_start_failed")
+        self.assertEqual(payload["error"]["data"]["known_ids"]["instance"], identity.value)
+        self.assertEqual(payload["error"]["data"]["details"]["offending_path"],
+                         str(paths.lock_path))
+        self.assertNotIn("Traceback", completed.stderr)
+
     def test_pretty_is_rejected_for_foreground_serve(self):
         completed = self.run_cli(["--pretty", "daemon", "serve"])
         self.assertEqual(completed.returncode, 2)
@@ -1345,6 +1373,62 @@ class PublicLauncherTests(unittest.TestCase):
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Local Unix-socket broker", result.stdout)
+
+    def test_subprocess_unsafe_runtime_ancestor_is_one_typed_json(self):
+        launcher = ROOT / "bin" / "codex-worker"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            home.mkdir(mode=0o700)
+            unsafe_tmp = root / "unsafe-tmp"
+            unsafe_tmp.mkdir(mode=0o777)
+            os.chmod(unsafe_tmp, 0o777)
+            env = dict(os.environ, HOME=str(home), XDG_STATE_HOME=str(root / "state"),
+                       TMPDIR=str(unsafe_tmp))
+            result = subprocess.run(
+                [str(launcher), "--instance", "unsafe-subprocess", "start",
+                 "--name", "worker-a", "--prompt", "go", "--cwd", directory],
+                cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, check=False,
+            )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["error"]["data"]["kind"], "daemon_start_failed")
+        self.assertEqual(payload["error"]["data"]["known_ids"]["instance"],
+                         "unsafe-subprocess")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_subprocess_unsafe_start_lock_is_one_typed_json(self):
+        launcher = ROOT / "bin" / "codex-worker"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            home.mkdir(mode=0o700)
+            runtime = root / "runtime"
+            runtime.mkdir(mode=0o700)
+            env = dict(os.environ, HOME=str(home), XDG_STATE_HOME=str(root / "state"),
+                       TMPDIR=str(runtime))
+            identity = resolve_instance("unsafe-subprocess-lock", {})
+            state_home = (home / "Library" / "Application Support"
+                          if sys.platform == "darwin" else root / "state")
+            paths = derive_instance_paths(identity, sys.platform, state_home, runtime,
+                                          os.getuid())
+            paths.lock_path.parent.mkdir(mode=0o700)
+            paths.lock_path.symlink_to(paths.lock_path.parent / "target")
+            result = subprocess.run(
+                [str(launcher), "--instance", identity.value, "run",
+                 "--name", "worker-a", "--prompt", "go"],
+                cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, check=False,
+            )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["error"]["data"]["kind"], "daemon_start_failed")
+        self.assertEqual(payload["error"]["data"]["details"]["reason"],
+                         "unsafe_start_lock")
+        self.assertNotIn("Traceback", result.stderr)
 
 
 class ManagedProcessLifecycleTests(unittest.TestCase):

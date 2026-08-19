@@ -141,7 +141,13 @@ class LifecycleTests(unittest.TestCase):
     def test_unsafe_existing_lock_is_refused_without_replacement(self):
         self.paths.lock_path.parent.mkdir(parents=True, mode=0o700)
         self.paths.lock_path.symlink_to(self.paths.lock_path.parent / "target")
-        with self.assertRaises(RuntimeError): self.manager.ensure_running()
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            self.manager.ensure_running()
+        self.assertEqual(caught.exception.code, instance_module.FacadeFaultCode.DAEMON_START_FAILED)
+        self.assertEqual(caught.exception.details["offending_path"], str(self.paths.lock_path))
+        self.assertEqual(caught.exception.details["log_path"], str(self.paths.log_path))
+        self.assertEqual(caught.exception.known_ids["instance"], self.identity.value)
+        self.assertTrue(caught.exception.next_actions)
         self.assertTrue(self.paths.lock_path.is_symlink())
 
     def test_status_surfaces_protocol_failure_as_failed(self):
@@ -334,9 +340,57 @@ class LifecycleTests(unittest.TestCase):
             })()
 
         with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(instance_module.FacadeFault) as caught:
                 self.manager.ensure_running()
+        self.assertEqual(caught.exception.code, instance_module.FacadeFaultCode.DAEMON_START_FAILED)
+        self.assertEqual(caught.exception.details["offending_path"], str(controlled_ancestor))
         self.assertEqual(self.spawns, [])
+
+    def test_short_hash_collision_has_distinct_runtime_endpoints(self):
+        first = resolve_instance("collision-8515", {})
+        second = resolve_instance("collision-11163", {})
+        self.assertEqual(first.key_hash[:6], second.key_hash[:6])
+        first_paths = derive_instance_paths(first, "darwin", Path("/state"), Path("/tmp"), 501)
+        second_paths = derive_instance_paths(second, "darwin", Path("/state"), Path("/tmp"), 501)
+        self.assertNotEqual(first_paths.socket_path, second_paths.socket_path)
+        self.assertNotEqual(first_paths.lock_path, second_paths.lock_path)
+        self.assertTrue(first_paths.socket_path.parent.name.endswith(first.key_hash[:20]))
+        self.assertTrue(second_paths.socket_path.parent.name.endswith(second.key_hash[:20]))
+
+    def test_short_hash_collision_cannot_accept_the_other_daemon(self):
+        first = resolve_instance("collision-8515", {})
+        second = resolve_instance("collision-11163", {})
+        root = Path(self.tempdir.name)
+        first_paths = derive_instance_paths(first, "darwin", root / "state", root / "tmp",
+                                            os.getuid())
+        second_paths = derive_instance_paths(second, "darwin", root / "state", root / "tmp",
+                                             os.getuid())
+        probes = []
+        spawns = []
+
+        def rpc(socket_path, method, params, timeout):
+            probes.append(socket_path)
+            if socket_path == str(first_paths.socket_path):
+                return {"result": {"ready": True, "daemon_pid": 1, "codex_pid": 2,
+                                   "session_count": 0}}
+            raise OSError("absent")
+
+        def spawn(argv, log_path):
+            spawns.append(list(argv))
+            return Process(running=False)
+
+        first_manager = InstanceManager(InstanceDeps(
+            first_paths, "/launcher", "codex", spawn, rpc, lambda: 0.0), first)
+        second_manager = InstanceManager(InstanceDeps(
+            second_paths, "/launcher", "codex", spawn, rpc, lambda: 0.0), second)
+        self.assertEqual(first_manager.ensure_running().status, "ready")
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            second_manager.ensure_running()
+        self.assertEqual(caught.exception.details["reason"], "child_exited")
+        self.assertEqual(len(spawns), 1)
+        self.assertIn(str(second_paths.socket_path), spawns[0])
+        self.assertIn(str(first_paths.socket_path), probes)
+        self.assertIn(str(second_paths.socket_path), probes)
 
     def test_stop_refuses_foreign_controlled_ancestor_and_preserves_socket(self):
         self._leave_stale_socket()
@@ -389,7 +443,7 @@ class ControlledParentTests(unittest.TestCase):
         linked_temp = self.root / "linked-temp"
         linked_temp.symlink_to(real_temp, target_is_directory=True)
         manager = self._manager(self.root / "state", linked_temp)
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(instance_module.FacadeFault):
             manager.ensure_running()
 
     def test_intermediate_symlink_in_controlled_parent_is_refused(self):
@@ -399,7 +453,7 @@ class ControlledParentTests(unittest.TestCase):
         linked_component = self.root / "linked-component"
         linked_component.symlink_to(real_temp, target_is_directory=True)
         manager = self._manager(self.root / "state", linked_component / "nested")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(instance_module.FacadeFault):
             manager.ensure_running()
 
     def test_group_or_world_writable_non_sticky_parent_is_refused(self):
@@ -409,7 +463,7 @@ class ControlledParentTests(unittest.TestCase):
                 unsafe_temp.mkdir(mode=mode)
                 os.chmod(unsafe_temp, mode)
                 manager = self._manager(self.root / (name + "-state"), unsafe_temp)
-                with self.assertRaises(RuntimeError):
+                with self.assertRaises(instance_module.FacadeFault):
                     manager.ensure_running()
 
     def test_owner_only_and_sticky_temp_parents_are_supported(self):
@@ -461,7 +515,7 @@ class ControlledParentTests(unittest.TestCase):
             })()
 
         with mock.patch.object(instance_module.os, "lstat", side_effect=injected_lstat):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(instance_module.FacadeFault):
                 manager.ensure_running()
 
 

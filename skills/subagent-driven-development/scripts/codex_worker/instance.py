@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import shlex
 import stat
 import tempfile
 import time
@@ -78,10 +79,10 @@ def derive_instance_paths(identity: InstanceIdentity, platform: str, state_home:
         raise ValueError("uid must be a non-negative integer")
     key_hash = identity.key_hash
     durable_dir = Path(state_home) / "superdev" / "codex-worker" / "instances" / key_hash
-    runtime_dir = Path(temp_root) / ("superdev-cw-%s" % uid) / key_hash[:6]
-    return InstancePaths(durable_dir, runtime_dir / "worker.sock", durable_dir / "registry.json",
+    runtime_dir = Path(temp_root) / ("scw-%s-%s" % (uid, key_hash[:20]))
+    return InstancePaths(durable_dir, runtime_dir / "s", durable_dir / "registry.json",
                          durable_dir / "daemon.log", durable_dir / "instance.json",
-                         runtime_dir / "start.lock")
+                         runtime_dir / "l")
 
 
 def _owner_regular(path: Path, mode: int) -> bool:
@@ -102,7 +103,7 @@ def _safe_directory(path: Path) -> bool:
             and stat.S_IMODE(data.st_mode) == 0o700)
 
 
-def _safe_ancestor(path: Path) -> bool:
+def _unsafe_ancestor(path: Path) -> Optional[Path]:
     """Accept owner-only ancestors and sticky system temp ancestors, never links."""
     absolute = Path(os.path.abspath(str(path)))
     current = Path(absolute.anchor)
@@ -113,28 +114,39 @@ def _safe_ancestor(path: Path) -> bool:
         try:
             data = os.lstat(current)
         except OSError:
-            return False
+            return current
         if stat.S_ISLNK(data.st_mode):
             if current.parent != Path(absolute.anchor) or data.st_uid != 0:
-                return False
+                return current
             try:
                 data = os.stat(current)
             except OSError:
-                return False
+                return current
         mode = stat.S_IMODE(data.st_mode)
         sticky = bool(mode & stat.S_ISVTX)
         shared = sticky and bool(mode & 0o022)
         if (not stat.S_ISDIR(data.st_mode)
                 or mode & 0o022 and not sticky):
-            return False
+            return current
         if data.st_uid == os.getuid():
             controlled = True
         elif shared:
             shared_sticky = True
             controlled = False
         elif data.st_uid != 0 or controlled or shared_sticky:
-            return False
-    return True
+            return current
+    return None
+
+
+def _safe_ancestor(path: Path) -> bool:
+    return _unsafe_ancestor(path) is None
+
+
+class UnsafePathError(RuntimeError):
+    def __init__(self, reason: str, path: Path):
+        self.reason = reason
+        self.path = Path(path)
+        super().__init__("%s: %s" % (reason, path))
 
 
 def _safe_nearest_ancestor(path: Path) -> bool:
@@ -154,20 +166,25 @@ def _safe_nearest_ancestor(path: Path) -> bool:
 
 def _mkdir_owner_only(path: Path) -> None:
     if path.exists() or path.is_symlink():
-        if not _safe_ancestor(path) or not _safe_directory(path):
-            raise RuntimeError("unsafe directory %s" % path)
+        unsafe = _unsafe_ancestor(path)
+        if unsafe is not None:
+            raise UnsafePathError("unsafe_ancestor", unsafe)
+        if not _safe_directory(path):
+            raise UnsafePathError("unsafe_directory", path)
         return
     parent = path.parent
     if not parent.exists():
         _mkdir_owner_only(parent)
-    elif not _safe_ancestor(parent):
-        raise RuntimeError("unsafe controlled parent %s" % parent)
+    else:
+        unsafe = _unsafe_ancestor(parent)
+        if unsafe is not None:
+            raise UnsafePathError("unsafe_parent", unsafe)
     try:
         path.mkdir(mode=0o700, exist_ok=False)
     except FileExistsError:
         pass
     if not _safe_directory(path):
-        raise RuntimeError("unsafe directory %s" % path)
+        raise UnsafePathError("unsafe_directory", path)
 
 
 def _metadata_payload(identity: InstanceIdentity) -> dict:
@@ -179,7 +196,7 @@ def _write_metadata(paths: InstancePaths, identity: InstanceIdentity) -> None:
     _mkdir_owner_only(paths.durable_dir)
     if paths.metadata_path.exists() or paths.metadata_path.is_symlink():
         if not _owner_regular(paths.metadata_path, 0o600):
-            raise RuntimeError("unsafe instance metadata")
+            raise UnsafePathError("unsafe_instance_metadata", paths.metadata_path)
     fd, temporary = tempfile.mkstemp(prefix="instance.", dir=str(paths.durable_dir))
     try:
         os.fchmod(fd, 0o600)
@@ -190,7 +207,7 @@ def _write_metadata(paths: InstancePaths, identity: InstanceIdentity) -> None:
             os.fsync(handle.fileno())
         os.replace(temporary, paths.metadata_path)
         if not _owner_regular(paths.metadata_path, 0o600):
-            raise RuntimeError("instance metadata permissions could not be hardened")
+            raise UnsafePathError("unsafe_instance_metadata", paths.metadata_path)
     except BaseException:
         try:
             os.unlink(temporary)
@@ -224,7 +241,7 @@ def acquire_start_lock(lock_path: Path, timeout: float = 2.0):
     _mkdir_owner_only(lock_path.parent)
     if lock_path.exists() or lock_path.is_symlink():
         if not _owner_regular(lock_path, 0o600):
-            raise RuntimeError("unsafe instance start lock")
+            raise UnsafePathError("unsafe_start_lock", lock_path)
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -234,7 +251,7 @@ def acquire_start_lock(lock_path: Path, timeout: float = 2.0):
             os.fchmod(fd, 0o600)
         before = os.fstat(fd)
         if not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid():
-            raise RuntimeError("unsafe instance start lock")
+            raise UnsafePathError("unsafe_start_lock", lock_path)
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -242,11 +259,11 @@ def acquire_start_lock(lock_path: Path, timeout: float = 2.0):
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("timed out waiting for instance start lock")
+                    raise UnsafePathError("start_lock_timeout", lock_path)
                 time.sleep(0.01)
         after = os.lstat(lock_path)
         if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
-            raise RuntimeError("instance start lock changed during acquisition")
+            raise UnsafePathError("start_lock_changed", lock_path)
         yield
     finally:
         try:
@@ -341,6 +358,33 @@ class InstanceManager:
                 "--state", str(paths.registry_path), "--codex-bin", self.deps.codex_bin]
 
     def ensure_running(self) -> DaemonStatusResponse:
+        try:
+            return self._ensure_running()
+        except FacadeFault:
+            raise
+        except (UnsafePathError, OSError) as exc:
+            offending_path = getattr(
+                exc, "path", getattr(exc, "filename", None) or self.deps.paths.lock_path,
+            )
+            reason = getattr(exc, "reason", type(exc).__name__)
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Codex worker daemon could not be started safely",
+                "daemon_start_failed",
+                details={"reason": reason, "offending_path": str(offending_path),
+                         "log_path": str(self.deps.paths.log_path),
+                         "durable_state": "preserved"},
+                known_ids={"instance": self.identity.value, "name": None,
+                           "session_id": None, "thread_id": None, "turn_id": None},
+                next_actions=[
+                    {"command": "codex-worker --instance %s daemon status" % shlex.quote(self.identity.value),
+                     "reason": "Inspect the selected managed instance"},
+                    {"command": "ls -ld %s" % shlex.quote(str(offending_path)),
+                     "reason": "Inspect ownership and permissions without changing state"},
+                ],
+            ) from exc
+
+    def _ensure_running(self) -> DaemonStatusResponse:
         with acquire_start_lock(self.deps.paths.lock_path):
             ready = self._probe()
             if ready is not None:

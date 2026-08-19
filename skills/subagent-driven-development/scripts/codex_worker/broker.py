@@ -369,11 +369,12 @@ class WorkerBroker:
         except (UnknownSession, ValueError) as exc:
             raise self._from_lower(exc, record) from exc
 
-    def turn_steer(self, selector: IdentifierSelector, prompt: str) -> JsonObject:
+    def turn_steer(self, selector: IdentifierSelector, prompt: str,
+                   expected_turn_id: Optional[str] = None) -> JsonObject:
         if not isinstance(prompt, str) or not prompt:
             raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
         record = self._resolve(selector, require_attached=True)
-        turn_id = self._active_turn_or_fault(record)
+        turn_id = self._active_turn_or_fault(record, expected_turn_id)
         try:
             returned_id = self.codex.steer(record.thread_id, turn_id, prompt)
         except CodexCallError as exc:
@@ -386,9 +387,10 @@ class WorkerBroker:
         return {"session_id": record.session_id, "thread_id": record.thread_id,
                 "turn_id": turn_id, "accepted": True}
 
-    def turn_interrupt(self, selector: IdentifierSelector) -> JsonObject:
+    def turn_interrupt(self, selector: IdentifierSelector,
+                       expected_turn_id: Optional[str] = None) -> JsonObject:
         record = self._resolve(selector, require_attached=True)
-        turn_id = self._active_turn_or_fault(record)
+        turn_id = self._active_turn_or_fault(record, expected_turn_id)
         try:
             self.codex.interrupt(record.thread_id, turn_id)
         except CodexCallError as exc:
@@ -561,16 +563,21 @@ class WorkerBroker:
             from .models import RuntimeStatus
             return RuntimeStatus(attached=False)
 
-    def _active_turn_or_fault(self, record: SessionRecord) -> str:
+    def _active_turn_or_fault(self, record: SessionRecord,
+                              expected_turn_id: Optional[str] = None) -> str:
         status = self._status_or_detached(record)
         if not status.attached:
             raise _fault(
                 -32003, "session is detached", "session_detached",
                 recovery="run session resume --session %s" % record.session_id,
             )
-        if status.active_turn_id is None:
+        if (status.active_turn_id is None
+                or expected_turn_id is not None and status.active_turn_id != expected_turn_id):
             latest_turn_id = status.latest_turn.turn_id if status.latest_turn else None
-            raise self._turn_not_active(record, status.latest_turn, latest_turn_id)
+            raise self._turn_not_active(
+                record, status.latest_turn,
+                expected_turn_id if expected_turn_id is not None else latest_turn_id,
+            )
         return status.active_turn_id
 
     def _raise_control_race_or_codex(self, record: SessionRecord, expected_turn_id: str,
