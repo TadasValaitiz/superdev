@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.commands import (
-    AccessMode, AgentMessageView, CompletionResponse, CompletionSelection, FacadeFault,
+    AccessMode, AgentMessageView, CompletionResponse, CompletionSelection, FacadeFault, FacadeFaultCode,
     MetricAvailability, MetricEvidence, RecoveryView, StartWorkerRequest, Tier, TurnView,
     WorkerMessagesResponse, WorkerView,
 )
@@ -19,6 +19,10 @@ class CommandModelTests(unittest.TestCase):
 
     def tearDown(self):
         self.tempdir.cleanup()
+
+    @property
+    def session_id(self):
+        return "12345678-1234-5678-1234-567812345678"
 
     def test_worker_name_and_start_configuration_are_strict(self):
         with self.assertRaises(ValueError):
@@ -48,7 +52,7 @@ class CommandModelTests(unittest.TestCase):
             StartWorkerRequest("review-a31", "x", self.cwd, goal=None, token_budget=1)
 
     def test_response_models_recursively_reject_bad_shapes_and_round_trip(self):
-        worker = WorkerView("scope", "review-a31", "sid", "thread", self.cwd,
+        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
         response = CompletionResponse(
             worker, TurnView("turn", "completed", None),
@@ -62,7 +66,7 @@ class CommandModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CompletionResponse.from_dict(invalid)
         with self.assertRaises(ValueError):
-            WorkerView("scope", "bad name", "sid", "thread", self.cwd,
+            WorkerView("scope", "bad name", self.session_id, "thread", self.cwd,
                        Tier.MEDIUM, "model", "medium", AccessMode.FULL)
 
     def test_fault_rejects_unknown_codes_and_malformed_wire_envelopes(self):
@@ -76,7 +80,7 @@ class CommandModelTests(unittest.TestCase):
             FacadeFault.from_dict(malformed)
 
     def test_response_values_reject_closed_literals_and_boundary_counts(self):
-        worker = WorkerView("scope", "review-a31", "sid", "thread", self.cwd,
+        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
         with self.assertRaises(ValueError):
             TurnView("turn", "unknown", None)
@@ -86,6 +90,37 @@ class CommandModelTests(unittest.TestCase):
             MetricEvidence(None, "", MetricAvailability.UNAVAILABLE)
         with self.assertRaises(ValueError):
             WorkerMessagesResponse(worker, [], 1, -1, False, None)
+
+    def test_worker_view_requires_uuid_session_id_on_construction_and_wire(self):
+        with self.assertRaises(ValueError):
+            WorkerView("scope", "review-a31", "not-a-uuid", "thread", self.cwd,
+                       Tier.MEDIUM, "model", "medium", AccessMode.FULL)
+        valid = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+                           Tier.MEDIUM, "model", "medium", AccessMode.FULL).to_dict()
+        valid["session_id"] = "not-a-uuid"
+        with self.assertRaises(ValueError):
+            WorkerView.from_dict(valid)
+
+    def test_every_common_fault_code_has_only_its_exact_kind(self):
+        expected = {
+            FacadeFaultCode.WORKER_NAME_EXISTS: "worker_name_exists",
+            FacadeFaultCode.WORKER_NOT_FOUND: "worker_not_found",
+            FacadeFaultCode.DAEMON_STOPPED: "daemon_stopped",
+            FacadeFaultCode.DAEMON_START_FAILED: "daemon_start_failed",
+            FacadeFaultCode.TIMEOUT_ACTIVE: "timeout_active",
+            FacadeFaultCode.MODEL_UNAVAILABLE: "model_unavailable",
+            FacadeFaultCode.EFFORT_UNSUPPORTED: "effort_unsupported",
+            FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable",
+            FacadeFaultCode.INCOMPLETE_COMPLETION: "incomplete_completion",
+        }
+        for code, kind in expected.items():
+            self.assertEqual(FacadeFault(code, "message", kind).to_dict()["data"]["kind"], kind)
+            with self.assertRaises(ValueError):
+                FacadeFault(code, "message", "worker_not_found" if kind != "worker_not_found" else "daemon_stopped")
+            wire = FacadeFault(code, "message", kind).to_dict()
+            wire["data"]["kind"] = "worker_not_found" if kind != "worker_not_found" else "daemon_stopped"
+            with self.assertRaises(ValueError):
+                FacadeFault.from_dict(wire)
 
 
 if __name__ == "__main__":

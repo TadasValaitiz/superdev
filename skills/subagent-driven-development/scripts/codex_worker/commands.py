@@ -4,6 +4,7 @@ from enum import Enum
 import math
 from pathlib import Path
 import re
+import uuid
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
 JsonObject = Dict[str, Any]
@@ -51,6 +52,19 @@ class FacadeFaultCode(int, Enum):
     EFFORT_UNSUPPORTED = -32027
     LIMITS_UNAVAILABLE = -32028
     INCOMPLETE_COMPLETION = -32029
+
+
+_FACADE_FAULT_KINDS = {
+    FacadeFaultCode.WORKER_NAME_EXISTS: "worker_name_exists",
+    FacadeFaultCode.WORKER_NOT_FOUND: "worker_not_found",
+    FacadeFaultCode.DAEMON_STOPPED: "daemon_stopped",
+    FacadeFaultCode.DAEMON_START_FAILED: "daemon_start_failed",
+    FacadeFaultCode.TIMEOUT_ACTIVE: "timeout_active",
+    FacadeFaultCode.MODEL_UNAVAILABLE: "model_unavailable",
+    FacadeFaultCode.EFFORT_UNSUPPORTED: "effort_unsupported",
+    FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable",
+    FacadeFaultCode.INCOMPLETE_COMPLETION: "incomplete_completion",
+}
 
 
 def validate_worker_name(value: str) -> None:
@@ -328,6 +342,10 @@ class WorkerView(StrictModel):
         super().__post_init__()
         if not self.instance or not self.session_id or not self.thread_id or not self.model or not self.effort:
             raise ValueError("worker identity and configuration strings must be non-empty")
+        try:
+            uuid.UUID(self.session_id)
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError("session_id must be a UUID") from exc
         validate_worker_name(self.name)
         validate_canonical_cwd(self.cwd)
 @dataclass(frozen=True)
@@ -364,6 +382,7 @@ class DaemonStatusResponse(StrictModel): instance: InstanceView; status: str; da
 class DaemonStopResponse(StrictModel): instance: InstanceView; status_before: str; status_after: str; daemon_pid: Optional[int]; codex_pid: Optional[int]; durable_state: str; worker_count: int
 
 
+# Internal service Result carriers; RPC uses the explicit façade and raw wire envelopes above.
 T = TypeVar("T"); E = TypeVar("E")
 @dataclass(frozen=True)
 class Ok(Generic[T]): value: T
@@ -385,6 +404,8 @@ class FacadeFault(Exception):
             raise ValueError("invalid façade fault code") from exc
         if not isinstance(self.message, str) or not self.message or not isinstance(self.kind, str) or not self.kind:
             raise ValueError("fault message and kind must be non-empty strings")
+        if self.kind != _FACADE_FAULT_KINDS[code]:
+            raise ValueError("fault code and kind do not match")
         if type(self.retryable) is not bool or not isinstance(self.source, str) or not self.source:
             raise ValueError("invalid façade fault metadata")
         if not isinstance(details, dict): raise ValueError("details must be an object")
