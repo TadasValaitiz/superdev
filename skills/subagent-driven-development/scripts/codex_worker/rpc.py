@@ -12,6 +12,10 @@ import time
 from typing import Any, Callable, Dict, Optional, Union
 
 from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
+from .commands import (FacadeFault, GoalSetRequest, GoalShowRequest, InterruptWorkerRequest,
+                       LimitsRequest, Ok, RunWorkerRequest, StartWorkerRequest,
+                       SteerWorkerRequest, WorkerHistoryRequest, WorkerMessagesRequest,
+                       WorkerStatusRequest)
 
 JsonId = Optional[Union[str, int]]
 
@@ -172,14 +176,39 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
         return method, payload["params"]
 
 
+COMMON_METHODS = {
+    "worker/start": ("start", StartWorkerRequest),
+    "worker/run": ("run", RunWorkerRequest),
+    "worker/status": ("status", WorkerStatusRequest),
+    "worker/messages": ("messages", WorkerMessagesRequest),
+    "worker/history": ("history", WorkerHistoryRequest),
+    "worker/steer": ("steer", SteerWorkerRequest),
+    "worker/interrupt": ("interrupt", InterruptWorkerRequest),
+    "worker/goal/set": ("goal_set", GoalSetRequest),
+    "worker/goal/show": ("goal_show", GoalShowRequest),
+    "account/limits": ("limits", LimitsRequest),
+}
+
+
+class FacadeRpcFault(RpcFault):
+    """RPC adapter preserving the façade's richer refusal data unchanged."""
+    def __init__(self, fault: FacadeFault):
+        super().__init__(fault.code.value, fault.message, fault.kind)
+        self._facade_fault = fault
+
+    def to_dict(self) -> JsonObject:
+        return self._facade_fault.to_dict()
+
+
 class RpcServer(ThreadingUnixServer):
     """Threaded one-request-per-connection JSON-RPC server over an AF_UNIX path."""
 
-    def __init__(self, socket_path: str, broker: Any):
+    def __init__(self, socket_path: str, broker: Any, facade: Any = None):
         if not isinstance(socket_path, str) or not socket_path:
             raise SocketPathUnsafe("socket_path must be a non-empty string")
         self.socket_path = socket_path
         self.broker = broker
+        self.facade = facade
         self._shutdown_started = False
         self._bound_stat = None
         self._lock_fd = None  # type: Optional[int]
@@ -229,6 +258,22 @@ class RpcServer(ThreadingUnixServer):
         threading.Thread(target=self.shutdown, name="codex-worker-rpc-shutdown", daemon=True).start()
 
     def dispatch(self, method: str, params: JsonObject) -> JsonObject:
+        common = COMMON_METHODS.get(method)
+        if common is not None:
+            if self.facade is None:
+                raise _fault(-32601, "Method not found", "method_not_found", details={"method": method})
+            operation, request_type = common
+            try:
+                request = request_type.from_dict(params)
+            except ValueError as exc:
+                raise _fault(-32602, "Invalid params", "invalid_params", details={"reason": str(exc)}) from exc
+            result = getattr(self.facade, operation)(request)
+            if isinstance(result, Ok):
+                return result.value.to_dict()
+            fault = result.error
+            if isinstance(fault, FacadeFault):
+                raise FacadeRpcFault(fault)
+            raise _fault(-32603, "Internal error", "internal_error")
         dispatcher = _DISPATCH.get(method)
         if dispatcher is None:
             raise _fault(-32601, "Method not found", "method_not_found", details={"method": method})
@@ -339,12 +384,13 @@ def _socket_accepts_connections(socket_path: str) -> bool:
 
 
 def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
-             timeout: float = 30.0) -> JsonObject:
+             timeout: Optional[float] = 30.0) -> JsonObject:
     if params is None:
         params = {}
     if not isinstance(params, dict):
         raise ValueError("params must be an object")
-    timeout = _bounded_platform_timeout(_finite_nonnegative_float(timeout, "timeout"))
+    if timeout is not None:
+        timeout = _bounded_platform_timeout(_finite_nonnegative_float(timeout, "timeout"))
     expected_endpoint = _validate_socket_endpoint(socket_path)
     request = {"jsonrpc": "2.0", "id": "cli", "method": method, "params": params}
     received = b""

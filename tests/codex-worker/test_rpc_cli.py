@@ -637,17 +637,21 @@ class CliTests(unittest.TestCase):
         fake_bin.chmod(0o700)
         return fake_bin
 
-    def run_cli(self, argv, fake_rpc=None):
+    def run_cli(self, argv, fake_rpc=None, include_socket=True):
         out = io.StringIO()
         err = io.StringIO()
         original_rpc_call = cli.rpc_call
+        original_common_endpoint = cli._common_endpoint
         if fake_rpc is not None:
             cli.rpc_call = fake_rpc
+            cli._common_endpoint = lambda instance, autostart: self.socket_path
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                code = cli.main(["--socket", self.socket_path] + list(argv))
+                prefix = ["--socket", self.socket_path] if include_socket else []
+                code = cli.main(prefix + list(argv))
         finally:
             cli.rpc_call = original_rpc_call
+            cli._common_endpoint = original_common_endpoint
         return type("Completed", (), {
             "returncode": code,
             "stdout": out.getvalue(),
@@ -775,6 +779,44 @@ class CliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(len(json.loads(completed.stdout)), 3)
         self.assertIn("\n  ", completed.stdout)
+
+    def test_common_command_matrix_builds_exact_rpc_requests(self):
+        cases = [
+            (['start', '--name', 'build-1', '--prompt', 'go', '--cwd', self.cwd], 'worker/start',
+             {'name': 'build-1', 'prompt': 'go', 'cwd': self.cwd, 'tier': 'medium',
+              'model': None, 'effort': 'medium', 'access': 'full', 'goal': None,
+              'token_budget': None, 'output_schema': None, 'timeout': None}),
+            (['run', '--name', 'build-1', '--prompt', 'again'], 'worker/run',
+             {'name': 'build-1', 'prompt': 'again', 'output_schema': None, 'timeout': None}),
+            (['status', '--name', 'build-1'], 'worker/status', {'name': 'build-1'}),
+            (['messages', '--name', 'build-1', '--tail', '2'], 'worker/messages', {'name': 'build-1', 'tail': 2}),
+            (['history', '--name', 'build-1'], 'worker/history', {'name': 'build-1', 'tail': 1}),
+            (['steer', '--name', 'build-1', '--prompt', 'focus'], 'worker/steer', {'name': 'build-1', 'prompt': 'focus'}),
+            (['interrupt', '--name', 'build-1'], 'worker/interrupt', {'name': 'build-1'}),
+            (['goal', 'set', '--name', 'build-1', '--goal', 'finish'], 'worker/goal/set',
+             {'name': 'build-1', 'objective': 'finish', 'status': None, 'token_budget': None}),
+            (['goal', 'show', '--name', 'build-1'], 'worker/goal/show', {'name': 'build-1'}),
+            (['limits'], 'account/limits', {}),
+        ]
+        for argv, method, params in cases:
+            with self.subTest(argv=argv):
+                self.rpc_calls = []
+                result = self.run_cli(argv, fake_rpc=self.fake_rpc_success, include_socket=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.rpc_calls[0][0:2], (method, params))
+
+    def test_common_commands_reject_socket_and_creation_flags_on_run(self):
+        rejected = [
+            ['--socket', self.socket_path, 'start', '--name', 'build-1', '--prompt', 'go'],
+            ['run', '--name', 'build-1', '--prompt', 'go', '--cwd', self.cwd],
+            ['goal', 'set', '--name', 'build-1'],
+            ['start', '--name', 'build-1', '--prompt', 'go', '--token-budget', '1'],
+        ]
+        for argv in rejected:
+            with self.subTest(argv=argv):
+                result = self.run_cli(argv, fake_rpc=self.fake_rpc_success)
+                self.assert_json_error(result, 2)
+        self.assertEqual(self.rpc_calls, [])
 
     def test_foreground_serve_has_no_stdout_and_shutdown_preserves_registry(self):
         script = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"

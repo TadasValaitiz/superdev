@@ -6,6 +6,8 @@ import os
 import signal
 import sys
 import tempfile
+import subprocess
+import time
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -13,8 +15,10 @@ from .app_server import CodexAppServer
 from .broker import WorkerBroker
 from .models import JsonObject, RpcFault, rpc_response
 from .registry import SessionRegistry
-from .rpc import RpcServer, SocketInUse, SocketPathUnsafe, daemon_unavailable_fault, rpc_call
+from .rpc import FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe, daemon_unavailable_fault, rpc_call
 from .runtime import RuntimeStore
+from .commands import FacadeFault, FacadeFaultCode
+from .instance import InstanceDeps, InstanceManager, derive_instance_paths, resolve_instance
 
 
 DOCUMENTED_CLIENT_METHODS = {
@@ -104,14 +108,17 @@ def build_parser() -> argparse.ArgumentParser:
         prog="codex-worker",
         description="Local Unix-socket broker for durable Codex worker sessions.",
     )
-    parser.add_argument("--socket", default=default_socket_path(),
+    parser.add_argument("--socket",
                         help="Unix socket path (default: SUPERDEV_CODEX_WORKER_SOCKET or user temp path)")
+    parser.add_argument("--instance", help="selected managed worker instance")
     parser.add_argument("--pretty", action="store_true",
                         help="Pretty-print JSON responses for client commands")
 
     families = parser.add_subparsers(
         dest="family", required=True, parser_class=CodexWorkerArgumentParser
     )
+
+    _add_common_commands(families)
 
     daemon = families.add_parser("daemon", help="broker lifecycle")
     daemon_sub = daemon.add_subparsers(
@@ -126,6 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--event-limit", type=_positive_int, default=1000,
                        help="per-session in-memory event retention limit")
     daemon_sub.add_parser("status", help="read daemon health").set_defaults(method="daemon/status")
+    daemon_sub.add_parser("stop", help="stop the selected managed daemon").set_defaults(method="daemon/stop", managed_daemon=True)
     daemon_sub.add_parser("shutdown", help="gracefully stop the daemon").set_defaults(method="daemon/shutdown")
 
     model = families.add_parser("model", help="live Codex model discovery")
@@ -196,6 +204,46 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_common_commands(families) -> None:
+    start = families.add_parser("start", help="create a named worker and send its first message")
+    start.set_defaults(method="worker/start", common=True)
+    _add_name_prompt(start)
+    start.add_argument("--cwd", default=os.getcwd())
+    policy = start.add_mutually_exclusive_group()
+    policy.add_argument("--tier", choices=("medium", "very-smart"), default="medium")
+    policy.add_argument("--model")
+    start.add_argument("--effort", default="medium")
+    start.add_argument("--read-only", action="store_true")
+    start.add_argument("--goal")
+    start.add_argument("--token-budget", type=_positive_int)
+    _add_turn_options(start)
+    run = families.add_parser("run", help="send a follow-up to a named worker")
+    run.set_defaults(method="worker/run", common=True)
+    _add_name_prompt(run); _add_turn_options(run)
+    for name, method in (("status", "worker/status"), ("messages", "worker/messages"),
+                         ("history", "worker/history"), ("interrupt", "worker/interrupt")):
+        command = families.add_parser(name)
+        command.set_defaults(method=method, common=True)
+        command.add_argument("--name", required=True)
+        if name in ("messages", "history"): command.add_argument("--tail", type=_positive_int, default=1)
+    steer = families.add_parser("steer"); steer.set_defaults(method="worker/steer", common=True); _add_name_prompt(steer)
+    goal = families.add_parser("goal"); goal_sub = goal.add_subparsers(dest="action", required=True, parser_class=CodexWorkerArgumentParser)
+    goal_set = goal_sub.add_parser("set"); goal_set.set_defaults(method="worker/goal/set", common=True)
+    goal_set.add_argument("--name", required=True); goal_set.add_argument("--goal"); goal_set.add_argument("--status", choices=("active", "paused", "blocked", "usageLimited", "budgetLimited", "complete")); goal_set.add_argument("--token-budget", type=_positive_int)
+    goal_show = goal_sub.add_parser("show"); goal_show.set_defaults(method="worker/goal/show", common=True); goal_show.add_argument("--name", required=True)
+    limits = families.add_parser("limits"); limits.set_defaults(method="account/limits", common=True)
+
+
+def _add_name_prompt(parser) -> None:
+    parser.add_argument("--name", required=True)
+    _add_prompt_group(parser)
+
+
+def _add_turn_options(parser) -> None:
+    parser.add_argument("--output-schema")
+    parser.add_argument("--timeout", type=_nonnegative_float)
+
+
 def _add_selector_group(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--session", dest="session_id", help="daemon-minted session UUID")
@@ -253,21 +301,46 @@ def main(argv: Optional[List[str]] = None) -> int:
         return int(exc.code)
 
     if args.family == "daemon" and args.action == "serve":
-        if args.pretty:
-            print("codex-worker: --pretty is not valid with daemon serve", file=sys.stderr)
+        if args.pretty or args.instance:
+            print("codex-worker: --pretty and --instance are not valid with daemon serve", file=sys.stderr)
             return 2
         return _serve(args)
 
     try:
+        if args.family == "daemon" and args.action == "status" and not args.socket:
+            response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).status().to_dict()}
+            _print_json(response, args.pretty)
+            return 0
+        if args.family == "daemon" and args.action == "stop":
+            if args.socket:
+                raise ValueError("--socket is not valid with daemon stop")
+            response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).stop().to_dict()}
+            _print_json(response, args.pretty)
+            return 0
+        if args.family == "daemon" and args.action == "shutdown" and args.instance:
+            raise ValueError("--instance is not valid with daemon shutdown")
         method = args.method
         params = _params_for(args)
-        response = rpc_call(args.socket, method, params, timeout=_client_timeout(method, params))
+        if getattr(args, "common", False):
+            if args.socket:
+                raise ValueError("--socket is not valid for common worker commands")
+            socket_path = _common_endpoint(args.instance, autostart=method in ("worker/start", "worker/run"))
+        else:
+            if args.socket and args.instance:
+                raise ValueError("--socket and --instance are mutually exclusive")
+            socket_path = (str(_instance_manager(args.instance).deps.paths.socket_path)
+                           if args.instance else args.socket or default_socket_path())
+        response = rpc_call(socket_path, method, params, timeout=_client_timeout(method, params))
+    except FacadeFault as fault:
+        response = rpc_response(None, fault=FacadeRpcFault(fault))
+        _print_json(response, args.pretty)
+        return 1
     except RpcFault as fault:
         response = rpc_response(None, fault=fault)
         _print_json(response, args.pretty)
         return 1
     except OSError:
-        response = rpc_response(None, fault=daemon_unavailable_fault(args.socket))
+        response = rpc_response(None, fault=daemon_unavailable_fault(args.socket or default_socket_path()))
         _print_json(response, args.pretty)
         return 1
     except ValueError as exc:
@@ -294,8 +367,10 @@ def _serve(args: argparse.Namespace) -> int:
             [args.codex_bin, "app-server"],
             runtime.on_notification,
         )
-        broker = WorkerBroker(registry, codex, runtime, args.socket, args.state)
-        server = RpcServer(args.socket, broker)
+        socket_path = args.socket or default_socket_path()
+        broker = WorkerBroker(registry, codex, runtime, socket_path, args.state)
+        facade = _managed_facade(broker, runtime, registry, Path(args.state))
+        server = RpcServer(socket_path, broker, facade)
         previous_int = signal.getsignal(signal.SIGINT)
         previous_term = signal.getsignal(signal.SIGTERM)
 
@@ -305,7 +380,7 @@ def _serve(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
         try:
-            print("codex-worker daemon listening on %s" % args.socket, file=sys.stderr)
+            print("codex-worker daemon listening on %s" % socket_path, file=sys.stderr)
             server.serve_forever()
         finally:
             signal.signal(signal.SIGINT, previous_int)
@@ -326,6 +401,22 @@ def _serve(args: argparse.Namespace) -> int:
 
 def _params_for(args: argparse.Namespace) -> JsonObject:
     method = args.method
+    if method == "worker/start":
+        return {"name": args.name, "prompt": _prompt(args), "cwd": str(Path(args.cwd).resolve()),
+                "tier": None if args.model else args.tier, "model": args.model, "effort": args.effort,
+                "access": "read_only" if args.read_only else "full", "goal": args.goal,
+                "token_budget": args.token_budget, "output_schema": _output_schema(args.output_schema),
+                "timeout": args.timeout}
+    if method == "worker/run":
+        return {"name": args.name, "prompt": _prompt(args), "output_schema": _output_schema(args.output_schema), "timeout": args.timeout}
+    if method in ("worker/status", "worker/interrupt", "worker/goal/show"):
+        return {"name": args.name}
+    if method in ("worker/messages", "worker/history"):
+        return {"name": args.name, "tail": args.tail}
+    if method == "worker/steer": return {"name": args.name, "prompt": _prompt(args)}
+    if method == "worker/goal/set":
+        return {"name": args.name, "objective": args.goal, "status": args.status, "token_budget": args.token_budget}
+    if method == "account/limits": return {}
     if method in ("daemon/status", "daemon/shutdown", "model/list", "session/list"):
         return {}
     if method == "session/start":
@@ -385,11 +476,64 @@ def _prompt(args: argparse.Namespace) -> str:
 
 
 def _client_timeout(method: str, params: JsonObject) -> float:
+    if method in ("worker/start", "worker/run"):
+        timeout = params.get("timeout")
+        return None if timeout is None else max(float(timeout) + 5.0, 5.0)
     if method == "turn/wait":
         timeout = params.get("timeout")
         if type(timeout) in (int, float):
             return max(float(timeout) + 5.0, 5.0)
     return 30.0
+
+
+def _output_schema(path: Optional[str]):
+    if path is None: return None
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("could not read output schema: %s" % exc) from exc
+    if not isinstance(value, dict): raise ValueError("output schema must be a JSON object")
+    return value
+
+
+def _managed_state_home() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+
+
+def _spawn_daemon(argv, log_path):
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    handle = open(log_path, "ab", buffering=0)
+    try:
+        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=handle, stderr=handle,
+                                start_new_session=True)
+    finally:
+        handle.close()
+
+
+def _common_endpoint(explicit_instance, autostart):
+    manager = _instance_manager(explicit_instance)
+    status = manager.ensure_running() if autostart else manager.status()
+    if status.status != "ready":
+        raise FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped")
+    return str(manager.deps.paths.socket_path)
+
+
+def _instance_manager(explicit_instance):
+    identity = resolve_instance(explicit_instance, os.environ)
+    paths = derive_instance_paths(identity, sys.platform, _managed_state_home(), Path(tempfile.gettempdir()), os.getuid())
+    launcher = str(Path(__file__).resolve().parents[4] / "bin" / "codex-worker")
+    return InstanceManager(InstanceDeps(paths, launcher, "codex", _spawn_daemon, rpc_call, time.monotonic), identity)
+
+
+def _managed_facade(broker, runtime, registry, state_path):
+    from .facade import FacadeDeps, WorkerFacade
+    from .instance import load_managed_identity
+    from . import projection
+    identity = load_managed_identity(state_path)
+    if identity is None: return None
+    return WorkerFacade(FacadeDeps(identity, registry, broker, runtime, projection, time.monotonic))
 
 
 def _print_json(payload: JsonObject, pretty: bool) -> None:
