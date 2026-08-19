@@ -1,6 +1,6 @@
 # Codex worker command ergonomics — Design (anchor)
 
-**Date:** 2026-08-19 · **Status:** draft
+**Date:** 2026-08-19 · **Status:** approved for planning — autonomous handoff
 **Mode:** autonomous
 **Decision log:** ./2026-08-19-codex-worker-command-ergonomics-decisions.md
 **Companions:** ./2026-08-19-codex-worker-command-ergonomics-cli-surface.md;
@@ -196,9 +196,10 @@ while retaining the advanced event and raw-recovery escape hatch.
   after strict validation; at least one field is required. Replacing an objective may
   reset native usage exactly as Codex documents, and the response says so. `goal show`
   returns the native goal or typed absence. `history` pages `thread/turns/list` newest
-  first until it has the requested tail, then returns those turns chronologically with
-  native status and completion messages selected by D41's phase/fallback rule. `limits`
-  returns the full authoritative
+  first until it has the requested tail, then returns those turns chronologically. A
+  terminal history turn uses D41's explicit-final/fallback completion rule; an
+  `in_progress` turn labels returned narration `selection: live` and never applies a
+  terminal fallback. `limits` returns the full authoritative
   `account/rateLimits/read` payload, or typed `unavailable` for unsupported auth.
 - **Retention boundary:** `messages` is a bounded live convenience view and declares
   truncation. `history` is the durable read-back path after retained events roll off.
@@ -299,12 +300,13 @@ stranding raw recovery users or requiring nested script paths.
 - **Compatibility:** Keep `daemon serve/status/shutdown`, `model list`, `session
   start/resume/list/show`, and `turn start/status/wait/events/steer/interrupt`. The
   common surface adds `daemon stop` as the preferred spelling; legacy `shutdown`
-  remains advanced. Advanced clients accept at most one explicit endpoint override,
-  `--instance` or `--socket`; raw legacy environment/default-socket resolution remains
-  when neither is supplied in legacy mode. Explicit `--socket daemon status/shutdown`
-  preserves the existing wire response, while instance-selected `daemon status/stop`
-  uses the new response models. Existing `--state`, raw session/thread selectors, and
-  JSON-RPC methods retain their meaning.
+  remains advanced. Advanced model/session/turn clients accept at most one explicit
+  endpoint override, `--instance` or `--socket`, and retain legacy socket
+  environment/default resolution when neither is supplied. `daemon serve` and
+  `daemon shutdown` remain raw socket-only. `daemon status` is instance-mode unless
+  `--socket` is explicitly supplied, which preserves the existing wire response;
+  instance-selected `daemon status/stop` use the new models. Existing `--state`, raw
+  session/thread selectors, and JSON-RPC methods retain their meaning.
 - **Documentation:** Update `codex-worker.md`, model-selection examples, SDD worker
   dispatch guidance, top-level help, and every touched subcommand help in the same
   change. Common examples lead; advanced mechanics are a separate recovery appendix.
@@ -335,6 +337,14 @@ classDiagram
     registry_path: Path
     log_path: Path
   }
+  class InstanceView {
+    <<CLI response value>>
+    instance: str
+    source: InstanceSource
+    durable_dir: Path
+    socket_path: Path
+    log_path: Path
+  }
   class WorkerRecord {
     <<durable record — identity: instance + name>>
     name: str
@@ -353,6 +363,8 @@ classDiagram
     token_budget: int?
     tokens_used: int
     time_used_seconds: int
+    created_at: UpstreamTimestamp
+    updated_at: UpstreamTimestamp
   }
   class AgentMessage {
     <<upstream item — identity: item_id>>
@@ -366,6 +378,22 @@ classDiagram
     source: MetricSource
     availability: Availability
   }
+  class RecoveryView {
+    <<CLI response value>>
+    status: str
+    messages: str
+    interrupt: str
+    raw_resume: str?
+  }
+  class HistoryTurnView {
+    <<CLI response value>>
+    turn_id: str
+    status: TurnStatus
+    started_at: UpstreamTimestamp?
+    completed_at: UpstreamTimestamp?
+    messages: AgentMessage[]
+    error: JsonObject?
+  }
   class CompletionResponse {
     <<response model>>
     worker: WorkerRecord
@@ -373,7 +401,7 @@ classDiagram
     messages: AgentMessage[]
     structured_output: JsonValue?
     metrics: map[str, MetricEvidence]
-    recovery: RecoveryLinks
+    recovery: RecoveryView
   }
   class WorkerStatusResponse {
     <<CLI response — status>>
@@ -388,13 +416,16 @@ classDiagram
     worker: WorkerRecord
     messages: AgentMessage[]
     requested_tail: int
+    returned: int
     truncated: bool
+    latest_cursor: int?
   }
   class WorkerHistoryResponse {
     <<CLI response — history>>
     worker: WorkerRecord
     turns: HistoryTurnView[]
     requested_tail: int
+    returned: int
     older_available: bool
   }
   class ControlResponse {
@@ -417,16 +448,21 @@ classDiagram
   }
   class DaemonStatusResponse {
     <<CLI response — daemon status>>
-    instance: InstanceIdentity
+    instance: InstanceView
     status: DaemonStatus
     daemon_pid: int?
     codex_pid: int?
     worker_count: int
+    readiness: JsonObject?
+    last_error: JsonObject?
   }
   class DaemonStopResponse {
     <<CLI response — daemon stop>>
-    instance: InstanceIdentity
+    instance: InstanceView
+    status_before: DaemonStatus
     status_after: stopped
+    daemon_pid: int?
+    codex_pid: int?
     durable_state: preserved
     worker_count: int
   }
@@ -453,6 +489,8 @@ classDiagram
   class DaemonStopRequest { <<CLI request — daemon stop>> }
 
   InstanceIdentity --> InstancePaths
+  InstanceView --> InstanceIdentity
+  InstanceView --> InstancePaths
   WorkerRecord --> InstanceIdentity
   StartWorkerRequest --> InstanceIdentity
   StartWorkerRequest --> WorkerRecord
@@ -468,13 +506,15 @@ classDiagram
   CompletionResponse --> WorkerRecord
   CompletionResponse --> AgentMessage
   CompletionResponse --> MetricEvidence
+  CompletionResponse --> RecoveryView
   WorkerStatusResponse --> WorkerRecord
   WorkerMessagesResponse --> AgentMessage
   WorkerHistoryResponse --> AgentMessage
   ControlResponse --> WorkerRecord
   GoalResponse --> GoalState
-  DaemonStatusResponse --> InstanceIdentity
-  DaemonStopResponse --> InstanceIdentity
+  WorkerHistoryResponse --> HistoryTurnView
+  DaemonStatusResponse --> InstanceView
+  DaemonStopResponse --> InstanceView
   DaemonStatusRequest --> InstanceIdentity
   DaemonStopRequest --> InstanceIdentity
   LimitsRequest --> InstanceIdentity
@@ -573,7 +613,7 @@ implementation-facing distillation.
 |---|---|---|---|
 | D1–D2 | locked | Design the end-to-end CLI product, not a skill-only patch. | The measured failure spans packaging through completion; revisit if scope becomes documentation-only. |
 | D3 | superseded by D6 | Earlier explicit `daemon ensure`. | Environment-derived identity made it ceremony. |
-| D4 | locked | Independent daemon instances coexist. | Supports concurrent isolated sessions; revisit if native Codex supplies safe multi-tenancy. |
+| D4 | refined by D6 | Independent daemon instances coexist; message commands, not `ensure`, start/reuse them. | Supports concurrent isolated sessions; revisit if native Codex supplies safe multi-tenancy. |
 | D5 | refined by D9 | Claude session UUID derives default instance; durable files do not use Claude job storage. | Preserves inherited identity without harness-owned storage; revisit if Claude identity changes. |
 | D6 | refined by D18/D23 | Message commands own implicit lifecycle; diagnostics/control stay explicit and non-destructive. | Removes setup ceremony; revisit if implicit startup cannot stay legible and safe. |
 | D7 | superseded by D23 | Earlier create-or-continue `run`. | Split creation from continuation to prevent drift. |
@@ -599,7 +639,7 @@ implementation-facing distillation.
 | D40 | locked | Use strict frozen stdlib seam models as a scoped dependency-free exception. | Plugin install has no Python dependency mechanism; revisit if one is added. |
 | D41 | locked | Prefer explicit final phases; otherwise select the last agent message as a visible terminal fallback. | Phase is protocol-nullable; revisit if upstream makes it reliable. |
 | D42 | locked | Worker keys are shell-safe 1–128 character tokens. | Makes validation and registry identity exact; revisit by adding a separate label if needed. |
-| D43 | locked | Advanced clients explicitly select instance or socket; socket daemon status/shutdown retain legacy responses. | Preserves compatibility while reaching managed instances; revisit in a major raw-surface removal. |
+| D43 | locked | Advanced model/session/turn accept instance or socket overrides and otherwise retain legacy socket defaults; daemon serve/shutdown stay raw, while status is dual-mode. | Preserves compatibility while reaching managed instances; revisit in a major raw-surface removal. |
 | D44 | locked | Map full/read-only at both thread sandbox and turn sandboxPolicy seams. | Current protocol uses two encodings; revisit if upstream unifies them. |
 
 ## 7. Assumptions & open questions
@@ -655,7 +695,7 @@ handled as typed unavailability rather than an assumption of support.
 | AH9 | Every common client path emits one JSON object, and name, timeout, model, startup, and malformed-state refusals preserve state and name the next safe action. | UC9 / R3, R11, R13 | fast + slow | |
 | AH10 | All explicit final agent messages are returned in order; a protocol-valid null phase still yields a visibly marked terminal fallback; requested structured verdict/report/review fields come only from schema-mode JSON; every metric states its source or unavailability. | UC1, UC6 / R3 | fast + slow | |
 | AH11 | Missing or zero-byte first-use state initializes atomically and owner-only, while non-empty malformed state remains unchanged. | UC9 / R11 | fast | |
-| AH12 | Existing model/session/turn/raw-thread recovery workflows retain their meaning and the public launcher works from outside the repository. | UC10 / R12, R13 | fast + slow | |
+| AH12 | Existing model/session/turn/raw-thread recovery workflows, including explicit-socket daemon status/shutdown responses, retain their meaning and the public launcher works from outside the repository. | UC10 / R12, R13 | fast + slow | |
 
 ## 10. Drift protocol
 

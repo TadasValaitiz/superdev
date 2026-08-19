@@ -1,4 +1,4 @@
-# Codex worker command ergonomics — CLI Surface (status: draft)
+# Codex worker command ergonomics — CLI Surface (status: approved for planning — autonomous handoff)
 
 **Design doc:** ./2026-08-19-codex-worker-command-ergonomics-design.md ·
 **Decision log:** ./2026-08-19-codex-worker-command-ergonomics-decisions.md
@@ -12,17 +12,18 @@ validation failure. `--pretty` changes whitespace only.
 
 | Argument | Meaning | Scope |
 |---|---|---|
-| `--instance <id>` | Explicit daemon-instance identity; highest-precedence selector. | Common and advanced client commands; optional. |
+| `--instance <id>` | Explicit daemon-instance identity; highest-precedence selector where supported. | Common commands, advanced model/session/turn, and instance-mode daemon status; invalid for raw daemon serve/shutdown. |
 | `--pretty` | Indent the one JSON stdout object. | All client commands; invalid with foreground `daemon serve`. |
 | `--socket <absolute-path>` | Explicit raw RPC endpoint. Mutually exclusive with `--instance`; not accepted by common façade commands. | Advanced compatibility commands only. |
 | `-h`, `--help` | Render help and exit without a JSON client result. | Every parser level. |
 
 Common-command instance precedence is `--instance`, `CODEX_WORKER_INSTANCE`,
 `CLAUDE_CODE_SESSION_ID`, user-local `default`. Advanced model/session/turn clients use
-an explicit `--socket` first, then explicit `--instance`, then the legacy
-`SUPERDEV_CODEX_WORKER_SOCKET` when set, then the common instance precedence. Explicit
-socket-selected daemon status/shutdown are the legacy wire mode. `CLAUDE_EFFORT` and all
-other Claude variables do not configure model, effort, access, cwd, or lifecycle.
+an explicit `--socket` or `--instance`; with neither, they retain
+`SUPERDEV_CODEX_WORKER_SOCKET` or the legacy user-temp socket default. Raw daemon serve
+and shutdown are socket-only. Daemon status uses instance mode unless `--socket` is
+explicitly present, which selects the legacy wire mode. `CLAUDE_EFFORT` and all other
+Claude variables do not configure model, effort, access, cwd, or lifecycle.
 
 `<worker-name>` means the exact 1–128 character token
 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. It is compared case-sensitively and never used as a
@@ -50,6 +51,10 @@ synchronous because the harness already owns parallel process scheduling (D13, D
 
 The prompt has two input spellings but one request field. Output schema and timeout are
 per-turn/per-wait controls, so they remain legal on `run`; worker policy does not.
+At the adapter edge, full/read-only become thread `sandbox` values
+`danger-full-access`/`read-only` on create or resume, and turn `sandboxPolicy` objects
+`{type: dangerFullAccess}`/`{type: readOnly, networkAccess: false}` on every message.
+Only thread creation sends `allowProviderModelFallback: false`.
 
 ### 1c. Completion response
 
@@ -233,13 +238,13 @@ documentation change.
 |---|---|
 | `WorkerView` | `instance: str`; `name: worker-name`; `session_id: uuid`; `thread_id: str`; `cwd: absolute-path`; `tier: medium\|very-smart\|null` (null for raw model); `model: str`; `effort: str`; `access: full\|read_only`. |
 | `TurnView` | `turn_id: str`; `status: in_progress\|completed\|failed\|interrupted`; `error: object\|null` copied from authoritative turn state. |
-| `AgentMessageView` | `type: "agent_message"`; `item_id: str`; `phase: commentary\|final_answer\|null`; `selection: explicit_final\|terminal_fallback\|live`; `text: str`. Completion/history use explicit-final-or-fallback selection; live messages use `live`. |
+| `AgentMessageView` | `type: "agent_message"`; `item_id: str`; `phase: commentary\|final_answer\|null`; `selection: explicit_final\|terminal_fallback\|live`; `text: str`. Terminal completion and terminal history use explicit-final-or-fallback selection; `messages` and in-progress history use `live`. |
 | `MetricEvidence` | `value: JSON\|null`; `source: str`; `availability: measured\|reported\|derived\|unavailable`. |
 | `CompletionResponse` | `worker: WorkerView`; `turn: TurnView`; `messages: AgentMessageView[]`; `structured_output: JSON\|null`; `metrics: object[str, MetricEvidence]`; `recovery: RecoveryView`. |
 | `RecoveryView` | `status: command-str`; `messages: command-str`; `interrupt: command-str`; optional `raw_resume: command-str\|null`. Commands include shell quoting appropriate to the validated worker/ID token. |
 | `WorkerStatusResponse` | `worker: WorkerView`; `daemon_status: ready`; `attached: bool`; `active_turn_id: str\|null`; `latest_turn: TurnView\|null`. A stopped daemon is an error, not a fabricated worker status. |
 | `WorkerMessagesResponse` | `worker: WorkerView`; `messages: AgentMessageView[]`; `requested_tail: positive-int`; `returned: nonnegative-int`; `truncated: bool`; `latest_cursor: nonnegative-int\|null`. |
-| `HistoryTurnView` | `turn_id: str`; `status: in_progress\|completed\|failed\|interrupted`; `started_at: upstream-timestamp\|null`; `completed_at: upstream-timestamp\|null`; `messages: AgentMessageView[]`; `error: object\|null`. |
+| `HistoryTurnView` | `turn_id: str`; `status: in_progress\|completed\|failed\|interrupted`; `started_at: upstream-timestamp\|null`; `completed_at: upstream-timestamp\|null`; `messages: AgentMessageView[]`; `error: object\|null`. Terminal turns apply explicit-final-or-fallback selection; in-progress turns return available narration as `live` and never infer a terminal message. |
 | `WorkerHistoryResponse` | `worker: WorkerView`; `turns: HistoryTurnView[]` chronological; `requested_tail: positive-int`; `returned: nonnegative-int`; `older_available: bool`. |
 | `ControlResponse` | `worker: WorkerView`; `action: steer\|interrupt`; `accepted: true`; `turn_id: str`; `status: in_progress\|interrupted`. Idle/race refusal uses `RpcErrorData`. |
 | `GoalView` | `thread_id: str`; `objective: str`; `status: active\|paused\|blocked\|usageLimited\|budgetLimited\|complete`; `token_budget: int\|null`; `tokens_used: nonnegative-int`; `time_used_seconds: nonnegative-int`; `created_at: upstream-timestamp`; `updated_at: upstream-timestamp`. |

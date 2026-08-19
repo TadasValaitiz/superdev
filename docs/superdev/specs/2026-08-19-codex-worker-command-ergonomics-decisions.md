@@ -75,7 +75,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ## D4 — Treat daemons as independent instances, not one global singleton
 **When:** 2026-08-19T13:04:53Z · **Phase:** brainstorm ·
-**Status:** locked
+**Status:** refined-by D6
 **Decided by:** Tadas
 
 - **Trigger:** Configuration-mismatch handling assumed one daemon at one global
@@ -87,9 +87,10 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: independent daemon instances resolved from the requested configuration — gains
     concurrency and makes lifecycle bookkeeping a CLI responsibility / requires a
     stable instance handle and instance registry.
-- **Decided:** Take option B. Claude Code passes what a worker pool needs; `daemon
-  ensure` reuses or starts the matching independent instance and returns its handle.
-  Differently configured daemons coexist and are never silently replaced.
+- **Decided:** Take option B. Claude Code passes what a worker pool needs; differently
+  configured daemons coexist and are never silently replaced. D6 later removes the
+  explicit `daemon ensure` spelling and assigns matching-instance start/reuse to
+  `start`/`run` internally.
 - **Rests on:** Direct operator clarification and the established need for parallel,
   worktree-isolated worker roles.
 - **Affects:** instance identity, daemon discovery, configuration, cleanup targeting,
@@ -973,9 +974,11 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - C: select all explicit final-answer messages when present; otherwise select the last
     completed agent message as `terminal_fallback` while preserving its null/unknown
     phase — gains protocol compatibility with a visible fallback rule.
-- **Decided:** Take option C for live completion and durable history. Schema mode decodes
-  the last selected completion message. Only a terminal turn with no agent message at
-  all is `incomplete_completion`.
+- **Decided:** Take option C for terminal completion and terminal turns in durable
+  history. An `in_progress` history turn labels its returned narration `live` and never
+  applies terminal fallback. Schema mode decodes the last selected terminal completion
+  message. Only a terminal turn with no agent message at all is
+  `incomplete_completion`.
 - **Rests on:** Generated Codex 0.147.0 `AgentMessageThreadItem.phase` schema.
 - **Affects:** completion/history projection, result fields, schema decoding, metrics,
   and acceptance evidence.
@@ -1017,8 +1020,12 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
     advanced clients, retain legacy environment/default-socket behavior when neither is
     supplied in legacy mode, and let explicit `--socket daemon status/shutdown` keep the
     old wire response while instance-selected status/stop use new models.
-- **Decided:** Take option C. Every advanced CLI row lists both selectors explicitly;
-  common commands reject `--socket`.
+- **Decided:** Take option C with explicit command-specific exceptions. Advanced
+  model/session/turn clients accept `--instance` or `--socket`; when neither is supplied
+  they retain legacy socket environment/default resolution. `daemon serve` and
+  `daemon shutdown` remain raw socket-only. `daemon status` is instance-mode unless
+  `--socket` is explicitly present, which selects the legacy response. Common worker,
+  goal, limits, and stop commands reject `--socket`.
 - **Rests on:** R12, D34, D38, and the existing global socket contract.
 - **Affects:** parser dispatch, exhaustive CLI tables, daemon dual-mode status,
   environment precedence, response models, and regression tests.
@@ -1036,9 +1043,9 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: map `full` to thread `danger-full-access` and turn
     `{type: dangerFullAccess}`, and map `read_only` to thread `read-only` and turn
     `{type: readOnly, networkAccess: false}` — gains exact, testable enforcement.
-- **Decided:** Take option B. Thread creation/resume also sets
-  `allowProviderModelFallback: false`; turn start resends the persisted policy so sticky
-  upstream configuration cannot drift.
+- **Decided:** Take option B. Thread creation alone also sets
+  `allowProviderModelFallback: false` (the field does not exist on resume); turn start
+  resends the persisted policy so sticky upstream configuration cannot drift.
 - **Rests on:** Local generated Codex 0.147.0 `SandboxMode`, `SandboxPolicy`,
   `ThreadStartParams`, `ThreadResumeParams`, and `TurnStartParams` schemas.
 - **Affects:** app-server adapter, worker start/resume/run, access metadata, and
