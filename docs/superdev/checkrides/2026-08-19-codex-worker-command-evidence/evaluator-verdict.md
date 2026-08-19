@@ -1,8 +1,8 @@
 # Codex worker command checkride evaluator verdict
 
-Date: 2026-08-20  
-Historical candidate: `e5e8c8ac29117c92bfe92b4376fddfe3c4d5586c`  
-Fix candidate: `ffa24e7` (includes product fix `7d356e2`)  
+Date: 2026-08-20
+Historical candidate: `e5e8c8ac29117c92b4376fddfe3c4d5586c`
+Fix candidate: `ffa24e7` (includes product fix `7d356e2`)
 Role: CHECKRIDE EVALUATOR (judgment only; no product edits)
 
 Evidence reviewed:

@@ -1,8 +1,8 @@
 # Codex worker command executor transcript
 
-Date: 2026-08-19  
-Historical ride SHA: `e5e8c8ac29117c92bfe92b4376fddfe3c4d5586c` (`e5e8c8a`)  
-Focused re-ride fix SHA: `ffa24e7e6652f5d218811d4707748aa8bc84fc36` (`ffa24e7`)  
+Date: 2026-08-19
+Historical ride SHA: `e5e8c8ac29117c92bfe92b4376fddfe3c4d5586c` (`e5e8c8a`)
+Focused re-ride fix SHA: `ffa24e7e6652f5d218811d4707748aa8bc84fc36` (`ffa24e7`)
 Substrate/tier: **MEASURED** real local Codex provider (`codex-cli 0.147.0`), isolated checkride instances `checkride-a9f3` and `env-a9f3`, and `/tmp/codex-worker-checkride-20260819-a9f3/cwd`. Prompts and files below are tiny checkride tasks, not market data. PATH resolves `codex-worker` to this worktree's `bin/codex-worker`. No credential values are recorded.
 
 Capture convention: each section is one public client invocation. `stdout/stderr` is the complete verbatim combined terminal capture supplied by the executor; success JSON is stdout, and argparse usage preceding an error JSON is stderr. No diagnostics were omitted.
@@ -194,9 +194,9 @@ exit 0
 
 ## Executor summary
 
-Commands ridden: 39 (happy 28; refusal 11).  
-NOT RUN: none.  
-Unexpected errors: none recorded by the executor.  
+Commands ridden: 39 (happy 28; refusal 11).
+NOT RUN: none.
+Unexpected errors: none recorded by the executor.
 Reconstruction IDs/paths: main instance `checkride-a9f3`; environment instance `env-a9f3`; main master session `414b9f03-89e6-4bbc-82ea-d9d95d867eb1`, thread `01a01bc9-9eaf-7441-8672-cb04c35139e7`; raw session `18b71c46-7037-4486-a402-379faaffc377`, thread `01a01bcb-a39a-7db3-9b46-5e101064fc05`; temporary cwd `/tmp/codex-worker-checkride-20260819-a9f3/cwd`; main durable directory and socket are recorded in sections 1 and 10. Both managed runtimes were stopped non-destructively; durable state was preserved.
 
 ## Focused re-ride after `ffa24e7`
