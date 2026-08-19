@@ -65,6 +65,27 @@ class LifecycleTests(unittest.TestCase):
         endpoint.close()
         os.chmod(self.paths.socket_path, 0o600)
 
+    def _assert_start_fault(self, fault, reason, cause=None, offending_path=None):
+        path = self.paths.socket_path if offending_path is None else offending_path
+        self.assertEqual(fault.code, instance_module.FacadeFaultCode.DAEMON_START_FAILED)
+        self.assertEqual(fault.kind, "daemon_start_failed")
+        self.assertEqual(fault.details, {
+            "reason": reason,
+            "cause": cause,
+            "socket_path": str(self.paths.socket_path),
+            "offending_path": str(path),
+            "log_path": str(self.paths.log_path),
+            "durable_state": "preserved",
+        })
+        self.assertEqual(fault.known_ids, {
+            "instance": self.identity.value, "name": None, "session_id": None,
+            "thread_id": None, "turn_id": None,
+        })
+        self.assertEqual(len(fault.next_actions), 3)
+        self.assertIn("daemon status", fault.next_actions[0]["command"])
+        self.assertIn(str(path), fault.next_actions[1]["command"])
+        self.assertIn(str(self.paths.log_path), fault.next_actions[2]["command"])
+
     def test_concurrent_start_spawns_once_and_writes_verified_metadata(self):
         results = []
         threads = [threading.Thread(target=lambda: results.append(self.manager.ensure_running())) for _ in range(5)]
@@ -122,9 +143,30 @@ class LifecycleTests(unittest.TestCase):
                                                 lambda: clock[0], lambda _: clock.__setitem__(0, clock[0] + 3)), self.identity)
         with self.assertRaises(Exception) as caught:
             manager.ensure_running()
-        self.assertEqual(caught.exception.kind, "daemon_start_failed")
-        self.assertEqual(caught.exception.details["reason"], "readiness_timeout")
-        self.assertEqual(caught.exception.details["log_path"], str(self.paths.log_path))
+        self._assert_start_fault(caught.exception, "readiness_timeout")
+
+    def test_spawn_failure_has_complete_managed_start_contract(self):
+        def spawn(argv, log_path):
+            raise OSError("spawn denied")
+
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", spawn,
+            lambda *args: (_ for _ in ()).throw(OSError("absent")), lambda: 0.0,
+        ), self.identity)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running()
+        self._assert_start_fault(caught.exception, "spawn_failed", {
+            "type": "OSError", "message": "spawn denied",
+        })
+
+    def test_child_early_exit_has_complete_managed_start_contract(self):
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", lambda *args: Process(running=False),
+            lambda *args: (_ for _ in ()).throw(OSError("absent")), lambda: 0.0,
+        ), self.identity)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running()
+        self._assert_start_fault(caught.exception, "child_exited")
 
     def test_stop_retains_metadata_when_reported_pid_is_alive(self):
         self.manager.ensure_running()
@@ -239,7 +281,7 @@ class LifecycleTests(unittest.TestCase):
         endpoint.listen(1)
         with self.assertRaises(instance_module.FacadeFault) as caught:
             self.manager.ensure_running()
-        self.assertEqual(caught.exception.details["reason"], "socket_peer_active")
+        self._assert_start_fault(caught.exception, "socket_peer_active")
         self.assertTrue(self.paths.socket_path.exists())
         self.assertEqual(self.spawns, [])
 

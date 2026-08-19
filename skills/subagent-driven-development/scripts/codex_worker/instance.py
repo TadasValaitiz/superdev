@@ -357,32 +357,61 @@ class InstanceManager:
         return [self.deps.launcher, "--socket", str(paths.socket_path), "daemon", "serve",
                 "--state", str(paths.registry_path), "--codex-bin", self.deps.codex_bin]
 
+    @staticmethod
+    def _cause(exc: BaseException) -> dict:
+        return {"type": type(exc).__name__, "message": str(exc)}
+
+    def _start_fault(self, reason: str, offending_path: Optional[Path] = None,
+                     cause: Optional[dict] = None, retryable: bool = False) -> FacadeFault:
+        paths = self.deps.paths
+        path = paths.socket_path if offending_path is None else Path(offending_path)
+        selected = shlex.quote(self.identity.value)
+        return FacadeFault(
+            FacadeFaultCode.DAEMON_START_FAILED,
+            "Codex worker daemon could not be started safely",
+            "daemon_start_failed",
+            retryable=retryable,
+            details={
+                "reason": reason,
+                "cause": cause,
+                "socket_path": str(paths.socket_path),
+                "offending_path": str(path),
+                "log_path": str(paths.log_path),
+                "durable_state": "preserved",
+            },
+            known_ids={"instance": self.identity.value, "name": None,
+                       "session_id": None, "thread_id": None, "turn_id": None},
+            next_actions=[
+                {"command": "codex-worker --instance %s daemon status" % selected,
+                 "reason": "Inspect the selected managed instance"},
+                {"command": "/bin/ls -ld %s" % shlex.quote(str(path)),
+                 "reason": "Inspect the runtime path without changing it"},
+                {"command": "/usr/bin/tail -n 100 %s" % shlex.quote(str(paths.log_path)),
+                 "reason": "Inspect the daemon log without changing it"},
+            ],
+        )
+
     def ensure_running(self) -> DaemonStatusResponse:
         try:
             return self._ensure_running()
-        except FacadeFault:
-            raise
+        except FacadeFault as exc:
+            if exc.code != FacadeFaultCode.DAEMON_START_FAILED:
+                raise
+            details = exc.details if isinstance(exc.details, dict) else {}
+            path = details.get("offending_path", details.get("socket_path"))
+            raise self._start_fault(
+                details.get("reason", "startup_failed"),
+                Path(path) if isinstance(path, str) else self.deps.paths.socket_path,
+                details.get("cause") if isinstance(details.get("cause"), dict) else None,
+                exc.retryable,
+            ) from exc
         except (UnsafePathError, OSError) as exc:
             offending_path = getattr(
                 exc, "path", getattr(exc, "filename", None) or self.deps.paths.lock_path,
             )
             reason = getattr(exc, "reason", type(exc).__name__)
-            raise FacadeFault(
-                FacadeFaultCode.DAEMON_START_FAILED,
-                "Codex worker daemon could not be started safely",
-                "daemon_start_failed",
-                details={"reason": reason, "offending_path": str(offending_path),
-                         "log_path": str(self.deps.paths.log_path),
-                         "durable_state": "preserved"},
-                known_ids={"instance": self.identity.value, "name": None,
-                           "session_id": None, "thread_id": None, "turn_id": None},
-                next_actions=[
-                    {"command": "codex-worker --instance %s daemon status" % shlex.quote(self.identity.value),
-                     "reason": "Inspect the selected managed instance"},
-                    {"command": "ls -ld %s" % shlex.quote(str(offending_path)),
-                     "reason": "Inspect ownership and permissions without changing state"},
-                ],
-            ) from exc
+            cause = None if isinstance(exc, UnsafePathError) else self._cause(exc)
+            raise self._start_fault(reason, Path(offending_path), cause) from exc
 
     def _ensure_running(self) -> DaemonStatusResponse:
         with acquire_start_lock(self.deps.paths.lock_path):
@@ -401,9 +430,7 @@ class InstanceManager:
             try:
                 process = self.deps.spawn(self._serve_argv(), str(self.deps.paths.log_path))
             except Exception as exc:
-                raise FacadeFault(FacadeFaultCode.DAEMON_START_FAILED, "Codex worker daemon failed to start",
-                                  "daemon_start_failed", details={"log_path": str(self.deps.paths.log_path),
-                                                                  "reason": type(exc).__name__}) from exc
+                raise self._start_fault("spawn_failed", cause=self._cause(exc)) from exc
             deadline = self.deps.monotonic() + 2.0
             while True:
                 ready = self._probe()
@@ -414,9 +441,7 @@ class InstanceManager:
                 if self.deps.monotonic() >= deadline:
                     reason = "readiness_timeout"; break
                 self.deps.wait(0.01)
-            raise FacadeFault(FacadeFaultCode.DAEMON_START_FAILED, "Codex worker daemon did not become ready",
-                              "daemon_start_failed", True, details={"log_path": str(self.deps.paths.log_path),
-                                                                     "reason": reason})
+            raise self._start_fault(reason, retryable=True)
 
     def stop(self) -> DaemonStopResponse:
         if (not _safe_nearest_ancestor(self.deps.paths.durable_dir)

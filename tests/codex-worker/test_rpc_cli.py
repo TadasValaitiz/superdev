@@ -976,9 +976,18 @@ class CliTests(unittest.TestCase):
         finally:
             cli._instance_manager = original
         payload = self.assert_json_error(completed, 1, "daemon_start_failed")
-        self.assertEqual(payload["error"]["data"]["known_ids"]["instance"], identity.value)
-        self.assertEqual(payload["error"]["data"]["details"]["offending_path"],
-                         str(paths.lock_path))
+        data = payload["error"]["data"]
+        self.assertEqual(data["known_ids"], {
+            "instance": identity.value, "name": None, "session_id": None,
+            "thread_id": None, "turn_id": None,
+        })
+        self.assertEqual(data["details"], {
+            "reason": "unsafe_start_lock", "cause": None,
+            "socket_path": str(paths.socket_path),
+            "offending_path": str(paths.lock_path),
+            "log_path": str(paths.log_path), "durable_state": "preserved",
+        })
+        self.assertEqual(len(data["next_actions"]), 3)
         self.assertNotIn("Traceback", completed.stderr)
 
     def test_pretty_is_rejected_for_foreground_serve(self):

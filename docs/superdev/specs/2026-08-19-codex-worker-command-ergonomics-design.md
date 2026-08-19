@@ -113,8 +113,9 @@ into one safe local runtime while hiding transport bookkeeping.
   recheck readiness under that lock, spawn one detached daemon if needed, and wait for
   a health handshake rather than sleeping. Five racing callers converge on that one
   daemon. A stale PID is evidence only; socket ownership, peer health, and process
-  identity determine reuse. Startup failure returns the selected instance, offending
-  path, log path, cause, and safe inspection actions as one typed refusal. Runtime
+  identity determine reuse. Every managed startup failure returns the selected
+  instance, socket and offending paths, log path, reason/cause, preserved durable-state
+  claim, and safe read-only inspection actions as one typed refusal. Runtime
   endpoints use an 80-bit identity hash in a compact owner-only directory so distinct
   durable identities cannot alias while macOS AF_UNIX paths remain short. Legacy
   six-hex runtime endpoints are left untouched and are not reused; a later invocation

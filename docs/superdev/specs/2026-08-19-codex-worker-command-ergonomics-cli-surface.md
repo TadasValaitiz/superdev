@@ -359,7 +359,7 @@ rolled back. Preserve the reported IDs and log/state paths.
 | `-32021` | `worker_name_exists` | `start` name already exists in selected instance. | Use `run --name <name>` or choose a new unique name. |
 | `-32022` | `worker_not_found` | Name absent for continuation/observation/control. | Use `start --name <name>` or select the right instance. |
 | `-32023` | `daemon_stopped` | A non-autostart command selected an inactive runtime. | Use `start`/`run` to restart, or stop if observation was unintended. |
-| `-32024` | `daemon_start_failed` | Implicit startup failed readiness or refused unsafe runtime/lock state. | Inspect the returned selected instance, offending path when present, log path, cause, and safe actions; no arbitrary sleep retry. |
+| `-32024` | `daemon_start_failed` | Implicit startup failed readiness or refused unsafe runtime/lock state. | Inspect the returned selected instance, socket/offending paths, log path, reason/cause, preserved-state claim, and safe read-only actions; no arbitrary sleep retry. |
 | `-32030` | `daemon_stop_failed` | Graceful stop did not terminate every reported process before its bounded deadline. | Inspect returned PIDs/status, then retry stop; durable state and verified runtime markers were preserved. |
 | `-32025` | `timeout_active` | Local wait expired while turn remains active. | Use returned status/messages/interrupt commands. |
 | `-32004` | `turn_active` | A new `start`/`run` turn was refused because the named worker already has active work. | Use returned status/messages/steer/interrupt commands; do not assume the existing turn stopped. |
