@@ -69,22 +69,52 @@ class NativeCodexProxy:
         if not isinstance(result, dict):
             raise CodexCallError("protocol_error", method, {"message": "result must be an object"})
         return result
+    @staticmethod
+    def _protocol(method: str, message: str) -> None:
+        raise CodexCallError("protocol_error", method, {"message": message})
+    def _goal(self, method: str, result: JsonObject, allow_absent: bool) -> JsonObject:
+        if set(result) != {"goal"}:
+            self._protocol(method, "unexpected goal response fields")
+        goal = result["goal"]
+        if goal is None and allow_absent:
+            return result
+        required = {"threadId", "objective", "status", "tokenBudget", "tokensUsed", "timeUsedSeconds", "createdAt", "updatedAt"}
+        if not isinstance(goal, dict) or set(goal) != required:
+            self._protocol(method, "malformed goal")
+        if (not all(isinstance(goal[key], str) and goal[key] for key in ("threadId", "objective", "createdAt", "updatedAt"))
+                or goal["status"] not in ("active", "paused", "blocked", "usageLimited", "budgetLimited", "complete")
+                or (goal["tokenBudget"] is not None and (type(goal["tokenBudget"]) is not int or goal["tokenBudget"] <= 0))
+                or any(type(goal[key]) is not int or goal[key] < 0 for key in ("tokensUsed", "timeUsedSeconds"))):
+            self._protocol(method, "malformed goal fields")
+        return result
     def goal_set(self, thread_id: str, objective: Optional[str] = None, status: Optional[str] = None,
                  token_budget: Optional[int] = None) -> JsonObject:
         params = {"threadId": thread_id}
         if objective is not None: params["objective"] = objective
         if status is not None: params["status"] = status
         if token_budget is not None: params["tokenBudget"] = token_budget
-        return self._call("thread/goal/set", params)
+        return self._goal("thread/goal/set", self._call("thread/goal/set", params), False)
     def goal_get(self, thread_id: str) -> JsonObject:
-        return self._call("thread/goal/get", {"threadId": thread_id})
+        return self._goal("thread/goal/get", self._call("thread/goal/get", {"threadId": thread_id}), True)
     def turns_list(self, thread_id: str, cursor: Optional[str] = None, limit: Optional[int] = None) -> JsonObject:
         params = {"threadId": thread_id, "sortDirection": "desc", "itemsView": "full"}
         if cursor is not None: params["cursor"] = cursor
         if limit is not None: params["limit"] = limit
-        return self._call("thread/turns/list", params)
+        result = self._call("thread/turns/list", params)
+        if set(result) != {"turns", "nextCursor"} or not isinstance(result["turns"], list) or result["nextCursor"] is not None and not isinstance(result["nextCursor"], str):
+            self._protocol("thread/turns/list", "malformed turn page")
+        from .projection import project_history_turn
+        for turn in result["turns"]:
+            try:
+                project_history_turn(turn)
+            except ValueError as exc:
+                self._protocol("thread/turns/list", str(exc))
+        return result
     def rate_limits_read(self) -> JsonObject:
-        return self._call("account/rateLimits/read", {})
+        result = self._call("account/rateLimits/read", {})
+        if set(result) != {"rateLimits"} or not isinstance(result["rateLimits"], dict):
+            self._protocol("account/rateLimits/read", "malformed rate limits")
+        return result
 
 
 def _fault(code: int, message: str, kind: str,

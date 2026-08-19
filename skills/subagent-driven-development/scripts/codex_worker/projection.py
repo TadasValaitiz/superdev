@@ -5,7 +5,8 @@ from typing import Dict, List, Optional, Sequence
 
 from .commands import (
     AgentMessageView, CompletionResponse, CompletionSelection, HistoryTurnView,
-    MetricAvailability, MetricEvidence, RecoveryView, TurnView, WorkerView,
+    FacadeFault, FacadeFaultCode, MetricAvailability, MetricEvidence, RecoveryView,
+    TurnView, WorkerView,
 )
 from .models import ItemRecord, TurnSnapshot
 
@@ -55,18 +56,29 @@ def derive_metrics(items: Sequence[ItemRecord], duration_seconds: float) -> Dict
     return metrics
 
 
+def _incomplete(turn_id: str, messages: Sequence[AgentMessageView], reason: str) -> FacadeFault:
+    return FacadeFault(FacadeFaultCode.INCOMPLETE_COMPLETION, "Codex completion is incomplete",
+                       "incomplete_completion", details={
+                           "turn_id": turn_id,
+                           "messages": [message.to_dict() for message in messages],
+                           "parse_reason": reason,
+                       })
+
+
 def project_completion(worker: WorkerView, turn: TurnSnapshot, output_schema: Optional[dict],
                        duration_seconds: float, recovery: Optional[RecoveryView] = None) -> CompletionResponse:
     terminal = turn.status != "in_progress"
     messages = select_completion_messages(turn.items, terminal)
     structured_output = None
+    if turn.status == "completed" and not messages:
+        raise _incomplete(turn.turn_id, messages, "no_agent_message")
     if output_schema is not None:
         if not messages:
-            raise ValueError("incomplete completion: no agent message for schema output")
+            raise _incomplete(turn.turn_id, messages, "no_agent_message")
         try:
             structured_output = json.loads(messages[-1].text)
         except (TypeError, ValueError) as exc:
-            raise ValueError("incomplete completion: schema output is not JSON") from exc
+            raise _incomplete(turn.turn_id, messages, "invalid_json") from exc
     error = turn.error.to_dict() if turn.error else None
     if recovery is None:
         recovery = RecoveryView("status", "messages", "interrupt")
@@ -75,13 +87,22 @@ def project_completion(worker: WorkerView, turn: TurnSnapshot, output_schema: Op
 
 
 def project_history_turn(turn: dict) -> HistoryTurnView:
-    if not isinstance(turn, dict) or not isinstance(turn.get("id"), str) or not isinstance(turn.get("status"), str):
+    if (not isinstance(turn, dict) or not isinstance(turn.get("id"), str)
+            or turn.get("status") not in ("inProgress", "completed", "failed", "interrupted")):
         raise ValueError("malformed Codex history turn")
     items = turn.get("items", [])
     if not isinstance(items, list):
         raise ValueError("malformed Codex history items")
-    records = [ItemRecord(item["id"], item["type"], {k: v for k, v in item.items() if k not in ("id", "type")})
-               for item in items if isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("type"), str)]
+    records = []
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"] or not isinstance(item.get("type"), str) or not item["type"]:
+            raise ValueError("malformed Codex history item")
+        records.append(ItemRecord(item["id"], item["type"], {key: value for key, value in item.items() if key not in ("id", "type")}))
+    for field in ("startedAt", "completedAt"):
+        if field in turn and turn[field] is not None and not isinstance(turn[field], str):
+            raise ValueError("malformed Codex history timestamp")
+    if turn.get("error") is not None and not isinstance(turn.get("error"), dict):
+        raise ValueError("malformed Codex history error")
     terminal = turn["status"] != "inProgress"
     status = "in_progress" if turn["status"] == "inProgress" else turn["status"]
     error = turn.get("error") if isinstance(turn.get("error"), dict) else None

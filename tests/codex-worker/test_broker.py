@@ -145,6 +145,15 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(self.codex.turn_start_calls[-1]["sandboxPolicy"], {"type": "readOnly", "networkAccess": False})
         self.assertEqual(self.codex.turn_start_calls[-1]["outputSchema"], {"type": "object"})
 
+    def test_native_proxy_rejects_malformed_provider_result(self):
+        from codex_worker.broker import NativeCodexProxy
+        class Raw:
+            def call(self, method, params):
+                return {"unexpected": True}
+        with self.assertRaises(CodexCallError) as caught:
+            NativeCodexProxy(Raw()).rate_limits_read()
+        self.assertEqual(caught.exception.kind, "protocol_error")
+
     def tearDown(self):
         self.tempdir.cleanup()
 
