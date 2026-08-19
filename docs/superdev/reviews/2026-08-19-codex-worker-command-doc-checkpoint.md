@@ -62,7 +62,18 @@ WORKFLOW YOU WOULD USE:
 
 ### Re-review 2
 
-Pending controller verdict.
+```text
+VERDICT: PASS
+FINDINGS:
+- No Critical/Important findings. The checkpoint preserves both prior responses in full, including verdicts, findings, and workflows, and provides a distinct Re-review 2 slot. Cite: `docs/superdev/reviews/2026-08-19-codex-worker-command-doc-checkpoint.md:29-81`.
+- No Critical/Important findings. Fan-out remains explicitly distinct-worktree and concurrent; timeout/restart recovery still requires a terminal prior turn before `run`. Cite: `skills/subagent-driven-development/codex-worker.md:54-67`, `:89-95`.
+
+WORKFLOW YOU WOULD USE:
+- Launch each worker concurrently in its assigned worktree with a unique role-plus-suffix name.
+- Inspect named status/messages/history; steer active work or interrupt only to cancel.
+- After timeout or restart, wait for terminal status/history before `run`.
+- Use `daemon stop` for non-destructive shutdown; a later `run` continues the preserved worker.
+```
 
 ## Reviewer B — model/access/native-Claude boundaries
 
