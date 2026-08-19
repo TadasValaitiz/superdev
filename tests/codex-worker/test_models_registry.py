@@ -74,6 +74,17 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["sessions"][0]["model"], "legacy-model")
 
+    def test_common_policy_allows_raw_model_tier_but_requires_access(self):
+        registry = SessionRegistry(self.state_path)
+        tiered = registry.create_worker("thr-tiered", self.cwd, "tiered", "medium",
+                                        "gpt-5.6-terra", "medium", "full")
+        raw = registry.create_worker("thr-raw", self.cwd, "raw", None,
+                                     "custom-live-model", "high", "read_only")
+        legacy = registry.create("thr-legacy", self.cwd, "legacy", "legacy-model", "medium")
+        self.assertTrue(tiered.common_policy_complete)
+        self.assertTrue(raw.common_policy_complete)
+        self.assertFalse(legacy.common_policy_complete)
+
     def test_malformed_record_error_names_path_and_supported_versions(self):
         self.write_v1_record(name="legacy")
         payload = json.loads(self.state_path.read_text())

@@ -43,6 +43,9 @@ class SessionStartSpec:
     name: Optional[str]
     model: Optional[str]
     access: AccessMode = AccessMode.FULL
+    tier: Optional[str] = None
+    effort: Optional[str] = None
+    annotation_policy: AnnotationPolicy = AnnotationPolicy.LEGACY_MUTABLE
 
 
 @dataclass(frozen=True)
@@ -165,6 +168,12 @@ class WorkerBroker:
     def start_session(self, spec: SessionStartSpec) -> JsonObject:
         canonical_cwd = self._canonical_cwd(spec.cwd, "declared cwd")
         self._validate_model_effort(spec.model, None)
+        if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
+            if (spec.name is None or spec.model is None or spec.effort is None
+                    or spec.access is None):
+                raise _fault(-32602, "common worker start requires name, model, effort, and access",
+                             "invalid_params")
+            self._validate_model_effort(spec.model, spec.effort)
         session_id = str(uuid.uuid4())
         try:
             response = self.codex.start_thread(canonical_cwd, model=spec.model,
@@ -174,7 +183,13 @@ class WorkerBroker:
             if returned_cwd != canonical_cwd:
                 raise _fault(-32014, "Codex returned a different working directory", "session_cwd_mismatch",
                              details={"expected_cwd": canonical_cwd, "returned_cwd": returned_cwd})
-            record = self.registry.create(thread_id, canonical_cwd, spec.name, spec.model, None, session_id=session_id)
+            if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
+                record = self.registry.create_worker(
+                    thread_id, canonical_cwd, spec.name, spec.tier, spec.model,
+                    spec.effort, spec.access.value, session_id=session_id)
+            else:
+                record = self.registry.create(thread_id, canonical_cwd, spec.name, spec.model,
+                                              None, session_id=session_id)
         except RpcFault:
             raise
         except CodexCallError as exc:

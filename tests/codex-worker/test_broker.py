@@ -145,6 +145,16 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(self.codex.turn_start_calls[-1]["sandboxPolicy"], {"type": "readOnly", "networkAccess": False})
         self.assertEqual(self.codex.turn_start_calls[-1]["outputSchema"], {"type": "object"})
 
+    def test_preserved_common_start_persists_policy_in_one_registry_record(self):
+        from codex_worker.broker import AnnotationPolicy, SessionStartSpec
+        from codex_worker.commands import AccessMode
+        result = self.broker.start_session(SessionStartSpec(
+            self.cwd, "common", "fake-model-a", AccessMode.FULL, "medium", "medium",
+            AnnotationPolicy.PRESERVE_WORKER_POLICY))
+        record = self.registry.resolve(IdentifierSelector(session_id=result["session"]["session_id"]))
+        self.assertEqual((record.tier, record.model, record.effort, record.access),
+                         ("medium", "fake-model-a", "medium", "full"))
+
     def test_native_proxy_rejects_malformed_provider_result(self):
         from codex_worker.broker import NativeCodexProxy
         class Raw:

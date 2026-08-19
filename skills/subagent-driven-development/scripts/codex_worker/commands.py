@@ -43,6 +43,11 @@ class MetricAvailability(str, Enum):
 
 
 class FacadeFaultCode(int, Enum):
+    INVALID_PARAMS = -32602
+    TURN_NOT_ACTIVE = -32005
+    REGISTRY_ERROR = -32011
+    CODEX_PROTOCOL_ERROR = -32015
+    CODEX_FAILURE = -32020
     WORKER_NAME_EXISTS = -32021
     WORKER_NOT_FOUND = -32022
     DAEMON_STOPPED = -32023
@@ -56,6 +61,11 @@ class FacadeFaultCode(int, Enum):
 
 
 _FACADE_FAULT_KINDS = {
+    FacadeFaultCode.INVALID_PARAMS: "invalid_params",
+    FacadeFaultCode.TURN_NOT_ACTIVE: "turn_not_active",
+    FacadeFaultCode.REGISTRY_ERROR: "registry_error",
+    FacadeFaultCode.CODEX_PROTOCOL_ERROR: "codex_protocol_error",
+    FacadeFaultCode.CODEX_FAILURE: "codex_failure",
     FacadeFaultCode.WORKER_NAME_EXISTS: "worker_name_exists",
     FacadeFaultCode.WORKER_NOT_FOUND: "worker_not_found",
     FacadeFaultCode.DAEMON_STOPPED: "daemon_stopped",

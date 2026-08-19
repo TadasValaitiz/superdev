@@ -1,0 +1,297 @@
+"""Transport-independent named-worker orchestration service."""
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
+
+from .broker import AnnotationPolicy, NativeCodexProxy, SessionStartSpec, TurnStartSpec
+from .commands import (AccessMode, CompletionResponse, ControlResponse, FacadeFault,
+                       FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
+                       GoalView, InterruptWorkerRequest, LimitsRequest, LimitsResponse,
+                       Ok, Err, RecoveryView, Result, RunWorkerRequest, StartWorkerRequest,
+                       SteerWorkerRequest, Tier, TurnView, WorkerHistoryRequest,
+                       WorkerHistoryResponse, WorkerMessagesRequest, WorkerMessagesResponse,
+                       WorkerStatusRequest, WorkerStatusResponse, WorkerView)
+from .instance import InstanceIdentity
+from .models import IdentifierSelector, RpcFault, SessionRecord
+from .registry import RegistryError
+from .runtime import SessionDetached, UnknownSession, WaitTimeout
+
+
+_TIER_MODELS = {Tier.MEDIUM: "gpt-5.6-terra", Tier.VERY_SMART: "gpt-5.6-sol"}
+
+
+@dataclass(frozen=True)
+class FacadeDeps:
+    instance: InstanceIdentity
+    registry: Any
+    broker: Any
+    runtime: Any
+    projector: Any
+    clock: Callable[[], float]
+
+
+class WorkerFacade:
+    def __init__(self, deps: FacadeDeps):
+        self.deps = deps
+
+    def start(self, request: StartWorkerRequest) -> Result[CompletionResponse, FacadeFault]:
+        try:
+            try:
+                existing = self.deps.registry.resolve_name(request.name)
+            except RegistryError as exc:
+                if str(exc) != "unknown worker name":
+                    return Err(self._registry_fault(exc, request.name))
+                existing = None
+            if existing is not None:
+                return Err(self._exists_fault(existing))
+            model = self._select_model(request.tier, request.model, request.effort)
+            self.deps.broker.start_session(SessionStartSpec(
+                request.cwd, request.name, model, request.access,
+                request.tier.value if request.tier else None, request.effort,
+                AnnotationPolicy.PRESERVE_WORKER_POLICY))
+            record = self.deps.registry.resolve_name(request.name)
+            worker = self._worker(record)
+            if request.goal is not None:
+                try:
+                    NativeCodexProxy(self.deps.broker.codex).goal_set(
+                        record.thread_id, request.goal, "active", request.token_budget)
+                except BaseException as exc:
+                    return Err(self._effect_fault(exc, record, request.name))
+            return self._start_and_wait(record, worker, request.prompt, request.output_schema,
+                                        request.timeout)
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def run(self, request: RunWorkerRequest) -> Result[CompletionResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault):
+                return Err(record)
+            status = self.deps.runtime.status(record.session_id)
+            if not status.attached:
+                self.deps.broker.session_resume(IdentifierSelector(session_id=record.session_id))
+            return self._start_and_wait(record, self._worker(record), request.prompt,
+                                        request.output_schema, request.timeout)
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            status = self.deps.runtime.status(record.session_id)
+            if not status.attached:
+                return Err(self._stopped_fault(request.name, record))
+            return Ok(WorkerStatusResponse(self._worker(record), "ready", status.attached,
+                                           status.active_turn_id, self._turn_view(status.latest_turn)))
+        except (UnknownSession, SessionDetached):
+            return Err(self._stopped_fault(request.name, None))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def messages(self, request: WorkerMessagesRequest) -> Result[WorkerMessagesResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            if not self.deps.runtime.status(record.session_id).attached:
+                return Err(self._stopped_fault(request.name, record))
+            items, truncated, cursor = self.deps.runtime.agent_messages(record.session_id, request.tail)
+            messages = self.deps.projector.select_completion_messages(items, False)
+            return Ok(WorkerMessagesResponse(self._worker(record), messages, request.tail,
+                                             len(messages), truncated, cursor))
+        except (UnknownSession, SessionDetached):
+            return Err(self._stopped_fault(request.name, None))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def history(self, request: WorkerHistoryRequest) -> Result[WorkerHistoryResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            proxy = NativeCodexProxy(self.deps.broker.codex)
+            pages, cursor = [], None
+            while len([turn for page in pages for turn in page]) < request.tail:
+                page = proxy.turns_list(record.thread_id, cursor, request.tail)
+                pages.append(page["turns"])
+                cursor = page["nextCursor"]
+                if cursor is None: break
+            chronological = self.deps.projector.chronological_history_pages(pages)
+            chronological = chronological[-request.tail:]
+            turns = [self.deps.projector.project_history_turn(turn) for turn in chronological]
+            return Ok(WorkerHistoryResponse(self._worker(record), turns, request.tail,
+                                            len(turns), cursor is not None))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def steer(self, request: SteerWorkerRequest) -> Result[ControlResponse, FacadeFault]:
+        return self._control(request, "steer")
+
+    def interrupt(self, request: InterruptWorkerRequest) -> Result[ControlResponse, FacadeFault]:
+        return self._control(request, "interrupt")
+
+    def goal_set(self, request: GoalSetRequest) -> Result[GoalResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            result = NativeCodexProxy(self.deps.broker.codex).goal_set(
+                record.thread_id, request.objective, request.status, request.token_budget)
+            return Ok(GoalResponse(self._worker(record), "present", self._goal(result["goal"])))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def goal_show(self, request: GoalShowRequest) -> Result[GoalResponse, FacadeFault]:
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            goal = NativeCodexProxy(self.deps.broker.codex).goal_get(record.thread_id)["goal"]
+            return Ok(GoalResponse(self._worker(record), "present" if goal else "absent",
+                                   self._goal(goal) if goal else None))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def limits(self, request: LimitsRequest) -> Result[LimitsResponse, FacadeFault]:
+        try:
+            return Ok(LimitsResponse("available", NativeCodexProxy(self.deps.broker.codex).rate_limits_read()["rateLimits"]))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, None, limits=True))
+
+    def _start_and_wait(self, record, worker, prompt, schema, timeout):
+        started = self.deps.clock()
+        self.deps.broker.start_turn(TurnStartSpec(record.session_id, prompt, record.model,
+                                                  record.effort, AccessMode(record.access), schema))
+        try:
+            turn = self._wait(record.session_id, timeout)
+        except WaitTimeout as exc:
+            return Err(self._timeout_fault(record, exc.turn_id))
+        return Ok(self.deps.projector.project_completion(worker, turn, schema,
+                                                          self.deps.clock() - started,
+                                                          self._recovery(record)))
+
+    def _wait(self, session_id, timeout):
+        if timeout is not None:
+            return self.deps.runtime.wait(session_id, timeout)
+        while True:
+            try: return self.deps.runtime.wait(session_id, 60.0)
+            except WaitTimeout: pass
+
+    def _select_model(self, tier, raw_model, effort):
+        model = raw_model if raw_model is not None else _TIER_MODELS[tier]
+        models = self.deps.broker.model_list()["models"]
+        found = next((item for item in models if item["id"] == model), None)
+        if found is None:
+            raise FacadeFault(FacadeFaultCode.MODEL_UNAVAILABLE, "Requested model is unavailable",
+                              "model_unavailable", details={"model": model, "models": models})
+        if effort not in found["supported_efforts"]:
+            raise FacadeFault(FacadeFaultCode.EFFORT_UNSUPPORTED, "Requested effort is unsupported",
+                              "effort_unsupported", details={"model": model, "supported_efforts": found["supported_efforts"]})
+        return model
+
+    def _resolve_policy(self, name):
+        try: record = self.deps.registry.resolve_name(name)
+        except RegistryError as exc:
+            if str(exc) == "unknown worker name": return FacadeFault.worker_not_found(name, self.deps.instance.value)
+            return self._registry_fault(exc, name)
+        if not record.common_policy_complete:
+            return self._legacy_fault(record)
+        return record
+
+    def _control(self, request, action):
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault): return Err(record)
+            status = self.deps.runtime.status(record.session_id)
+            if not status.attached: return Err(self._stopped_fault(request.name, record))
+            turn_id = status.active_turn_id
+            if turn_id is None:
+                return Err(self._turn_not_active(record, None))
+            method = self.deps.broker.turn_steer if action == "steer" else self.deps.broker.turn_interrupt
+            result = method(IdentifierSelector(session_id=record.session_id), request.prompt) if action == "steer" else method(IdentifierSelector(session_id=record.session_id))
+            return Ok(ControlResponse(self._worker(record), action, result["accepted"], turn_id,
+                                      "interrupted" if action == "interrupt" else "in_progress"))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, None, request.name))
+
+    def _worker(self, record: SessionRecord) -> WorkerView:
+        return WorkerView(self.deps.instance.value, record.name, record.session_id, record.thread_id,
+                          record.cwd, Tier(record.tier) if record.tier else None, record.model,
+                          record.effort, AccessMode(record.access))
+
+    @staticmethod
+    def _turn_view(turn):
+        return None if turn is None else TurnView(turn.turn_id, turn.status, turn.error.to_dict() if turn.error else None)
+
+    @staticmethod
+    def _goal(goal):
+        return GoalView(goal["threadId"], goal["objective"], goal["status"], goal["tokenBudget"],
+                        goal["tokensUsed"], goal["timeUsedSeconds"], goal["createdAt"], goal["updatedAt"])
+
+    def _recovery(self, record):
+        name = record.name
+        return RecoveryView("codex-worker status --name %s" % name,
+                            "codex-worker messages --name %s" % name,
+                            "codex-worker interrupt --name %s" % name,
+                            "codex-worker session resume --thread %s" % record.thread_id)
+
+    def _known(self, record=None, name=None, turn_id=None):
+        return {"instance": self.deps.instance.value, "name": name or (record.name if record else None),
+                "session_id": record.session_id if record else None,
+                "thread_id": record.thread_id if record else None, "turn_id": turn_id}
+
+    def _exists_fault(self, record):
+        return FacadeFault(FacadeFaultCode.WORKER_NAME_EXISTS, "Worker name already exists", "worker_name_exists",
+                           known_ids=self._known(record), next_actions=[
+                               {"command": "codex-worker run --name %s" % record.name, "reason": "Continue the existing worker"},
+                               {"command": "codex-worker start --name <different-name>", "reason": "Create an independent worker"}])
+
+    def _legacy_fault(self, record):
+        return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Worker policy is incomplete in legacy state", "registry_error",
+                           details={"policy_state": "incomplete_legacy"}, known_ids=self._known(record), next_actions=[
+                               {"command": "codex-worker session resume --thread %s" % record.thread_id, "reason": "Recover through the advanced raw session path"},
+                               {"command": "codex-worker turn start --session %s --prompt <text>" % record.session_id, "reason": "Use the advanced raw turn path without inventing policy"},
+                               {"command": "codex-worker start --name <different-name>", "reason": "Create a common worker with explicit policy"}])
+
+    def _registry_fault(self, exc, name):
+        return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Could not read worker registry", "registry_error",
+                           details={"reason": str(exc)}, known_ids=self._known(name=name))
+
+    def _timeout_fault(self, record, turn_id):
+        return FacadeFault(FacadeFaultCode.TIMEOUT_ACTIVE, "Timed out while worker turn remains active", "timeout_active",
+                           retryable=True, known_ids=self._known(record, turn_id=turn_id), next_actions=[
+                               {"command": "codex-worker status --name %s" % record.name, "reason": "Inspect active work"},
+                               {"command": "codex-worker messages --name %s" % record.name, "reason": "Read retained narration"},
+                               {"command": "codex-worker interrupt --name %s" % record.name, "reason": "Cancel only if deliberate"}])
+
+    def _stopped_fault(self, name, record):
+        return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+                           known_ids=self._known(record, name), next_actions=[
+                               {"command": "codex-worker run --name %s --prompt <text>" % name, "reason": "Resume deliberately"}])
+
+    def _turn_not_active(self, record, turn_id):
+        return FacadeFault(FacadeFaultCode.TURN_NOT_ACTIVE, "Turn is not active", "turn_not_active",
+                           known_ids=self._known(record, turn_id=turn_id), next_actions=[
+                               {"command": "codex-worker status --name %s" % record.name, "reason": "Inspect the latest turn"}])
+
+    def _effect_fault(self, exc, record, name, limits=False):
+        if isinstance(exc, FacadeFault): return exc
+        if isinstance(exc, WaitTimeout): return self._timeout_fault(record, exc.turn_id)
+        if isinstance(exc, RpcFault):
+            try: code = FacadeFaultCode(exc.code)
+            except ValueError:
+                code = FacadeFaultCode.DAEMON_STOPPED if exc.kind == "session_detached" else FacadeFaultCode.CODEX_FAILURE
+            known = self._known(record, name)
+            if isinstance(exc.details, dict):
+                for key in ("session_id", "thread_id", "turn_id"):
+                    if isinstance(exc.details.get(key), str):
+                        known[key] = exc.details[key]
+            return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
+                               known_ids=known)
+        if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name)
+        code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
+        return FacadeFault(code, "Codex operation failed" if not limits else "Codex limits are unavailable",
+                           self._kind(code), details={"reason": str(exc)}, known_ids=self._known(record, name))
+
+    @staticmethod
+    def _kind(code):
+        return {FacadeFaultCode.INVALID_PARAMS: "invalid_params", FacadeFaultCode.TURN_NOT_ACTIVE: "turn_not_active",
+                FacadeFaultCode.REGISTRY_ERROR: "registry_error", FacadeFaultCode.CODEX_PROTOCOL_ERROR: "codex_protocol_error",
+                FacadeFaultCode.CODEX_FAILURE: "codex_failure", FacadeFaultCode.MODEL_UNAVAILABLE: "model_unavailable",
+                FacadeFaultCode.EFFORT_UNSUPPORTED: "effort_unsupported", FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable"}[code]

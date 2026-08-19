@@ -130,7 +130,7 @@ class SessionRecord:
 
     @property
     def common_policy_complete(self) -> bool:
-        return all(value is not None for value in (self.name, self.tier, self.model, self.effort, self.access))
+        return all(value is not None for value in (self.name, self.model, self.effort, self.access))
 
     def to_dict(self) -> JsonObject:
         return {"session_id": self.session_id, "thread_id": self.thread_id, "cwd": self.cwd,
