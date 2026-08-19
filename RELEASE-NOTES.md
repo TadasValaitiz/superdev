@@ -1,5 +1,31 @@
 # Superdev Release Notes
 
+## v7.1.0 (2026-08-19)
+
+### Local Codex workers and explicit two-tier model routing
+
+- **Local Codex worker server:** `subagent-driven-development` can now opt into a
+  local JSON-RPC daemon backed by `codex app-server`. It supports durable logical
+  sessions, raw-thread recovery, resume after daemon failure, turn observation,
+  steering, interruption, approval handling, isolated working directories, and
+  structured CLI errors. Claude Code remains the coordinator; this is not an MCP
+  server and does not replace native Claude agents.
+- **Exactly two SDD model tiers:** `very smart` and `medium`. Native Claude maps them
+  to `opus` and `sonnet`; explicitly selected Codex work maps them to
+  `gpt-5.6-sol` and `gpt-5.6-terra`. Live model discovery and supported-effort
+  validation are mandatory, with no silent fallback or third tier.
+- **Executable routing across skills:** brainstorming, planning, review, checkride,
+  finishing, self-brainstorming, and Codex-harness references now use the shared
+  vocabulary. Self-brainstorming pins every Workflow call and inline fallback role
+  explicitly, while main-session Claude design remains native Claude.
+- **Diagnosis and boundary:** the failure was a context-document and dispatch-contract
+  gap: SDD exposed relative three-tier guidance without a compact provider mapping,
+  and some consumer prompts inherited models implicitly. The fix lands in
+  `skills/subagent-driven-development/`, its active consumer prompts, the
+  self-brainstorming dispatch reference, and focused integration coverage. The
+  Claude-side local broker and native Codex-harness `spawn_agent` remain distinct
+  mechanisms.
+
 ## v7.0.2 (2026-08-18)
 
 - orchestrator: "milestone" clarified as an ALTITUDE, not a fixed unit — the integration
