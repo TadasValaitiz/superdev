@@ -74,6 +74,16 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["sessions"][0]["model"], "legacy-model")
 
+    def test_malformed_record_error_names_path_and_supported_versions(self):
+        self.write_v1_record(name="legacy")
+        payload = json.loads(self.state_path.read_text())
+        payload["sessions"][0]["name"] = "bad name"
+        original = json.dumps(payload).encode()
+        self.state_path.write_bytes(original)
+        with self.assertRaisesRegex(ValueError, "state/sessions.json; expected schema versions 1 or 2"):
+            SessionRegistry(self.state_path)
+        self.assertEqual(self.state_path.read_bytes(), original)
+
     def test_registry_rejects_duplicate_thread_ids(self):
         registry = SessionRegistry(self.state_path)
         first = registry.create("thr-1", self.cwd, "one", None, None)

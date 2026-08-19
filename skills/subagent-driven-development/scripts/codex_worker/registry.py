@@ -101,7 +101,10 @@ class SessionRegistry:
                 or payload.get("schema_version") not in (1, self.SCHEMA_VERSION)
                 or not isinstance(payload.get("sessions"), list)):
             raise RegistryError("unsupported registry schema at %s; expected schema versions 1 or 2" % self.path)
-        records = [_record(item, payload["schema_version"]) for item in payload["sessions"]]
+        try:
+            records = [_record(item, payload["schema_version"]) for item in payload["sessions"]]
+        except RegistryError as exc:
+            raise RegistryError("invalid registry record at %s; expected schema versions 1 or 2: %s" % (self.path, exc)) from exc
         names = [r.name for r in records if r.name is not None]
         if (len({r.session_id for r in records}) != len(records) or len({r.thread_id for r in records}) != len(records)
                 or len(set(names)) != len(names)):
