@@ -1215,3 +1215,25 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Task 5 Files block, process concurrency/disconnect/timeout tests, Task 6
   deterministic fixtures.
 - **Revisit-when:** Process tests move to a dedicated fixture package.
+
+## D55 — Normalize native goal and history from measured Codex 0.147.0 shapes
+**When:** 2026-08-19T20:48:07Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Task 8's real native-proxy ride reached payloads that the fixtures had
+  modeled incorrectly: goal timestamps were rejected as non-strings, and durable
+  history rejected the provider's page envelope before AH6 could be demonstrated.
+- **Options weighed:** preserve the speculative string/`turns` contract with coercion;
+  weaken validation; normalize the measured provider contract at the adapter seam and
+  expose its integer timestamps without inventing units.
+- **Decided:** Match Codex 0.147.0 evidence. Goal and history timestamps are upstream
+  `int64` integers (nullable where the provider permits); `thread/turns/list` accepts the
+  measured `{data,nextCursor,backwardsCursor}` provider envelope and normalizes `data`
+  to the facade's internal `turns` page. Both cursors are validated. Public JSON retains
+  the upstream integer values; it does not stringify them or assign an undocumented unit.
+- **Rests on:** MEASURED generated schema plus authenticated live goal/history responses
+  and direct two-page cursor pagination from Task 8.
+- **Affects:** R9, UC6, AH6; design §5.4/§5.9 and CLI §8 timestamp fields;
+  `commands.py`, `broker.py`, projection, fake fixtures, and native-proxy tests.
+- **Revisit-when:** A supported Codex version changes these generated schemas or live
+  response shapes.

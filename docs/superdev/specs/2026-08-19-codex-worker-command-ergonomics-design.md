@@ -185,6 +185,12 @@ messages short without allowing silent configuration drift.
 
 ### 5.4 Observation, control, history, and native proxies
 
+Native goal/history timestamps preserve Codex's measured `int64` values exactly; the
+facade does not stringify them or invent an undocumented unit. At the provider seam,
+`thread/turns/list` normalizes Codex 0.147.0's measured
+`{data,nextCursor,backwardsCursor}` envelope into the named history response and
+validates both cursor fields (D55).
+
 The projection/control service exposes the small name-based operations a harness needs
 while retaining the advanced event and raw-recovery escape hatch.
 
@@ -643,6 +649,7 @@ implementation-facing distillation.
 | D42 | locked | Worker keys are shell-safe 1–128 character tokens. | Makes validation and registry identity exact; revisit by adding a separate label if needed. |
 | D43 | locked | Advanced model/session/turn accept instance or socket overrides and otherwise retain legacy socket defaults; daemon serve/shutdown stay raw, while status is dual-mode. | Preserves compatibility while reaching managed instances; revisit in a major raw-surface removal. |
 | D44 | locked | Map full/read-only at both thread sandbox and turn sandboxPolicy seams. | Current protocol uses two encodings; revisit if upstream unifies them. |
+| D55 | locked | Preserve native goal/history timestamps as upstream `int64` values and normalize the measured turns-list `data` envelope at the adapter seam. | Real Codex 0.147.0 schema and authenticated pagination contradicted the speculative fixture shape; revisit on supported-provider schema drift. |
 
 ## 7. Assumptions & open questions
 
