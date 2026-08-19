@@ -60,3 +60,26 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** Human requirement: “Make sure that Claude Code also remains,” plus the existing broker boundary in which Claude Code owns coordination.
 - **Affects:** Core skill wording, Codex appendix scope, examples, and compatibility acceptance.
 - **Revisit-when:** The SDD workflow adopts a single mandatory execution harness or Claude Code no longer supports explicit model selection.
+
+## D5 — Resolve native Claude tiers with stable aliases
+**When:** 2026-08-19T06:07:50Z · **Phase:** brainstorm spec-review ·
+**Status:** locked
+**Decided by:** coordinator clarification of D4
+
+- **Trigger:** Independent spec review found that D4 preserved native Claude dispatch
+  but did not define a testable resolution for its `medium` tier.
+- **Options weighed:**
+  - A: resolve `very smart` to `opus` and `medium` to `sonnet` — gains stable,
+    actionable Claude Code dispatch aliases / sacrifices automatic substitution when an
+    alias is unavailable.
+  - B: leave both as “corresponding available tiers” — gains catalog flexibility /
+    sacrifices deterministic routing and makes accidental tier collapse unverifiable.
+- **Decided:** Native Claude Code dispatch resolves `very smart` to `opus` and `medium`
+  to `sonnet`. Both are passed explicitly. An unavailable required alias is a reported
+  blocker, not a silent fallback. Main-session brainstorming/design remains native
+  Claude `opus`; the Codex worker remains an explicitly delegated task path.
+- **Rests on:** D4, existing Superdev prompt conventions, and the user's requirement
+  that Claude Code remain.
+- **Affects:** Claude compatibility design, core model-selection guidance, and
+  acceptance scenarios.
+- **Revisit-when:** Claude Code changes or removes either stable alias.
