@@ -97,3 +97,24 @@ was deleted. The `superdev-dev` marketplace remains pointed at
 `/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade` pending branch
 integration, after which the controller will restore the main-checkout source and
 reverify installed 7.2.0.
+
+## Post-review hardening refresh
+
+After commits `054fa60` and `7767207` closed the final control, catalog, endpoint,
+and managed-start findings, bytewise comparison showed that the installed cache was
+stale for `instance.py`, `broker.py`, and `facade.py`; `commands.py` already matched.
+The controller repeated the non-destructive refresh:
+
+- `claude plugin uninstall superdev@superdev-dev --scope user --keep-data` — PASS.
+- `claude plugin install superdev@superdev-dev --scope user` — PASS.
+- `claude plugin update superdev@superdev-dev --scope user` — PASS; already at 7.2.0.
+- `claude plugin list --json` — Superdev 7.2.0, user scope, enabled.
+- Bytewise `cmp -s` checks for current source versus installed `instance.py`,
+  `broker.py`, `facade.py`, and `commands.py` — all PASS.
+- The installed launcher is executable; from a fresh external `mktemp` cwd, `--help`
+  and `daemon status` both exited 0. Status returned exactly one JSON object for the
+  stopped default instance with zero workers.
+
+The uninstall again used `--keep-data`; no durable worker state or plugin data was
+deleted. Marketplace restoration remains intentionally deferred until the reviewed
+branch is integrated into the main checkout.
