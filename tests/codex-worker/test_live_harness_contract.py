@@ -37,7 +37,34 @@ class FailingDaemon:
         self.disposed = True
 
 
+class GoalRunner:
+    def __init__(self, token_budget):
+        self.token_budget = token_budget
+        self.calls = []
+
+    def result(self, *argv, cwd=None):
+        self.calls.append((argv, cwd))
+        return {"availability": "present", "goal": {
+            "status": "paused", "token_budget": self.token_budget,
+        }}
+
+
 class LiveHarnessContractTests(unittest.TestCase):
+    def test_pause_goal_omits_budget_update_and_preserves_authoritative_budget(self):
+        runner = GoalRunner(token_budget=31789)
+        preceding = {"availability": "present", "goal": {
+            "status": "active", "token_budget": 31789,
+        }}
+
+        updated = LIVE.pause_goal_preserving_budget(
+            runner, "native-worker", Path("/tmp/native-workspace"), preceding,
+        )
+
+        self.assertEqual(runner.calls, [(('goal', 'set', '--name', 'native-worker',
+                                         '--status', 'paused'),
+                                        Path('/tmp/native-workspace'))])
+        self.assertEqual(updated["goal"]["token_budget"], 31789)
+
     def test_managed_live_cli_preserves_codex_authentication_home(self):
         with tempfile.TemporaryDirectory() as root:
             recorder = type("RecorderStub", (), {"run_dir": Path(root)})()

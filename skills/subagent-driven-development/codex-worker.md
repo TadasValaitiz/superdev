@@ -97,9 +97,12 @@ stored conversation and must not overlap an active old turn. If durable persiste
 reports known session/thread IDs, preserve them and the reported log/state paths. Do
 not overwrite malformed state or assume an upstream thread was rolled back.
 
-If `start` reports `effort_unsupported`, use its shell-safe corrected `start` action or
-choose another advertised effort. The action preserves the original name and tier/raw
-model choice; the provider was not silently substituted. If `run` reports
+If `start` reports `effort_unsupported` without `--output-schema`, use its shell-safe
+corrected `start` action or choose another advertised effort. The action preserves the
+original name and tier/raw model choice; the provider was not silently substituted.
+When the original request used `--output-schema`, the parsed request retains no source
+path, so no executable retry action is returned. Its structured `schema_retry` details
+require the caller's original schema file and one of `supported_efforts`. If `run` reports
 `turn_active`, use its returned named status/messages/steer/interrupt actions instead
 of overlapping the existing turn.
 

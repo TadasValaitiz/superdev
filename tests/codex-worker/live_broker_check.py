@@ -1250,6 +1250,15 @@ def scenario_control_recovery() -> Json:
         runner.stop()
 
 
+def pause_goal_preserving_budget(runner, name: str, cwd: Path, preceding: Json) -> Json:
+    updated = runner.result(
+        "goal", "set", "--name", name, "--status", "paused", cwd=cwd,
+    )
+    assert updated["goal"]["token_budget"] == preceding["goal"]["token_budget"], (
+        preceding, updated)
+    return updated
+
+
 def scenario_native_proxies() -> Json:
     recorder = Recorder("native-proxies")
     instance = "task8-native-%s" % uuid.uuid4().hex[:12]
@@ -1268,10 +1277,7 @@ def scenario_native_proxies() -> Json:
         assert goal_initial["goal"]["objective"] == "Complete the Task 8 native proxy check"
         history = runner.result("history", "--name", name, "--tail", "2", cwd=cwd)
         assert history["returned"] >= 1 and history["returned"] == len(history["turns"]), history
-        goal_updated = runner.result(
-            "goal", "set", "--name", name, "--status", "paused",
-            "--token-budget", "25000", cwd=cwd,
-        )
+        goal_updated = pause_goal_preserving_budget(runner, name, cwd, goal_initial)
         assert goal_updated["goal"]["status"] == "paused"
         status_after_pause = runner.result("status", "--name", name, cwd=cwd)
         limits_payload, limits_completed = runner.run("limits", cwd=cwd, check=False)

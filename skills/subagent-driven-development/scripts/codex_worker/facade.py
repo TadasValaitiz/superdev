@@ -224,15 +224,22 @@ class WorkerFacade:
                               "model_unavailable", details={"model": model, "models": models})
         if request.effort not in found["supported_efforts"]:
             supported = found["supported_efforts"]
+            details = {"model": model, "supported_efforts": supported}
+            if request.output_schema is not None:
+                details["schema_retry"] = {
+                    "required_option": "--output-schema",
+                    "source": "caller's original file",
+                    "guidance": "Retry with the original --output-schema file and one of supported_efforts",
+                }
             raise FacadeFault(FacadeFaultCode.EFFORT_UNSUPPORTED, "Requested effort is unsupported",
                               "effort_unsupported",
-                              details={"model": model, "supported_efforts": supported},
+                              details=details,
                               known_ids=self._known(name=request.name),
                               next_actions=self._corrected_start_actions(request, supported))
         return model
 
     def _corrected_start_actions(self, request, supported_efforts):
-        if not supported_efforts:
+        if not supported_efforts or request.output_schema is not None:
             return []
         args = [
             "start", "--name", shlex.quote(request.name),

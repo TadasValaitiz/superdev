@@ -200,6 +200,29 @@ class FacadeTests(unittest.TestCase):
         ])
         self.assertNotIn("--model", command)
 
+    def test_unsupported_effort_with_schema_requires_original_file_and_omits_action(self):
+        self.broker.model_list = lambda: {"models": [{
+            "id": "gpt-5.6-terra", "is_default": True,
+            "supported_efforts": ["low"],
+        }]}
+
+        result = self._facade().start(StartWorkerRequest(
+            name="retry-schema", prompt="continue", cwd=self.cwd, effort="high",
+            output_schema={"type": "object", "required": ["verdict"]},
+        ))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.next_actions, [])
+        self.assertEqual(result.error.details, {
+            "model": "gpt-5.6-terra",
+            "supported_efforts": ["low"],
+            "schema_retry": {
+                "required_option": "--output-schema",
+                "source": "caller's original file",
+                "guidance": "Retry with the original --output-schema file and one of supported_efforts",
+            },
+        })
+
     def _facade(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         return WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"),
