@@ -7,7 +7,7 @@ import tempfile
 import time
 import fcntl
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -56,6 +56,7 @@ class InstanceDeps:
     spawn: Callable[[Sequence[str], str], Any]
     rpc_call: Callable[[str, str, dict, Optional[float]], dict]
     monotonic: Callable[[], float]
+    wait: Callable[[float], None] = field(default=time.sleep)
 
 
 def resolve_instance(explicit: Optional[str], env: Mapping[str, str]) -> InstanceIdentity:
@@ -99,12 +100,38 @@ def _safe_directory(path: Path) -> bool:
             and stat.S_IMODE(data.st_mode) == 0o700)
 
 
+def _safe_ancestor(path: Path) -> bool:
+    """Accept owner-only ancestors and sticky system temp ancestors, never links."""
+    current = Path(path).resolve()
+    while True:
+        try:
+            data = os.lstat(current)
+        except OSError:
+            return False
+        mode = stat.S_IMODE(data.st_mode)
+        if not stat.S_ISDIR(data.st_mode) or stat.S_ISLNK(data.st_mode):
+            return False
+        if mode & 0o022 and not (mode & stat.S_ISVTX):
+            return False
+        if current.parent == current:
+            return True
+        current = current.parent
+
+
 def _mkdir_owner_only(path: Path) -> None:
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.exists() or path.is_symlink():
+        if not _safe_directory(path):
+            raise RuntimeError("unsafe directory %s" % path)
+        return
+    parent = path.parent
+    if not parent.exists():
+        _mkdir_owner_only(parent)
+    elif not _safe_ancestor(parent):
+        raise RuntimeError("unsafe controlled parent %s" % parent)
     try:
-        os.chmod(path, 0o700)
-    except OSError as exc:
-        raise RuntimeError("could not harden directory %s" % path) from exc
+        path.mkdir(mode=0o700, exist_ok=False)
+    except FileExistsError:
+        pass
     if not _safe_directory(path):
         raise RuntimeError("unsafe directory %s" % path)
 
@@ -116,6 +143,9 @@ def _metadata_payload(identity: InstanceIdentity) -> dict:
 
 def _write_metadata(paths: InstancePaths, identity: InstanceIdentity) -> None:
     _mkdir_owner_only(paths.durable_dir)
+    if paths.metadata_path.exists() or paths.metadata_path.is_symlink():
+        if not _owner_regular(paths.metadata_path, 0o600):
+            raise RuntimeError("unsafe instance metadata")
     fd, temporary = tempfile.mkstemp(prefix="instance.", dir=str(paths.durable_dir))
     try:
         os.fchmod(fd, 0o600)
@@ -156,12 +186,16 @@ def load_managed_identity(state_path: Path) -> Optional[InstanceIdentity]:
 @contextmanager
 def acquire_start_lock(lock_path: Path, timeout: float = 2.0):
     _mkdir_owner_only(lock_path.parent)
+    if lock_path.exists() or lock_path.is_symlink():
+        if not _owner_regular(lock_path, 0o600):
+            raise RuntimeError("unsafe instance start lock")
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(str(lock_path), flags, 0o600)
     try:
-        os.fchmod(fd, 0o600)
+        if not _owner_regular(lock_path, 0o600):
+            os.fchmod(fd, 0o600)
         before = os.fstat(fd)
         if not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid():
             raise RuntimeError("unsafe instance start lock")
@@ -202,7 +236,7 @@ class InstanceManager:
             response = self.deps.rpc_call(str(self.deps.paths.socket_path), "daemon/status", {}, 0.2)
             result = response.get("result", response)
             return result if result.get("ready") is True else None
-        except Exception:
+        except OSError:
             return None
 
     def _status_response(self, status: str, result: Optional[dict] = None,
@@ -213,7 +247,10 @@ class InstanceManager:
                                     result if status == "ready" else None, last_error)
 
     def status(self) -> DaemonStatusResponse:
-        result = self._probe()
+        try:
+            result = self._probe()
+        except Exception as exc:
+            return self._status_response("failed", last_error={"reason": type(exc).__name__})
         return self._status_response("ready", result) if result is not None else self._status_response("stopped")
 
     def _serve_argv(self) -> Sequence[str]:
@@ -233,13 +270,16 @@ class InstanceManager:
                 raise FacadeFault(FacadeFaultCode.DAEMON_START_FAILED, "Codex worker daemon failed to start",
                                   "daemon_start_failed", details={"log_path": str(self.deps.paths.log_path),
                                                                   "reason": type(exc).__name__}) from exc
-            ready = self._probe()
-            if ready is not None:
-                return self._status_response("ready", ready)
-            if getattr(process, "poll", lambda: None)() is not None:
-                reason = "child_exited"
-            else:
-                reason = "readiness_failed"
+            deadline = self.deps.monotonic() + 2.0
+            while True:
+                ready = self._probe()
+                if ready is not None:
+                    return self._status_response("ready", ready)
+                if getattr(process, "poll", lambda: None)() is not None:
+                    reason = "child_exited"; break
+                if self.deps.monotonic() >= deadline:
+                    reason = "readiness_timeout"; break
+                self.deps.wait(0.01)
             raise FacadeFault(FacadeFaultCode.DAEMON_START_FAILED, "Codex worker daemon did not become ready",
                               "daemon_start_failed", True, details={"log_path": str(self.deps.paths.log_path),
                                                                      "reason": reason})
@@ -250,18 +290,31 @@ class InstanceManager:
             return DaemonStopResponse(self._view(), "stopped", "stopped", None, None,
                                       "preserved", 0)
         try:
+            observed_socket = os.lstat(self.deps.paths.socket_path)
+            if not stat.S_ISSOCK(observed_socket.st_mode) or observed_socket.st_uid != os.getuid():
+                raise RuntimeError("unsafe socket")
+        except FileNotFoundError:
+            observed_socket = None
+        try:
             self.deps.rpc_call(str(self.deps.paths.socket_path), "daemon/shutdown", {}, 2.0)
         except Exception:
             pass
         deadline = self.deps.monotonic() + 2.0
         while any(_pid_alive(pid) for pid in (before.get("daemon_pid"), before.get("codex_pid"))):
             if self.deps.monotonic() >= deadline:
-                break
-            time.sleep(0.01)
+                raise FacadeFault(FacadeFaultCode.DAEMON_STOP_FAILED, "Codex worker daemon did not stop",
+                                  "daemon_stop_failed", True, details={"reason": "stop_timeout",
+                                  "deadline_seconds": 2.0, "daemon_pid": before.get("daemon_pid"),
+                                  "codex_pid": before.get("codex_pid"), "durable_state": "preserved",
+                                  "socket_path": str(self.deps.paths.socket_path)},
+                                  next_actions=[{"command": "codex-worker daemon status", "reason": "Inspect the remaining daemon state"},
+                                                {"command": "codex-worker daemon stop", "reason": "Retry graceful shutdown"}])
+            self.deps.wait(0.01)
         try:
             metadata = os.lstat(self.deps.paths.socket_path)
-            if stat.S_ISSOCK(metadata.st_mode) and metadata.st_uid == os.getuid():
-                os.unlink(self.deps.paths.socket_path)
+            if observed_socket is not None and (metadata.st_dev, metadata.st_ino) != (observed_socket.st_dev, observed_socket.st_ino):
+                raise RuntimeError("socket changed during shutdown")
+            if stat.S_ISSOCK(metadata.st_mode) and metadata.st_uid == os.getuid(): os.unlink(self.deps.paths.socket_path)
         except FileNotFoundError:
             pass
         return DaemonStopResponse(self._view(), "ready", "stopped", before.get("daemon_pid"),

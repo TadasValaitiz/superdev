@@ -52,6 +52,7 @@ class FacadeFaultCode(int, Enum):
     EFFORT_UNSUPPORTED = -32027
     LIMITS_UNAVAILABLE = -32028
     INCOMPLETE_COMPLETION = -32029
+    DAEMON_STOP_FAILED = -32030
 
 
 _FACADE_FAULT_KINDS = {
@@ -64,6 +65,7 @@ _FACADE_FAULT_KINDS = {
     FacadeFaultCode.EFFORT_UNSUPPORTED: "effort_unsupported",
     FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable",
     FacadeFaultCode.INCOMPLETE_COMPLETION: "incomplete_completion",
+    FacadeFaultCode.DAEMON_STOP_FAILED: "daemon_stop_failed",
 }
 
 

@@ -112,6 +112,7 @@ class CommandModelTests(unittest.TestCase):
             FacadeFaultCode.EFFORT_UNSUPPORTED: "effort_unsupported",
             FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable",
             FacadeFaultCode.INCOMPLETE_COMPLETION: "incomplete_completion",
+            FacadeFaultCode.DAEMON_STOP_FAILED: "daemon_stop_failed",
         }
         for code, kind in expected.items():
             self.assertEqual(FacadeFault(code, "message", kind).to_dict()["data"]["kind"], kind)

@@ -1,4 +1,10 @@
 #!/bin/sh
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+SOURCE=$0
+while [ -h "$SOURCE" ]; do
+  DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd -P)
+  LINK=$(readlink "$SOURCE")
+  case $LINK in /*) SOURCE=$LINK ;; *) SOURCE=$DIR/$LINK ;; esac
+done
+ROOT=$(CDPATH= cd -- "$(dirname -- "$SOURCE")/.." && pwd -P)
 exec python3 "$ROOT/skills/subagent-driven-development/scripts/codex-worker" "$@"
