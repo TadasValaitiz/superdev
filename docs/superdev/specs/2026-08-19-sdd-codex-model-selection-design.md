@@ -1,6 +1,6 @@
 # SDD Codex model selection — Design (anchor)
 
-**Date:** 2026-08-19 · **Status:** draft
+**Date:** 2026-08-19 · **Status:** approved
 **Mode:** human-in-loop
 **Decision log:** ./2026-08-19-sdd-codex-model-selection-decisions.md
 **Companions:** `skills/subagent-driven-development/codex-worker.md`; planned `skills/subagent-driven-development/codex-model-selection.md`
@@ -66,11 +66,13 @@ This area supplies the stable vocabulary that every dispatch mechanism resolves.
   tiers. `medium` is the default for planned implementation, routine integration,
   ordinary debugging, and per-task review. `very smart` is mandatory for architecture,
   design reasoning, spec/plan/final/deviation gates, and is an available escalation for
-  unusually ambiguous or high-risk task work.
+  unusually ambiguous or high-risk task work. Every active reviewer, checkride,
+  brainstorming, and self-brainstorming prompt that selects a model uses the same tier
+  vocabulary; no dependent prompt retains a provider-relative third policy.
 - **Interface / contract:** Every dispatch explicitly selects one of the two tiers;
   omission/inheritance is still prohibited.
 - **Depends on:** 5.2 and 5.3 for mechanism-specific resolution.
-- **Serves:** R1, R4 · **Governed by:** D1, D2 · **Realizes:** UC1, UC2, UC3
+- **Serves:** R1, R4 · **Governed by:** D1, D2, D6, D7 · **Realizes:** UC1, UC2, UC3
 
 ### 5.2 Claude Code compatibility
 
@@ -180,6 +182,30 @@ manual.
 - **Why:** The same two-tier policy must be actionable on Claude Code as well as Codex,
   and these stable aliases already appear in Superdev's Claude guidance.
 - **Revisit-when:** Claude Code changes or removes either alias.
+
+### D6 — Migrate every active routing consumer atomically   (status: locked)
+
+- **Decision:** Update every active Superdev prompt/reference that selects a model to
+  use the shared two-tier policy in the same implementation task.
+- **Alternatives:** Central-only editing gains a smaller diff but sacrifices contract
+  consistency; atomic migration gains one enforceable policy but touches more linked
+  documentation.
+- **Why:** A stale reviewer or checkride prompt can override the central skill at the
+  exact high-judgment boundary this change is meant to protect.
+- **Revisit-when:** A new consumer requires a deliberately different policy and the
+  anchor is amended first.
+
+### D7 — Include synonym-bearing tool references   (status: locked)
+
+- **Decision:** Treat the checkride executor prompt and `using-superdev` Codex routing
+  reference as active consumers, and structurally reject their retired synonyms and
+  Luna/fallback policy.
+- **Alternatives:** Literal phrase inventory gains simplicity but misses semantic
+  aliases; semantic inventory gains complete enforcement at the cost of a broader
+  search/test list.
+- **Why:** Both files directly select worker models and can bypass D2/D3 even though
+  they use different words from the central policy.
+- **Revisit-when:** The anchor intentionally adds a model or tier.
 
 ## 7. Assumptions & open questions
 

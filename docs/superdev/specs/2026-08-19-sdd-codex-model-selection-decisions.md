@@ -83,3 +83,48 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Claude compatibility design, core model-selection guidance, and
   acceptance scenarios.
 - **Revisit-when:** Claude Code changes or removes either stable alias.
+
+## D6 — Migrate every active routing consumer atomically
+**When:** 2026-08-19T06:43:00Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** coordinator from independent plan review
+
+- **Trigger:** The first plan changed the central Model Selection section but left
+  active reviewer, checkride, brainstorming, and self-brainstorming prompts on the
+  retired `most capable` / `standard` / `top tier under Codex` vocabulary.
+- **Options weighed:**
+  - A: update only the central policy — gains the smallest diff / sacrifices a single
+    enforceable contract because dependent prompts can bypass the new mappings.
+  - B: migrate every active routing consumer in the same task — gains consistency and
+    testability / expands the documentation diff across linked skills.
+- **Decided:** Migrate all active Superdev model-routing consumers atomically to
+  `very smart` / `medium` and the explicit Claude aliases, with Codex resolution
+  delegated to the new appendix. Structural tests reject retired routing vocabulary in
+  those consumers.
+- **Rests on:** R1–R4, D2–D5, and the plan review finding that contradictory active
+  prompts would make correct routing optional.
+- **Affects:** §5.1 and the implementation plan's file map, structural tests, and
+  evaluation context.
+- **Revisit-when:** A newly added model-routing consumer intentionally defines a
+  different policy and the anchor is amended to permit it.
+
+## D7 — Treat synonym-bearing tool references as routing consumers
+**When:** 2026-08-19T06:48:43Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** coordinator from plan re-review
+
+- **Trigger:** A literal inventory of `most capable` / `standard model` missed the
+  checkride executor's `standard tier` and `using-superdev`'s Codex routing table with
+  Luna and nearest-tier substitution.
+- **Options weighed:**
+  - A: patch only the initially matched files — gains a narrow diff / sacrifices D6
+    because synonym-bearing consumers retain contradictory behavior.
+  - B: inventory model-routing semantics, including synonyms and tables — gains a
+    complete contract boundary / requires stronger structural guards.
+- **Decided:** The checkride executor prompt and `using-superdev` Codex tools reference
+  are active routing consumers. Migrate them in the same task and reject `standard
+  tier`, Luna, and nearest-tier fallback in structural tests.
+- **Rests on:** D2, D3, D6 and the plan re-review evidence.
+- **Affects:** §5.1 consumer boundary, plan file map, Step 5, and structural tests.
+- **Revisit-when:** The routing contract intentionally adds another model or tier via an
+  anchor amendment.
