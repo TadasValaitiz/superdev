@@ -1079,3 +1079,62 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Revisit-when:** A blocking implementation or checkride finding requires removing or
   breaking an existing public command; redesign and choose the appropriate major/minor
   boundary before publishing.
+
+## D46 — Keep incomplete legacy records raw-recoverable without inventing policy
+**When:** 2026-08-19T17:14:42Z (MEASURED) · **Phase:** plan review · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Schema-v1 records have no access or tier field, so a migrated named raw
+  session can collide with common `start` while lacking the immutable policy required
+  for common `run`.
+- **Options weighed:** infer full access/default tier (short but dishonest); overwrite or
+  delete the legacy record (destructive); preserve it and refuse common execution with
+  exact advanced recovery (lossless and explicit).
+- **Decided:** Preserve the record through v2 migration with null policy. Common
+  execution/proxy/control returns typed `registry_error` with all IDs and exact advanced
+  recovery; existing-name `start` remains a collision and adds a different-name common
+  start action. No observation invents or persists policy.
+- **Affects:** registry v2, façade resolution, errors, migration tests, UC2/AH2 recovery.
+- **Revisit-when:** An explicit operator-approved adoption command is designed.
+
+## D47 — Load managed instance identity from verified owner-only metadata
+**When:** 2026-08-19T17:14:42Z (MEASURED) · **Phase:** plan review · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Common response and recovery models require the selected instance, but
+  trusting repeated client metadata would make daemon output spoofable and repetitive.
+- **Options weighed:** repeat identity in every RPC request; add a hidden public serve
+  flag; load the instance manager's already-required metadata beside managed state.
+- **Decided:** The instance manager atomically writes owner-only `instance.json`; daemon
+  bootstrap verifies its identity against the hashed parent and injects it into the
+  façade. Raw arbitrary-state serve exposes only advanced methods.
+- **Affects:** instance paths, daemon composition, `FacadeDeps`, every common response.
+- **Revisit-when:** The registry itself becomes explicitly instance-bound.
+
+## D48 — Raw turns cannot rewrite a common worker's immutable policy
+**When:** 2026-08-19T17:14:42Z (MEASURED) · **Phase:** plan review · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The legacy raw turn path persists model/effort annotations, while common
+  workers promise creation-time tier/model/effort/access immutability.
+- **Options weighed:** forbid raw access to common records; let raw commands permanently
+  reconfigure them; apply raw overrides to that turn while preserving common policy.
+- **Decided:** Apply raw overrides only to that turn for complete common-policy records.
+  Legacy incomplete records retain existing mutable annotation semantics. A later
+  common run deliberately resends the original policy.
+- **Affects:** typed broker specs, annotation policy, raw compatibility, regression tests.
+- **Revisit-when:** A first-class worker reconfiguration command is designed.
+
+## D49 — Use exact local release gates and installed Claude verification
+**When:** 2026-08-19T17:14:42Z (MEASURED) · **Phase:** plan review · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** The first plan named generic package/reinstall work that an implementer
+  could not execute without inventing commands or portal metadata.
+- **Decided:** Run the three tracked Codex marketplace/package/sync test scripts, commit
+  7.2.0 source manifests, run `claude plugin update superdev@superdev-dev`, verify the
+  version and installed launcher from a temporary external cwd, then commit that receipt.
+  Producing a portal archive is outside this local release because its required prior
+  official metadata package is not present (MEASURED); the package builder remains gated.
+- **Affects:** Task 8, D45's local meaning of packaged, checkride evidence, handoff.
+- **Revisit-when:** Official portal metadata is supplied for an upload artifact.

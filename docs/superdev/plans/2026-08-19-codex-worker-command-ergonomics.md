@@ -55,7 +55,7 @@ This plan discharges UC1–UC10 and AH1–AH12 from the design anchor. Tasks 1�
 
 **Role in the build:** Define the stable common request/response/refusal shapes and migrate durable records without losing existing raw sessions (R2–R3, R8, R11, R13; D11–D12, D35–D36, D40–D42).
 
-**Read first:** Design §5.2, §5.5–§5.6, §5.9.1–§5.9.5; CLI surface §§0, 8, 10; decision log D35–D36/D40–D42; Python patterns §§2, 4, 6, 8.
+**Read first:** Design §5.2, §5.5–§5.6, §5.9.1–§5.9.5; CLI surface §§0, 8, 10; decision log D35–D36/D40–D42/D46; Python patterns §§2, 4, 6, 8.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/commands.py`
@@ -66,7 +66,7 @@ This plan discharges UC1–UC10 and AH1–AH12 from the design anchor. Tasks 1�
 
 **Interfaces:**
 - Consumes: existing `SessionRecord`, `RpcFault`, and schema-v1 registry files.
-- Produces: closed `Tier`, `AccessMode`, `InstanceSource`, `CompletionSelection`, and `MetricAvailability` enums; frozen strict request models `StartWorkerRequest`, `RunWorkerRequest`, `WorkerStatusRequest`, `WorkerMessagesRequest`, `WorkerHistoryRequest`, `SteerWorkerRequest`, `InterruptWorkerRequest`, `GoalSetRequest`, `GoalShowRequest`, `LimitsRequest`, `DaemonStatusRequest`, `DaemonStopRequest`; frozen response/value models named exactly as CLI §8; `FacadeFault(code, message, kind, retryable, source, details, known_ids, next_actions)`; registry schema v2 with `SessionRecord.tier/access`, `resolve_name(name)`, and `create_worker(thread_id: str, cwd: str, name: str, tier: Optional[str], model: str, effort: str, access: str, session_id: Optional[str] = None) -> SessionRecord`.
+- Produces: shared frozen `Ok[T]`, `Err[E]`, and `Result[T, E]` types; closed `Tier`, `AccessMode`, `InstanceSource`, `CompletionSelection`, and `MetricAvailability` enums; frozen strict request models `StartWorkerRequest`, `RunWorkerRequest`, `WorkerStatusRequest`, `WorkerMessagesRequest`, `WorkerHistoryRequest`, `SteerWorkerRequest`, `InterruptWorkerRequest`, `GoalSetRequest`, `GoalShowRequest`, `LimitsRequest`, `DaemonStatusRequest`, `DaemonStopRequest`; frozen response/value models named exactly as CLI §8; `FacadeFault(code, message, kind, retryable, source, details, known_ids, next_actions)`; registry schema v2 with `SessionRecord.tier/access`, `SessionRecord.common_policy_complete`, `resolve_name(name)`, and `create_worker(thread_id: str, cwd: str, name: str, tier: Optional[str], model: str, effort: str, access: str, session_id: Optional[str] = None) -> SessionRecord`.
 
 - [ ] **Step 1: Write RED tests for strict command and response construction**
 
@@ -148,6 +148,7 @@ def test_v1_records_load_without_loss_and_upgrade_on_next_write(self):
     legacy = registry.resolve_name("legacy")
     self.assertIsNone(legacy.tier)
     self.assertIsNone(legacy.access)
+    self.assertFalse(legacy.common_policy_complete)
     registry.create_worker("thr-2", self.cwd, "new-a31", "medium",
                            "gpt-5.6-terra", "medium", "full")
     self.assertEqual(json.loads(self.state_path.read_text())["schema_version"], 2)
@@ -160,6 +161,8 @@ records as v2 only after a successful mutation. Missing/zero-byte input writes t
 empty v2 snapshot atomically. Preserve non-empty malformed bytes and include
 path/expected versions in `RegistryError`. Enforce unique non-null names in addition to
 session/thread IDs, parent fsync after replace, and exact owner-only regular-file checks.
+Loading never invents access, tier, model, or effort; a record is common-policy complete
+only when every immutable field is present.
 
 - [ ] **Step 6: Run focused and fast gates**
 
@@ -183,7 +186,7 @@ git commit -m "feat(codex-worker): add named worker command domain"
 
 **Role in the build:** Resolve harness identity into safe paths and one concurrency-safe daemon while keeping lifecycle independent from worker orchestration (R1, R4, R6, R10–R11; D4–D6, D8–D9, D18, D27, D33–D34, D37).
 
-**Read first:** Design §5.1, §5.6–§5.8; CLI surface §§0, 6; decision log D33–D34/D37/D43; Python patterns §§3–4, 6–8.
+**Read first:** Design §5.1, §5.6–§5.8; CLI surface §§0, 6; decision log D33–D34/D37/D43/D47; Python patterns §§3–4, 6–8.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/instance.py`
@@ -193,7 +196,7 @@ git commit -m "feat(codex-worker): add named worker command domain"
 
 **Interfaces:**
 - Consumes: Task 1 `InstanceIdentity`, `InstanceView`, `DaemonStatusResponse`, `DaemonStopResponse`, `FacadeFault`.
-- Produces: `resolve_instance(explicit, env) -> InstanceIdentity`; `derive_instance_paths(identity, platform, state_home, temp_root, uid) -> InstancePaths`; injectable `InstanceDeps`; `InstanceManager.status()`, `ensure_running()`, `stop()`; executable cwd-independent `bin/codex-worker`.
+- Produces: `resolve_instance(explicit, env) -> InstanceIdentity`; `derive_instance_paths(identity, platform, state_home, temp_root, uid) -> InstancePaths`; injectable `InstanceDeps`; `InstanceManager.status()`, `ensure_running()`, `stop()`; owner-only `instance.json`; `load_managed_identity(state_path) -> Optional[InstanceIdentity]`; executable cwd-independent `bin/codex-worker`.
 
 - [ ] **Step 1: Write RED precedence/path tests**
 
@@ -234,6 +237,11 @@ Unix systems under
 the socket under the platform temporary directory as
 `superdev-cw-<effective-uid>/<sha256-prefix>/worker.sock`. Persist original identity
 only in owner-only metadata, not path text.
+
+Create `instance.json` beside `registry.json` before spawn with mode `0600`. Loading
+verifies owner, type, mode, exact fields, and agreement between the identity hash and
+the parent directory name. An arbitrary raw state path without verified managed
+metadata remains valid for advanced methods but cannot construct a common façade.
 
 - [ ] **Step 4: Write RED concurrent-start, stale-state, stop, and adversarial path tests**
 
@@ -296,7 +304,7 @@ git commit -m "feat(codex-worker): manage session-scoped daemon instances"
 
 **Role in the build:** Add provider-accurate access/output/proxy calls and a pure completion/history projector before orchestration depends on them (R3, R7–R9; D15–D17, D20–D22, D29–D32, D39, D41, D44).
 
-**Read first:** Design §5.3–§5.5; CLI surface §§1c, 4–5, 8; decision log D39/D41/D44; generate fresh schemas with the Context-pack command and read `ThreadStartParams`, `ThreadResumeParams`, `TurnStartParams`, `ThreadGoal*`, `ThreadTurnsListParams`, and `AccountRateLimitsReadResponse`.
+**Read first:** Design §5.3–§5.5; CLI surface §§1c, 4–5, 8; decision log D39/D41/D44/D48; generate fresh schemas with the Context-pack command and read `ThreadStartParams`, `ThreadResumeParams`, `TurnStartParams`, `ThreadGoal*`, `ThreadTurnsListParams`, and `AccountRateLimitsReadResponse`.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/projection.py`
@@ -309,7 +317,7 @@ git commit -m "feat(codex-worker): manage session-scoped daemon instances"
 
 **Interfaces:**
 - Consumes: Task 1 response/value models; existing `WorkerBroker`, `RuntimeStore`, `CodexAppServer.call`.
-- Produces: `SessionStartSpec`, `SessionResumeSpec`, `TurnStartSpec`; public broker methods `start_session(spec)`, `resume_session(spec)`, `start_turn(spec)` used by both raw dispatch and façade; `NativeCodexProxy.goal_set/get`, `turns_list`, `rate_limits_read`; pure `select_completion_messages`, `project_completion`, `project_history_turn`, `derive_metrics`.
+- Produces: `SessionStartSpec`, `SessionResumeSpec`, `TurnStartSpec`; public broker methods `start_session(spec)`, `resume_session(spec)`, `start_turn(spec)` used by both raw dispatch and façade; `AnnotationPolicy.LEGACY_MUTABLE|PRESERVE_WORKER_POLICY`; `NativeCodexProxy.goal_set/get`, `turns_list`, `rate_limits_read`; pure `select_completion_messages`, `project_completion`, `project_history_turn`, `derive_metrics`.
 
 - [ ] **Step 1: Write RED adapter request-shape tests**
 
@@ -336,6 +344,13 @@ Expected: FAIL because typed specs/public methods do not exist.
 Refactor existing raw dispatchers to construct specs and call the same methods. Preserve
 all existing raw params/results. Add `NativeCodexProxy` with exact method/field spelling;
 validate every response before constructing Task 1 models.
+
+Registry mutation is record-aware: a schema-v2 worker with complete common policy keeps
+its creation-time `tier/model/effort/access` immutable even when addressed through a raw
+turn command, while a legacy/raw record with incomplete common policy retains existing
+mutable model/effort annotation behavior. A raw override on a common worker affects that
+turn only. Add paired tests for both branches and prove a later common `run` resends the
+original persisted policy.
 
 - [ ] **Step 3: Write RED projection tests for nullable phase, schema mode, and metrics**
 
@@ -406,15 +421,15 @@ git commit -m "feat(codex-worker): project native Codex worker results"
 
 **Role in the build:** Compose durable name lookup, policy, native proxies, waits, recovery, and result projection into one transport-independent service (R2–R9, R13; D13–D17, D23–D32, D35, D39–D44).
 
-**Read first:** Design §4 and §5.2–§5.7; CLI surface §§1–5, 8, 10; domain §5.9.5; Python patterns §§3–6.
+**Read first:** Design §4 and §5.2–§5.7; CLI surface §§1–5, 8, 10; decision log D46–D48; domain §5.9.5; Python patterns §§3–6.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/facade.py`
 - Create: `tests/codex-worker/test_facade.py`
 
 **Interfaces:**
-- Consumes: Tasks 1–3 models, registry, `WorkerBroker`, `NativeCodexProxy`, `RuntimeStore`, projector.
-- Produces: frozen `FacadeDeps`; `WorkerFacade.start/run/status/messages/history/steer/interrupt/goal_set/goal_show/limits`, each exactly `(Request) -> Result[Response]` using `Ok`/`Err(FacadeFault)`; no CLI/env/socket logic.
+- Consumes: Tasks 1–3 models, registry, verified `InstanceIdentity`, `WorkerBroker`, `NativeCodexProxy`, `RuntimeStore`, projector.
+- Produces: frozen `FacadeDeps(instance, registry, broker, runtime, projector, clock)`; `WorkerFacade.start/run/status/messages/history/steer/interrupt/goal_set/goal_show/limits`, each exactly `(Request) -> Result[Response, FacadeFault]` using Task 1's `Ok`/`Err`; no CLI/env/socket logic. Every `WorkerView.instance` and recovery command uses `deps.instance.value`, never client-supplied RPC metadata.
 
 - [ ] **Step 1: Write RED happy-path composition tests**
 
@@ -450,6 +465,12 @@ Cover full field equality for every CLI §8 response. Assert unknown name, exist
 idle control race, unrelated Codex failure, stopped/not-attached state, live message
 tail/truncation, multi-page history, goal absence/update, and limits unavailable.
 
+Add migrated/raw named-record cases: operations requiring common policy return typed
+`registry_error` with `details.policy_state: "incomplete_legacy"`, preserve all IDs,
+and offer exact advanced session/turn recovery plus a different-name common `start`.
+Existing-name `start` remains `worker_name_exists` with the same legacy-aware actions.
+The façade never guesses policy and never rewrites a record merely by observing it.
+
 - [ ] **Step 4: Implement remaining façade methods**
 
 Resolve name exactly once per call. `steer`/`interrupt` capture the active turn ID
@@ -475,7 +496,7 @@ git commit -m "feat(codex-worker): compose named worker workflows"
 
 **Role in the build:** Make the façade reachable through the public one-command harness journey while preserving every advanced raw method and response (R1–R6, R10, R12–R13; D6, D18, D23–D28, D30, D34–D38, D43).
 
-**Read first:** Design §5.1, §5.6, §5.8; CLI surface §§0–10; decision log D23–D28/D34/D38/D43; Python patterns §§3, 6–7.
+**Read first:** Design §5.1, §5.6, §5.8; CLI surface §§0–10; decision log D23–D28/D34/D38/D43/D47; Python patterns §§3, 6–7.
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/rpc.py`
@@ -484,7 +505,7 @@ git commit -m "feat(codex-worker): compose named worker workflows"
 - Modify: `tests/codex-worker/test_rpc_cli.py`
 
 **Interfaces:**
-- Consumes: Task 2 `InstanceManager`; Task 4 `WorkerFacade`; existing raw `WorkerBroker`.
+- Consumes: Task 2 `InstanceManager` and verified managed identity loader; Task 4 `WorkerFacade`; existing raw `WorkerBroker`.
 - Produces: composite RPC dispatcher with `worker/*`, `worker/goal/*`, `account/limits`; parser and renderer for every CLI table row; common/advanced endpoint mode resolver; daemon status/stop models; preserved raw JSON-RPC methods.
 
 - [ ] **Step 1: Write RED parser/model matrix tests**
@@ -533,6 +554,11 @@ explicit socket, explicit instance, legacy socket env/default. Daemon status is 
 unless `--socket` is explicit; raw shutdown/serve remain socket-only. Socket client
 timeout is infinite when the request wait is infinite and leaves server work running on
 disconnect.
+
+At daemon bootstrap, load verified `instance.json` adjacent to managed state and inject
+its `InstanceIdentity` into `FacadeDeps`. If metadata is absent or inconsistent,
+register only the advanced dispatcher. Common requests do not carry or select their
+response instance identity.
 
 - [ ] **Step 5: Verify every response/error field and compatibility mode**
 
@@ -695,7 +721,7 @@ git commit -m "docs(sdd): adopt named codex worker commands"
 
 **Role in the build:** Prove the operator journey against real Codex and Claude, fill every anchor receipt honestly, and publish the installed plugin only after the user-facing gate passes (R1–R13; UC1–UC10; AH1–AH12).
 
-**Read first:** Invoke `superdev:cli-checkride`; design §3 and §9; CLI surface §§0–10; Task 7's changed sections listed in its Files block; prior live harness/checkride evidence for mechanics only.
+**Read first:** Invoke `superdev:cli-checkride`; design §3 and §9; CLI surface §§0–10; decision log D45/D49; Task 7's changed sections listed in its Files block; prior live harness/checkride evidence for mechanics only.
 
 **Files:**
 - Modify: `tests/codex-worker/live_broker_check.py`
@@ -709,7 +735,7 @@ git commit -m "docs(sdd): adopt named codex worker commands"
 
 **Interfaces:**
 - Consumes: Tasks 1–7 complete source and installed-launcher candidate.
-- Produces: re-runnable real broker/Claude checks, tracked sanitized verbatim checkride evidence, AH1–AH12 receipts, version 7.2.0 installed plugin.
+- Produces: re-runnable real broker/Claude checks, tracked sanitized verbatim checkride evidence, AH1–AH12 receipts, version 7.2.0 source manifests and installed Claude plugin, plus passing Codex package/sync validation.
 
 - [ ] **Step 1: Update harness assertions before live execution**
 
@@ -772,7 +798,7 @@ Fill design §9 with one re-runnable test/transcript/file receipt per AH1–AH12
 any unavailable limits/token metric as unavailable; file an owned backlog item for any
 unanswered hint before autonomous close.
 
-- [ ] **Step 7: Bump, audit, package, and reinstall version 7.2.0**
+- [ ] **Step 7: Bump, audit, validate packaging, and commit version 7.2.0**
 
 Run:
 
@@ -780,24 +806,45 @@ Run:
 ./scripts/bump-version.sh 7.2.0
 ./scripts/bump-version.sh --check
 ./scripts/bump-version.sh --audit
+bash tests/codex/test-marketplace-manifest.sh
+bash tests/codex/test-package-codex-plugin.sh
+bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh
 ```
 
-Add measured release notes. Run the repository's Codex-plugin sync/package checks and
-the Claude plugin cache-buster/reinstall procedure used by the installed Superdev
-development plugin. From a cwd outside the repository, require `codex-worker --help`
-and a managed `daemon status` to resolve the installed 7.2.0 launcher.
+Add measured release notes, then commit the release source before installing from
+`HEAD`:
 
-- [ ] **Step 8: Commit release evidence**
+```bash
+git add RELEASE-NOTES.md package.json .claude-plugin/plugin.json \
+  .claude-plugin/marketplace.json .codex-plugin/plugin.json \
+  .cursor-plugin/plugin.json .kimi-plugin/plugin.json gemini-extension.json
+git commit -m "chore(release): bump superdev to 7.2.0"
+```
+
+- [ ] **Step 8: Reinstall Claude plugin, verify installed launcher, and commit evidence**
+
+Run exactly:
+
+```bash
+claude plugin update superdev@superdev-dev
+claude plugin list
+CLAUDE_PLUGIN_ROOT="$HOME/.claude/plugins/cache/superdev-dev/superdev/7.2.0"
+test -x "$CLAUDE_PLUGIN_ROOT/bin/codex-worker"
+INSTALLED_CHECK_DIR="$(mktemp -d)"
+(cd "$INSTALLED_CHECK_DIR" && "$CLAUDE_PLUGIN_ROOT/bin/codex-worker" --help)
+(cd "$INSTALLED_CHECK_DIR" && "$CLAUDE_PLUGIN_ROOT/bin/codex-worker" daemon status)
+```
+
+Record the installed 7.2.0 version line and both outside-repository invocations in the
+tracked checkride evidence. Then commit all live evidence and receipt updates:
 
 ```bash
 git add tests/codex-worker/live_broker_check.py tests/codex-worker/live_claude_check.sh \
   tests/codex-worker/live_claude_evidence.py tests/codex-worker/test_live_claude_evidence.py \
   docs/superdev/specs/2026-08-19-codex-worker-command-ergonomics-design.md \
   docs/superdev/checkrides/2026-08-19-codex-worker-command-checkride.md \
-  docs/superdev/checkrides/2026-08-19-codex-worker-command-evidence \
-  RELEASE-NOTES.md package.json .claude-plugin .codex-plugin .cursor-plugin \
-  .kimi-plugin gemini-extension.json
-git commit -m "chore(release): ship codex worker command facade"
+  docs/superdev/checkrides/2026-08-19-codex-worker-command-evidence
+git commit -m "docs(codex-worker): record installed command checkride"
 ```
 
 Run `git diff --check HEAD~1..HEAD`, `./scripts/bump-version.sh --check`, and the fast
