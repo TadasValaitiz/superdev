@@ -96,8 +96,11 @@ class WorkerFacade:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault):
                 return Err(record)
-            status = self.deps.runtime.status(record.session_id)
-            if not status.attached:
+            try:
+                attached = self.deps.runtime.status(record.session_id).attached
+            except (UnknownSession, SessionDetached):
+                attached = False
+            if not attached:
                 self.deps.broker.session_resume(IdentifierSelector(session_id=record.session_id))
             return self._start_and_wait(record, self._worker(record), request.prompt,
                                         request.output_schema, request.timeout)

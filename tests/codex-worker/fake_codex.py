@@ -14,8 +14,11 @@ class FakeCodex:
         self.delay = delay
         self.initialized = False
         self.thread_id = "thr-fake"
+        self.thread_number = 0
+        self.thread_cwds = {}
         self.turn_number = 0
         self.active_turn = None
+        self.active_turns = {}
         self.write_lock = threading.Lock()
         self.approval_request_id = 9001
         self.goal = None
@@ -34,27 +37,30 @@ class FakeCodex:
     def response(self, request_id, result):
         self.send({"id": request_id, "result": result})
 
-    def complete_later(self, turn_id):
+    def complete_later(self, thread_id, turn_id, prompt):
         time.sleep(self.delay)
-        if self.active_turn != turn_id:
+        if self.active_turns.get(thread_id) != turn_id:
             return
         self.send({
             "method": "item/completed",
             "params": {
-                "threadId": self.thread_id,
+                "threadId": thread_id,
                 "turnId": turn_id,
-                "item": {"id": "item-1", "type": "agentMessage", "text": "done", "phase": None,
+                "item": {"id": "item-%s" % turn_id, "type": "agentMessage",
+                         "text": "done:%s" % prompt, "phase": None,
                          "tokenUsage": {"totalTokens": 7}},
             },
         })
         self.send({
             "method": "turn/completed",
             "params": {
-                "threadId": self.thread_id,
+                "threadId": thread_id,
                 "turn": {"id": turn_id, "status": "completed", "items": []},
             },
         })
-        self.active_turn = None
+        self.active_turns.pop(thread_id, None)
+        if self.active_turn == turn_id:
+            self.active_turn = None
 
     def approval_method(self):
         return {
@@ -67,12 +73,16 @@ class FakeCodex:
     def handle_turn_start(self, message):
         self.turn_number += 1
         turn_id = "turn-%d" % self.turn_number
+        thread_id = message["params"]["threadId"]
+        inputs = message["params"].get("input", [])
+        prompt = inputs[0].get("text", "") if inputs and isinstance(inputs[0], dict) else ""
         notified_id = "turn-notified" if self.mode == "mismatch-before-response" else turn_id
         self.active_turn = notified_id
+        self.active_turns[thread_id] = notified_id
         started = {
             "method": "turn/started",
             "params": {
-                "threadId": self.thread_id,
+                "threadId": thread_id,
                 "turn": {"id": notified_id, "status": "inProgress", "items": []},
             },
         }
@@ -81,10 +91,11 @@ class FakeCodex:
             self.send({
                 "method": "turn/completed",
                 "params": {
-                    "threadId": self.thread_id,
+                    "threadId": thread_id,
                     "turn": {"id": notified_id, "status": "completed", "items": []},
                 },
             })
+            self.active_turns.pop(thread_id, None)
             self.active_turn = None
             self.response(message["id"], {"turn": {"id": turn_id, "status": "inProgress"}})
             return
@@ -94,7 +105,7 @@ class FakeCodex:
         approval_method = self.approval_method()
         if approval_method:
             params = {
-                "threadId": self.thread_id,
+                "threadId": thread_id,
                 "turnId": turn_id,
                 "itemId": "approval-item",
                 "reason": "SECRET prompt content",
@@ -104,7 +115,8 @@ class FakeCodex:
             }
             self.send({"id": self.approval_request_id, "method": approval_method, "params": params})
         else:
-            threading.Thread(target=self.complete_later, args=(turn_id,), daemon=True).start()
+            threading.Thread(target=self.complete_later,
+                             args=(thread_id, turn_id, prompt), daemon=True).start()
 
     def handle(self, message):
         method = message.get("method")
@@ -129,10 +141,14 @@ class FakeCodex:
                     {"id": "fake-model-b", "supportedReasoningEfforts": [{"reasoningEffort": "high"}]},
                 ]})
         elif method == "thread/start":
+            self.thread_number += 1
+            self.thread_id = "thr-fake" if self.thread_number == 1 else "thr-fake-%d" % self.thread_number
+            self.thread_cwds[self.thread_id] = message["params"]["cwd"]
             self.response(request_id, {"thread": {"id": self.thread_id, "cwd": message["params"]["cwd"]}})
         elif method == "thread/resume":
             self.thread_id = message["params"]["threadId"]
-            self.response(request_id, {"thread": {"id": self.thread_id, "cwd": os.getcwd()}})
+            self.response(request_id, {"thread": {"id": self.thread_id,
+                                                    "cwd": self.thread_cwds.get(self.thread_id, os.getcwd())}})
         elif method == "turn/start":
             self.thread_id = message["params"]["threadId"]
             self.handle_turn_start(message)
@@ -156,15 +172,17 @@ class FakeCodex:
             self.response(request_id, {"turnId": message["params"]["expectedTurnId"]})
         elif method == "turn/interrupt":
             turn_id = message["params"]["turnId"]
+            thread_id = message["params"]["threadId"]
             self.response(request_id, {})
-            if self.active_turn == turn_id:
+            if self.active_turns.get(thread_id) == turn_id:
                 self.send({
                     "method": "turn/completed",
                     "params": {
-                        "threadId": self.thread_id,
+                        "threadId": thread_id,
                         "turn": {"id": turn_id, "status": "interrupted", "items": []},
                     },
                 })
+                self.active_turns.pop(thread_id, None)
                 self.active_turn = None
         elif request_id == self.approval_request_id and method is None:
             decision = message.get("result", {})

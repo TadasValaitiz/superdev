@@ -21,7 +21,8 @@ from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowReq
                        InterruptWorkerRequest, LimitsRequest, RunWorkerRequest,
                        StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
                        WorkerMessagesRequest, WorkerStatusRequest)
-from .instance import InstanceDeps, InstanceManager, derive_instance_paths, resolve_instance
+from .instance import (InstanceDeps, InstanceManager, derive_instance_paths,
+                       resolve_instance, validate_instance_id)
 
 
 DOCUMENTED_CLIENT_METHODS = {
@@ -100,6 +101,26 @@ def _nonnegative_float(value: str) -> float:
     return parsed
 
 
+def _absolute_path(value: str) -> str:
+    if not value or not Path(value).is_absolute():
+        raise argparse.ArgumentTypeError("must be an absolute path")
+    return value
+
+
+def _absolute_directory(value: str) -> str:
+    path = Path(value)
+    if not path.is_absolute() or not path.is_dir():
+        raise argparse.ArgumentTypeError("must be an absolute existing directory")
+    return value
+
+
+def _instance_id(value: str) -> str:
+    try:
+        return validate_instance_id(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _unsupported_turn_selector(value: str) -> str:
     raise argparse.ArgumentTypeError(
         "unsupported argument --turn; use --session <session-id> or --thread <thread-id>"
@@ -111,9 +132,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="codex-worker",
         description="Local Unix-socket broker for durable Codex worker sessions.",
     )
-    parser.add_argument("--socket",
+    parser.add_argument("--socket", type=_absolute_path,
                         help="Unix socket path (default: SUPERDEV_CODEX_WORKER_SOCKET or user temp path)")
-    parser.add_argument("--instance", help="selected managed worker instance")
+    parser.add_argument("--instance", type=_instance_id,
+                        help="selected managed worker instance")
     parser.add_argument("--pretty", action="store_true",
                         help="Pretty-print JSON responses for client commands")
 
@@ -129,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve = daemon_sub.add_parser("serve", help="run the worker daemon in the foreground")
     serve.set_defaults(method=None)
-    serve.add_argument("--state", default=default_state_path(),
+    serve.add_argument("--state", type=_absolute_path, default=default_state_path(),
                        help="session registry path (default: SUPERDEV_CODEX_WORKER_STATE or user state dir)")
     serve.add_argument("--codex-bin", default="codex",
                        help="installed Codex CLI executable path")
@@ -151,7 +173,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     session_start = session_sub.add_parser("start", help="create and persist a new session")
     session_start.set_defaults(method="session/start")
-    session_start.add_argument("--cwd", required=True, help="absolute worker cwd")
+    session_start.add_argument("--cwd", required=True, type=_absolute_directory,
+                               help="absolute worker cwd")
     session_start.add_argument("--name", help="optional human annotation")
     session_start.add_argument("--model", help="optional live-discovered model ID")
 
@@ -213,7 +236,7 @@ def _add_common_commands(families) -> None:
     _add_name_prompt(start)
     start.add_argument("--cwd", default=os.getcwd())
     policy = start.add_mutually_exclusive_group()
-    policy.add_argument("--tier", choices=("medium", "very-smart"), default="medium")
+    policy.add_argument("--tier", choices=("medium", "very-smart"))
     policy.add_argument("--model")
     start.add_argument("--effort", default="medium")
     start.add_argument("--read-only", action="store_true")
@@ -295,7 +318,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except CliUsageError as exc:
         if _argv_selects_daemon_serve(raw_argv):
             return 2
-        response = rpc_response(None, fault=RpcFault(
+        response = rpc_response("cli", fault=RpcFault(
             -32602, "Invalid params", "invalid_params", details={"reason": str(exc)}
         ))
         _print_json(response, _argv_wants_pretty(raw_argv))
@@ -336,19 +359,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                            if args.instance else args.socket or default_socket_path())
         response = rpc_call(socket_path, method, params, timeout=_client_timeout(method, params))
     except FacadeFault as fault:
-        response = rpc_response(None, fault=FacadeRpcFault(fault))
+        response = rpc_response("cli", fault=FacadeRpcFault(fault))
         _print_json(response, args.pretty)
         return 1
     except RpcFault as fault:
-        response = rpc_response(None, fault=fault)
+        response = rpc_response("cli", fault=fault)
         _print_json(response, args.pretty)
         return 1
     except OSError:
-        response = rpc_response(None, fault=daemon_unavailable_fault(args.socket or default_socket_path()))
+        response = rpc_response("cli", fault=daemon_unavailable_fault(args.socket or default_socket_path()))
         _print_json(response, args.pretty)
         return 1
     except ValueError as exc:
-        response = rpc_response(None, fault=RpcFault(
+        response = rpc_response("cli", fault=RpcFault(
             -32602, "Invalid params", "invalid_params", details={"reason": str(exc)}
         ))
         _print_json(response, args.pretty)
@@ -407,7 +430,7 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
     method = args.method
     if method == "worker/start":
         return {"name": args.name, "prompt": _prompt(args), "cwd": str(Path(args.cwd).resolve()),
-                "tier": None if args.model else args.tier, "model": args.model, "effort": args.effort,
+                "tier": None if args.model else (args.tier or "medium"), "model": args.model, "effort": args.effort,
                 "access": "read_only" if args.read_only else "full", "goal": args.goal,
                 "token_budget": args.token_budget, "output_schema": _output_schema(args.output_schema),
                 "timeout": args.timeout}

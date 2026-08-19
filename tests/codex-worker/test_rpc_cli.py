@@ -19,6 +19,31 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.models import IdentifierSelector, RpcFault
+from codex_worker.commands import (
+    AccessMode,
+    AgentMessageView,
+    CompletionResponse,
+    CompletionSelection,
+    ControlResponse,
+    Err,
+    FACADE_FAULT_KINDS,
+    FacadeFault,
+    FacadeFaultCode,
+    GoalResponse,
+    GoalView,
+    HistoryTurnView,
+    LimitsResponse,
+    MetricAvailability,
+    MetricEvidence,
+    Ok,
+    RecoveryView,
+    Tier,
+    TurnView,
+    WorkerHistoryResponse,
+    WorkerMessagesResponse,
+    WorkerStatusResponse,
+    WorkerView,
+)
 import codex_worker.rpc as rpc_module
 from codex_worker.rpc import (
     RpcServer,
@@ -154,8 +179,8 @@ class RpcServerTests(unittest.TestCase):
             with contextlib.suppress(Exception):
                 server.server_close()
 
-    def start_server(self, broker=None):
-        server = RpcServer(self.socket_path, broker or FakeBroker())
+    def start_server(self, broker=None, facade=None):
+        server = RpcServer(self.socket_path, broker or FakeBroker(), facade)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         server._test_thread = thread
@@ -367,6 +392,21 @@ class RpcServerTests(unittest.TestCase):
             rpc_module.ThreadingUnixServer.server_activate = original_activate
         self.assertEqual(observed_modes, [0o600])
 
+    def test_socket_is_owner_only_immediately_when_bound(self):
+        original_bind = rpc_module.ThreadingUnixServer.server_bind
+        observed_modes = []
+
+        def checking_bind(server):
+            original_bind(server)
+            observed_modes.append(stat.S_IMODE(os.stat(server.socket_path).st_mode))
+
+        rpc_module.ThreadingUnixServer.server_bind = checking_bind
+        try:
+            self.start_server()
+        finally:
+            rpc_module.ThreadingUnixServer.server_bind = original_bind
+        self.assertEqual(observed_modes, [0o600])
+
     def test_params_null_is_rejected_as_invalid_params(self):
         self.start_server()
         response = self.send_raw(
@@ -568,6 +608,104 @@ class RpcServerTests(unittest.TestCase):
                       "data": {"kind": "unknown_session"}},
         })
 
+    def test_common_rpc_success_families_have_exact_public_shapes(self):
+        worker = WorkerView(
+            "instance-a", "worker-a", "00000000-0000-0000-0000-000000000001",
+            "thread-a", str(Path(self.tempdir.name).resolve()), Tier.MEDIUM,
+            "fake-model-a", "medium", AccessMode.FULL,
+        )
+        turn = TurnView("turn-a", "completed", None)
+        message = AgentMessageView(
+            "agent_message", "item-a", "final_answer",
+            CompletionSelection.EXPLICIT_FINAL, "done",
+        )
+        completion = CompletionResponse(
+            worker, turn, [message], None,
+            {"wall_time_ms": MetricEvidence(1, "codex-worker", MetricAvailability.MEASURED)},
+            RecoveryView("status", "messages", "interrupt"),
+        )
+        goal = GoalView(
+            "thread-a", "finish", "active", 10, 1, 2,
+            "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z",
+        )
+        responses = {
+            "start": completion,
+            "run": completion,
+            "status": WorkerStatusResponse(worker, "ready", True, None, turn),
+            "messages": WorkerMessagesResponse(worker, [message], 1, 1, False, 4),
+            "history": WorkerHistoryResponse(
+                worker, [HistoryTurnView("turn-a", "completed", None, None, [message], None)],
+                1, 1, False,
+            ),
+            "steer": ControlResponse(worker, "steer", True, "turn-a", "in_progress"),
+            "interrupt": ControlResponse(worker, "interrupt", True, "turn-a", "interrupted"),
+            "goal_set": GoalResponse(worker, "present", goal),
+            "goal_show": GoalResponse(worker, "absent", None),
+            "limits": LimitsResponse("available", {"primary": {"usedPercent": 1}}),
+        }
+
+        class GoldenFacade:
+            def __getattr__(self, name):
+                return lambda request: Ok(responses[name])
+
+        server = self.start_server(facade=GoldenFacade())
+        cases = {
+            "worker/start": {"name": "worker-a", "prompt": "go", "cwd": worker.cwd,
+                             "tier": "medium", "model": None, "effort": "medium",
+                             "access": "full", "goal": None, "token_budget": None,
+                             "output_schema": None, "timeout": None},
+            "worker/run": {"name": "worker-a", "prompt": "go",
+                           "output_schema": None, "timeout": None},
+            "worker/status": {"name": "worker-a"},
+            "worker/messages": {"name": "worker-a", "tail": 1},
+            "worker/history": {"name": "worker-a", "tail": 1},
+            "worker/steer": {"name": "worker-a", "prompt": "go"},
+            "worker/interrupt": {"name": "worker-a"},
+            "worker/goal/set": {"name": "worker-a", "objective": "finish",
+                                "status": None, "token_budget": None},
+            "worker/goal/show": {"name": "worker-a"},
+            "account/limits": {},
+        }
+        expected = {
+            "worker/start": completion.to_dict(), "worker/run": completion.to_dict(),
+            "worker/status": responses["status"].to_dict(),
+            "worker/messages": responses["messages"].to_dict(),
+            "worker/history": responses["history"].to_dict(),
+            "worker/steer": responses["steer"].to_dict(),
+            "worker/interrupt": responses["interrupt"].to_dict(),
+            "worker/goal/set": responses["goal_set"].to_dict(),
+            "worker/goal/show": responses["goal_show"].to_dict(),
+            "account/limits": responses["limits"].to_dict(),
+        }
+        for method, params in cases.items():
+            with self.subTest(method=method):
+                response = rpc_call(server.socket_path, method, params, timeout=1.0)
+                self.assertEqual(response, {
+                    "jsonrpc": "2.0", "id": "cli", "result": expected[method],
+                })
+
+    def test_cli_section_10_code_kind_pairs_are_exhaustive_and_exact(self):
+        expected = {
+            -32602: "invalid_params", -32005: "turn_not_active",
+            -32011: "registry_error", -32015: "codex_protocol_error",
+            -32020: "codex_failure", -32021: "worker_name_exists",
+            -32022: "worker_not_found", -32023: "daemon_stopped",
+            -32024: "daemon_start_failed", -32025: "timeout_active",
+            -32026: "model_unavailable", -32027: "effort_unsupported",
+            -32028: "limits_unavailable", -32029: "incomplete_completion",
+            -32030: "daemon_stop_failed",
+        }
+        self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
+                         expected)
+        for code in FacadeFaultCode:
+            fault = FacadeFault(code, "message", expected[code.value])
+            payload = rpc_module.FacadeRpcFault(fault).to_dict()
+            self.assertEqual(payload["code"], code.value)
+            self.assertEqual(payload["data"]["kind"], expected[code.value])
+            self.assertEqual(set(payload["data"]), {
+                "kind", "retryable", "source", "details", "known_ids", "next_actions",
+            })
+
 
 @dataclass(frozen=True)
 class CliCase:
@@ -669,6 +807,9 @@ class CliTests(unittest.TestCase):
         lines = completed.stdout.splitlines()
         self.assertEqual(len(lines), 1, completed.stderr)
         payload = json.loads(lines[0])
+        self.assertEqual(payload.get("jsonrpc"), "2.0")
+        self.assertEqual(payload.get("id"), "cli")
+        self.assertEqual(set(payload), {"jsonrpc", "id", "error"})
         self.assertIn("error", payload)
         self.assertEqual(payload["error"]["data"]["kind"], expected_kind)
         return payload
@@ -690,6 +831,92 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(("result" in payload, "error" in payload), case.expected_envelope)
                 self.assertEqual(payload["result"]["method"], case.method)
                 self.assertEqual(payload["result"]["params"], case.expected_params)
+                self.assertEqual(payload, {
+                    "jsonrpc": "2.0", "id": "cli",
+                    "result": {"method": case.method, "params": case.expected_params},
+                })
+
+    def test_every_advanced_client_accepts_explicit_instance_and_preserves_raw_response(self):
+        cases = [case for case in documented_client_argv_cases(
+            self.cwd, self.session_id, self.thread_id, self.prompt_file
+        ) if case.method not in {"daemon/status", "daemon/shutdown"}]
+        original_manager = cli._instance_manager
+        manager = type("Manager", (), {
+            "deps": type("Deps", (), {
+                "paths": type("Paths", (), {"socket_path": Path(self.socket_path)})(),
+            })(),
+        })()
+        cli._instance_manager = lambda selected: manager
+        try:
+            for case in cases:
+                with self.subTest(method=case.method):
+                    self.rpc_calls = []
+                    completed = self.run_cli(
+                        ["--instance", "chosen"] + case.argv,
+                        fake_rpc=self.fake_rpc_success, include_socket=False,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(json.loads(completed.stdout), {
+                        "jsonrpc": "2.0", "id": "cli",
+                        "result": {"method": case.method, "params": case.expected_params},
+                    })
+        finally:
+            cli._instance_manager = original_manager
+
+    def test_common_wait_timeout_maps_to_socket_timeout_without_cancelling(self):
+        cases = [
+            (["start", "--name", "a", "--prompt", "go"], None),
+            (["run", "--name", "a", "--prompt", "go"], None),
+            (["start", "--name", "a", "--prompt", "go", "--timeout", "0"], 5.0),
+            (["run", "--name", "a", "--prompt", "go", "--timeout", "2.5"], 7.5),
+        ]
+        for argv, expected_timeout in cases:
+            with self.subTest(argv=argv):
+                self.rpc_calls = []
+                completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                         include_socket=False)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(self.rpc_calls[0][2], expected_timeout)
+
+    def test_managed_daemon_success_models_have_exact_cli_shapes(self):
+        instance = {
+            "instance": "chosen", "source": "flag",
+            "durable_dir": str(Path(self.tempdir.name) / "durable"),
+            "socket_path": self.socket_path,
+            "log_path": str(Path(self.tempdir.name) / "daemon.log"),
+        }
+        status = {
+            "instance": instance, "status": "ready", "daemon_pid": 101,
+            "codex_pid": 102, "worker_count": 3,
+            "readiness": {"ready": True}, "last_error": None,
+        }
+        stopped = {
+            "instance": instance, "status_before": "ready", "status_after": "stopped",
+            "daemon_pid": 101, "codex_pid": 102, "durable_state": "preserved",
+            "worker_count": 3,
+        }
+
+        class Result:
+            def __init__(self, value): self.value = value
+            def to_dict(self): return self.value
+
+        manager = type("Manager", (), {
+            "status": lambda self: Result(status),
+            "stop": lambda self: Result(stopped),
+        })()
+        original = cli._instance_manager
+        cli._instance_manager = lambda selected: manager
+        try:
+            for argv, result in ((["--instance", "chosen", "daemon", "status"], status),
+                                 (["--instance", "chosen", "daemon", "stop"], stopped)):
+                with self.subTest(argv=argv):
+                    completed = self.run_cli(argv, include_socket=False)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(json.loads(completed.stdout), {
+                        "jsonrpc": "2.0", "id": "cli", "result": result,
+                    })
+        finally:
+            cli._instance_manager = original
 
     def test_rpc_error_is_structured_and_exit_one(self):
         def fake_rpc_error(socket_path, method, params, timeout):
@@ -708,6 +935,23 @@ class CliTests(unittest.TestCase):
         lines = completed.stdout.splitlines()
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0])["error"]["data"]["kind"], "daemon_unavailable")
+
+    def test_common_stopped_refusal_is_one_exact_operational_json_object(self):
+        original = cli._common_endpoint
+        cli._common_endpoint = lambda instance, autostart: (_ for _ in ()).throw(
+            FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped",
+                        "daemon_stopped")
+        )
+        try:
+            completed = self.run_cli(["status", "--name", "worker-a"],
+                                     include_socket=False)
+        finally:
+            cli._common_endpoint = original
+        payload = self.assert_json_error(completed, 1, "daemon_stopped")
+        self.assertEqual(payload["error"]["code"], -32023)
+        self.assertEqual(set(payload["error"]["data"]), {
+            "kind", "retryable", "source", "details", "known_ids", "next_actions",
+        })
 
     def test_pretty_is_rejected_for_foreground_serve(self):
         completed = self.run_cli(["--pretty", "daemon", "serve"])
@@ -814,9 +1058,176 @@ class CliTests(unittest.TestCase):
         ]
         for argv in rejected:
             with self.subTest(argv=argv):
-                result = self.run_cli(argv, fake_rpc=self.fake_rpc_success)
+                result = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                      include_socket=False)
                 self.assert_json_error(result, 2)
         self.assertEqual(self.rpc_calls, [])
+
+    def test_every_common_command_rejects_explicit_socket_before_rpc(self):
+        commands = [
+            ["start", "--name", "a", "--prompt", "go"],
+            ["run", "--name", "a", "--prompt", "go"],
+            ["status", "--name", "a"],
+            ["messages", "--name", "a"],
+            ["history", "--name", "a"],
+            ["steer", "--name", "a", "--prompt", "go"],
+            ["interrupt", "--name", "a"],
+            ["goal", "set", "--name", "a", "--status", "paused"],
+            ["goal", "show", "--name", "a"],
+            ["limits"],
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.rpc_calls = []
+                completed = self.run_cli(
+                    ["--socket", self.socket_path] + command,
+                    fake_rpc=self.fake_rpc_success, include_socket=False,
+                )
+                self.assert_json_error(completed, 2)
+                self.assertEqual(self.rpc_calls, [])
+
+    def test_invalid_explicit_instance_is_local_and_does_not_reach_rpc(self):
+        completed = self.run_cli(
+            ["--instance", "", "status", "--name", "a"], include_socket=False,
+        )
+        self.assert_json_error(completed, 2)
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_common_parser_exhaustively_validates_names_prompts_and_turn_options(self):
+        schema = Path(self.tempdir.name) / "schema.json"
+        schema.write_text('{"type":"object"}', encoding="utf-8")
+        non_object_schema = Path(self.tempdir.name) / "schema-array.json"
+        non_object_schema.write_text('[]', encoding="utf-8")
+        malformed_schema = Path(self.tempdir.name) / "schema-bad.json"
+        malformed_schema.write_text('{', encoding="utf-8")
+        valid = [
+            ["start", "--name", "a", "--prompt", "go", "--cwd", self.cwd],
+            ["start", "--name", "a" * 128, "--prompt-file", str(self.prompt_file),
+             "--cwd", self.cwd, "--goal", "finish", "--token-budget", "1",
+             "--output-schema", str(schema), "--timeout", "0", "--read-only"],
+            ["start", "--name", "raw", "--prompt", "go", "--cwd", self.cwd,
+             "--model", "fake-model", "--effort", "high"],
+            ["run", "--name", "a", "--prompt", "go", "--output-schema", str(schema),
+             "--timeout", "1e10"],
+            ["goal", "set", "--name", "a", "--status", "paused"],
+            ["goal", "set", "--name", "a", "--token-budget", "2"],
+            ["messages", "--name", "a", "--tail", "1"],
+            ["history", "--name", "a", "--tail", "999"],
+        ]
+        for argv in valid:
+            with self.subTest(valid=argv):
+                self.rpc_calls = []
+                completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                         include_socket=False)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(len(completed.stdout.splitlines()), 1)
+                self.assertEqual(len(self.rpc_calls), 1)
+
+        invalid = [
+            ["start", "--name", "_bad", "--prompt", "go"],
+            ["start", "--name", "bad/name", "--prompt", "go"],
+            ["start", "--name", "a" * 129, "--prompt", "go"],
+            ["start", "--name", "a", "--prompt", ""],
+            ["start", "--name", "a", "--prompt", "go", "--prompt-file", str(self.prompt_file)],
+            ["start", "--name", "a"],
+            ["start", "--name", "a", "--prompt", "go", "--cwd", str(Path(self.cwd) / "missing")],
+            ["start", "--name", "a", "--prompt", "go", "--tier", "medium", "--model", "fake-model"],
+            ["start", "--name", "a", "--prompt", "go", "--tier", "unknown"],
+            ["start", "--name", "a", "--prompt", "go", "--model", ""],
+            ["start", "--name", "a", "--prompt", "go", "--effort", ""],
+            ["start", "--name", "a", "--prompt", "go", "--goal", ""],
+            ["start", "--name", "a", "--prompt", "go", "--goal", "x" * 4001],
+            ["start", "--name", "a", "--prompt", "go", "--token-budget", "0"],
+            ["run", "--name", "a", "--prompt", "go", "--tier", "medium"],
+            ["run", "--name", "a", "--prompt", "go", "--model", "fake-model"],
+            ["run", "--name", "a", "--prompt", "go", "--read-only"],
+            ["run", "--name", "a", "--prompt", "go", "--goal", "finish"],
+            ["run", "--name", "a", "--prompt", "go", "--token-budget", "2"],
+            ["run", "--name", "a", "--prompt", "go", "--effort", "high"],
+            ["run", "--name", "a", "--prompt", "go", "--output-schema", str(non_object_schema)],
+            ["run", "--name", "a", "--prompt", "go", "--output-schema", str(malformed_schema)],
+            ["run", "--name", "a", "--prompt", "go", "--output-schema", str(schema) + ".missing"],
+            ["run", "--name", "a", "--prompt", "go", "--timeout", "-1"],
+            ["run", "--name", "a", "--prompt", "go", "--timeout", "nan"],
+            ["run", "--name", "a", "--prompt", "go", "--timeout", "inf"],
+            ["run", "--name", "a", "--prompt", "go", "--timeout", "1e309"],
+            ["messages", "--name", "a", "--tail", "0"],
+            ["history", "--name", "a", "--tail", "-1"],
+            ["goal", "set", "--name", "a"],
+            ["goal", "set", "--name", "a", "--goal", "x" * 4001],
+            ["goal", "set", "--name", "a", "--token-budget", "0"],
+            ["goal", "set", "--name", "a", "--status", "unknown"],
+        ]
+        for argv in invalid:
+            with self.subTest(invalid=argv):
+                self.rpc_calls = []
+                completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                         include_socket=False)
+                self.assert_json_error(completed, 2)
+                self.assertEqual(self.rpc_calls, [])
+
+    def test_endpoint_selector_matrix_and_absolute_socket_validation(self):
+        valid = [
+            (["--instance", "chosen", "start", "--name", "a", "--prompt", "go"], False),
+            (["--instance", "chosen", "model", "list"], False),
+            (["--socket", self.socket_path, "model", "list"], False),
+            (["--instance", "chosen", "daemon", "status"], False),
+            (["--socket", self.socket_path, "daemon", "status"], False),
+            (["--instance", "chosen", "daemon", "stop"], False),
+            (["--socket", self.socket_path, "daemon", "shutdown"], False),
+        ]
+        original_manager = cli._instance_manager
+
+        class Manager:
+            deps = type("Deps", (), {"paths": type("Paths", (), {"socket_path": Path(self.socket_path)})()})()
+            def status(inner):
+                return type("Response", (), {"to_dict": lambda self: {"status": "stopped"}})()
+            def stop(inner):
+                return type("Response", (), {"to_dict": lambda self: {"status_after": "stopped"}})()
+
+        cli._instance_manager = lambda selected: Manager()
+        try:
+            for argv, include_socket in valid:
+                with self.subTest(valid=argv):
+                    self.rpc_calls = []
+                    completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                             include_socket=include_socket)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(len(completed.stdout.splitlines()), 1)
+        finally:
+            cli._instance_manager = original_manager
+
+        invalid = [
+            ["--socket", self.socket_path, "--instance", "chosen", "model", "list"],
+            ["--socket", self.socket_path, "start", "--name", "a", "--prompt", "go"],
+            ["--socket", self.socket_path, "daemon", "stop"],
+            ["--instance", "chosen", "daemon", "shutdown"],
+            ["--instance", "chosen", "daemon", "serve"],
+            ["--pretty", "daemon", "serve"],
+            ["--socket", "relative.sock", "model", "list"],
+            ["--socket", "relative.sock", "daemon", "serve"],
+            ["--socket", self.socket_path, "daemon", "serve", "--state", "relative.json"],
+            ["--socket", self.socket_path, "session", "start", "--cwd", "."],
+        ]
+        original_serve = cli._serve
+        serve_calls = []
+        cli._serve = lambda args: serve_calls.append(args) or 99
+        try:
+            for argv in invalid:
+                with self.subTest(invalid=argv):
+                    self.rpc_calls = []
+                    completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
+                                             include_socket=False)
+                    is_serve = "daemon" in argv and "serve" in argv
+                    if is_serve:
+                        self.assertEqual(completed.returncode, 2)
+                        self.assertEqual(completed.stdout, "")
+                    else:
+                        self.assert_json_error(completed, 2)
+                    self.assertEqual(self.rpc_calls, [])
+        finally:
+            cli._serve = original_serve
+        self.assertEqual(serve_calls, [])
 
     def test_invalid_common_request_never_selects_or_starts_an_endpoint(self):
         called = []
@@ -935,6 +1346,188 @@ class PublicLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Local Unix-socket broker", result.stdout)
 
+
+class ManagedProcessLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.root = Path(self.tempdir.name)
+        self.launcher = ROOT / "bin" / "codex-worker"
+        fake_codex = ROOT / "tests" / "codex-worker" / "fake_codex.py"
+        fake_bin_dir = self.root / "bin"
+        fake_bin_dir.mkdir()
+        fake_bin = fake_bin_dir / "codex"
+        fake_bin.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, runpy, sys\n"
+            "if len(sys.argv) > 1 and sys.argv[1] == 'app-server':\n"
+            "    del sys.argv[1]\n"
+            "sys.argv.extend(['--delay', os.environ.get('FAKE_CODEX_DELAY', '0.03')])\n"
+            "sys.argv[0] = %r\n"
+            "runpy.run_path(%r, run_name='__main__')\n" % (str(fake_codex), str(fake_codex)),
+            encoding="utf-8",
+        )
+        fake_bin.chmod(0o700)
+        self.env = dict(os.environ)
+        self.env.update({
+            "HOME": str(self.root / "home"),
+            "XDG_STATE_HOME": str(self.root / "state"),
+            "CODEX_WORKER_INSTANCE": "task5-process-%s" % os.getpid(),
+            "FAKE_CODEX_DELAY": "3.0",
+            "PATH": str(fake_bin_dir) + os.pathsep + self.env.get("PATH", ""),
+        })
+        (self.root / "home").mkdir()
+        self.workdirs = []
+        for index in range(7):
+            workdir = self.root / ("work-%d" % index)
+            workdir.mkdir()
+            self.workdirs.append(workdir)
+        self.addCleanup(self._stop_daemon)
+
+    def _run(self, *argv, cwd=None, timeout=10):
+        return subprocess.run(
+            [str(self.launcher)] + list(argv), cwd=str(cwd or self.root), env=self.env,
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
+            check=False,
+        )
+
+    def _json(self, completed, expected_exit=0):
+        self.assertEqual(completed.returncode, expected_exit,
+                         "stdout=%s\nstderr=%s" % (completed.stdout, completed.stderr))
+        self.assertEqual(len(completed.stdout.splitlines()), 1, completed.stderr)
+        return json.loads(completed.stdout)
+
+    def _status_until(self, name, expected, timeout=5.0):
+        deadline = time.monotonic() + timeout
+        last = None
+        while time.monotonic() < deadline:
+            last = self._run("status", "--name", name, timeout=3)
+            if last.returncode == 0:
+                payload = json.loads(last.stdout)
+                latest = payload["result"]["latest_turn"]
+                if expected == "in_progress" and payload["result"]["active_turn_id"] is not None:
+                    return payload
+                if latest is not None and latest["status"] == expected:
+                    return payload
+            elif last.stdout:
+                payload = json.loads(last.stdout)
+                if payload.get("error", {}).get("data", {}).get("kind") not in {
+                        "daemon_stopped", "worker_not_found"}:
+                    self.fail(last.stdout)
+        self.fail("worker %s did not reach %s; last=%r" % (name, expected, last))
+
+    def _stop_daemon(self):
+        with contextlib.suppress(Exception):
+            self._run("daemon", "stop", timeout=5)
+
+    def test_concurrent_clients_share_one_daemon_without_crossing_results(self):
+        self.env["FAKE_CODEX_DELAY"] = "1.0"
+        processes = []
+        for index in range(5):
+            name = "worker-%d" % index
+            prompt = "prompt-%d" % index
+            processes.append((index, subprocess.Popen(
+                [str(self.launcher), "start", "--name", name, "--prompt", prompt,
+                 "--model", "fake-model-a", "--effort", "medium"],
+                cwd=str(self.workdirs[index]), env=self.env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )))
+        results = []
+        try:
+            for index, process in processes:
+                stdout, stderr = process.communicate(timeout=10)
+                completed = type("Completed", (), {
+                    "returncode": process.returncode, "stdout": stdout, "stderr": stderr,
+                })()
+                results.append((index, completed))
+        finally:
+            for _, process in processes:
+                if process.poll() is None:
+                    process.terminate()
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=2)
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=2)
+
+        results = [(index, self._json(completed)) for index, completed in results]
+
+        statuses = [self._json(self._run("daemon", "status"))["result"] for _ in range(5)]
+        status = statuses[0]
+        self.assertEqual(status["status"], "ready")
+        self.assertIsInstance(status["daemon_pid"], int)
+        self.assertTrue(_pid_exists(status["daemon_pid"]))
+        self.assertEqual({item["daemon_pid"] for item in statuses}, {status["daemon_pid"]})
+        self.assertEqual(status["worker_count"], 5)
+        names, threads, sessions, finals = set(), set(), set(), set()
+        for index, payload in results:
+            result = payload["result"]
+            worker = result["worker"]
+            names.add(worker["name"])
+            threads.add(worker["thread_id"])
+            sessions.add(worker["session_id"])
+            self.assertEqual(worker["name"], "worker-%d" % index)
+            self.assertEqual(worker["cwd"], str(self.workdirs[index].resolve()))
+            self.assertEqual(result["turn"]["status"], "completed")
+            self.assertEqual([message["text"] for message in result["messages"]],
+                             ["done:prompt-%d" % index])
+            finals.add(result["messages"][0]["text"])
+        self.assertEqual(len(names), 5)
+        self.assertEqual(len(threads), 5)
+        self.assertEqual(len(sessions), 5)
+        self.assertEqual(len(finals), 5)
+
+    def test_disconnect_and_timeout_leave_turn_and_daemon_active(self):
+        self.env["FAKE_CODEX_DELAY"] = "10.0"
+        waiting = subprocess.Popen(
+            [str(self.launcher), "start", "--name", "detached", "--prompt", "wait",
+             "--model", "fake-model-a"],
+            cwd=str(self.workdirs[5]), env=self.env, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        try:
+            active = self._status_until("detached", "in_progress")
+            daemon_pid = active["result"]["worker"]["instance"]
+            waiting.terminate()
+            waiting.communicate(timeout=3)
+            still_active = self._status_until("detached", "in_progress")
+            self.assertEqual(still_active["result"]["worker"]["instance"], daemon_pid)
+            daemon = self._json(self._run("daemon", "status"))["result"]
+            self.assertEqual(daemon["status"], "ready")
+            self.assertTrue(_pid_exists(daemon["daemon_pid"]))
+        finally:
+            if waiting.poll() is None:
+                waiting.kill()
+            waiting.communicate(timeout=3)
+
+        timed = self._run(
+            "start", "--name", "timed", "--prompt", "slow", "--model", "fake-model-a",
+            "--timeout", "0", cwd=self.workdirs[6], timeout=5,
+        )
+        timeout_payload = self._json(timed, expected_exit=1)
+        self.assertEqual(timeout_payload["error"]["code"], -32025)
+        self.assertEqual(timeout_payload["error"]["data"]["kind"], "timeout_active")
+        timed_status = self._status_until("timed", "in_progress")
+        self.assertIsNotNone(timed_status["result"]["active_turn_id"])
+
+    def test_repeated_stop_then_run_restarts_the_same_thread(self):
+        self.env["FAKE_CODEX_DELAY"] = "0.03"
+        started = self._json(self._run(
+            "start", "--name", "restartable", "--prompt", "first",
+            "--model", "fake-model-a", cwd=self.workdirs[0],
+        ))["result"]
+        thread_id = started["worker"]["thread_id"]
+        first_stop = self._json(self._run("daemon", "stop"))["result"]
+        second_stop = self._json(self._run("daemon", "stop"))["result"]
+        self.assertEqual(first_stop["status_after"], "stopped")
+        self.assertEqual(second_stop["status_before"], "stopped")
+        self.assertEqual(second_stop["status_after"], "stopped")
+        continued = self._json(self._run(
+            "run", "--name", "restartable", "--prompt", "second",
+            cwd=self.workdirs[0],
+        ))["result"]
+        self.assertEqual(continued["worker"]["thread_id"], thread_id)
+        self.assertEqual(continued["messages"][0]["text"], "done:second")
 
 if __name__ == "__main__":
     unittest.main()

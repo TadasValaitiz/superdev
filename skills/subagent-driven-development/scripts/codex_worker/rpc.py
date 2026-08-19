@@ -223,7 +223,11 @@ class RpcServer(ThreadingUnixServer):
             self._prepare_socket_path(socket_path)
             try:
                 super().__init__(socket_path, RpcRequestHandler, bind_and_activate=False)
-                self.server_bind()
+                previous_umask = os.umask(0o177)
+                try:
+                    self.server_bind()
+                finally:
+                    os.umask(previous_umask)
                 self._bound_stat = os.lstat(socket_path)
                 if not stat.S_ISSOCK(self._bound_stat.st_mode) or self._bound_stat.st_uid != os.getuid():
                     raise SocketPathUnsafe("bound socket inode is unsafe")
