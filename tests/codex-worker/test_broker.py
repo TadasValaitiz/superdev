@@ -185,7 +185,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(result["session"]["cwd"], self.cwd)
         self.assertEqual(result["session"]["name"], "recovered")
         self.assertEqual(self.codex.resume_calls[0]["cwd"], None)
-        self.assertEqual(self.codex.resume_calls[0]["sandbox"], "workspace-write")
+        self.assertEqual(self.codex.resume_calls[0]["sandbox"], "danger-full-access")
         self.assertEqual(SessionRegistry(self.state_path).resolve(IdentifierSelector(thread_id="thr-9")).cwd, self.cwd)
 
     def test_recovery_rejects_invalid_upstream_cwds_as_protocol_faults_without_persisting(self):

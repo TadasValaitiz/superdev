@@ -213,7 +213,10 @@ class WorkerBroker:
             if name is not None:
                 raise _fault(-32602, "--name is only valid for raw thread recovery", "invalid_params")
             try:
-                response = self.codex.resume_thread(existing.thread_id)
+                response = self.resume_session(SessionResumeSpec(
+                    existing.thread_id,
+                    AccessMode(existing.access) if existing.access else AccessMode.FULL,
+                ))
                 thread_id, returned_cwd = self._resume_identity(response)
                 if thread_id != existing.thread_id:
                     raise _fault(
@@ -236,9 +239,7 @@ class WorkerBroker:
             raise self._unknown_session(selector)
         session_id = str(uuid.uuid4())
         try:
-            response = self.codex.resume_thread(
-                selector.thread_id, approval_policy="never", sandbox="workspace-write"
-            )
+            response = self.resume_session(SessionResumeSpec(selector.thread_id, AccessMode.FULL))
             thread_id, recovered_cwd = self._resume_identity(response)
             if thread_id != selector.thread_id:
                 raise _fault(
