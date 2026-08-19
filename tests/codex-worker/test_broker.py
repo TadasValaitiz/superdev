@@ -154,6 +154,49 @@ class WorkerBrokerTests(unittest.TestCase):
             NativeCodexProxy(Raw()).rate_limits_read()
         self.assertEqual(caught.exception.kind, "protocol_error")
 
+    def test_read_only_resume_has_no_creation_only_fallback_field(self):
+        from codex_worker.broker import SessionResumeSpec
+        from codex_worker.commands import AccessMode
+        self.codex.resume_result = {"thread": {"id": "thr-read", "cwd": self.cwd}}
+        self.broker.resume_session(SessionResumeSpec("thr-read", AccessMode.READ_ONLY))
+        self.assertEqual(self.codex.resume_calls[-1]["sandbox"], "read-only")
+        self.assertNotIn("allowProviderModelFallback", self.codex.resume_calls[-1])
+
+    def test_complete_common_policy_survives_raw_override_while_legacy_mutates(self):
+        from codex_worker.broker import TurnStartSpec
+        from codex_worker.commands import AccessMode
+        complete = self.registry.create_worker("thr-common", self.cwd, "common", "medium", "fake-model-a", "medium", "full")
+        self.runtime.attach(complete)
+        self.broker.turn_start(IdentifierSelector(session_id=complete.session_id), "raw", "fake-model-b", "high")
+        preserved = self.registry.resolve(IdentifierSelector(session_id=complete.session_id))
+        self.assertEqual((preserved.tier, preserved.model, preserved.effort, preserved.access), ("medium", "fake-model-a", "medium", "full"))
+        self.codex.complete_active_turn()
+        self.broker.start_turn(TurnStartSpec(complete.session_id, "common", "fake-model-a", "medium", AccessMode.FULL))
+        self.assertEqual(self.codex.turn_start_calls[-1]["model"], "fake-model-a")
+        self.codex.complete_active_turn()
+        legacy = self.registry.create("thr-legacy", self.cwd, None, "fake-model-a", "medium")
+        self.runtime.attach(legacy)
+        self.broker.turn_start(IdentifierSelector(session_id=legacy.session_id), "raw", "fake-model-b", "high")
+        updated = self.registry.resolve(IdentifierSelector(session_id=legacy.session_id))
+        self.assertEqual((updated.model, updated.effort), ("fake-model-b", "high"))
+
+    def test_native_proxy_success_shapes_and_pagination_fields(self):
+        from codex_worker.broker import NativeCodexProxy
+        class Raw:
+            def __init__(self): self.calls = []
+            def call(self, method, params):
+                self.calls.append((method, params))
+                if method == "thread/goal/get": return {"goal": None}
+                if method == "thread/goal/set": return {"goal": {"threadId": "t", "objective": "o", "status": "active", "tokenBudget": None, "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": "x", "updatedAt": "x"}}
+                if method == "thread/turns/list": return {"turns": [{"id": "t", "status": "completed", "items": []}], "nextCursor": "next"}
+                return {"rateLimits": {"primary": {"usedPercent": 1}}}
+        raw = Raw(); proxy = NativeCodexProxy(raw)
+        self.assertIsNone(proxy.goal_get("t")["goal"])
+        self.assertEqual(proxy.goal_set("t", "o", "active")["goal"]["objective"], "o")
+        self.assertEqual(proxy.turns_list("t", "cursor", 2)["nextCursor"], "next")
+        self.assertEqual(proxy.rate_limits_read()["rateLimits"]["primary"]["usedPercent"], 1)
+        self.assertEqual(raw.calls[2], ("thread/turns/list", {"threadId": "t", "sortDirection": "desc", "itemsView": "full", "cursor": "cursor", "limit": 2}))
+
     def tearDown(self):
         self.tempdir.cleanup()
 

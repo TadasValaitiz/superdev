@@ -51,3 +51,25 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(metrics["item_counts"].value, {"commandExecution": 1, "agentMessage": 1})
         self.assertEqual(metrics["command_duration_ms"].value, 25)
         self.assertEqual(metrics["token_usage"].availability.value, "reported")
+
+    def test_multiple_explicit_finals_are_retained_in_order(self):
+        messages = select_completion_messages([
+            ItemRecord("one", "agentMessage", {"text": "a", "phase": "final_answer"}),
+            ItemRecord("two", "agentMessage", {"text": "b", "phase": "final_answer"}),
+        ], True)
+        self.assertEqual([message.item_id for message in messages], ["one", "two"])
+        self.assertTrue(all(message.selection.value == "explicit_final" for message in messages))
+
+    def test_missing_duration_and_token_usage_are_explicitly_unavailable(self):
+        metrics = derive_metrics([ItemRecord("c", "commandExecution", {})], 1.0)
+        self.assertEqual(metrics["command_count"].value, 1)
+        self.assertIsNone(metrics["command_duration_ms"].value)
+        self.assertEqual(metrics["command_duration_ms"].availability.value, "unavailable")
+        self.assertIsNone(metrics["token_usage"].value)
+        self.assertEqual(metrics["token_usage"].availability.value, "unavailable")
+
+    def test_history_terminal_fallback_and_in_progress_live(self):
+        terminal = project_history_turn({"id": "old", "status": "completed", "items": [{"id": "a", "type": "agentMessage", "text": "answer"}]})
+        live = project_history_turn({"id": "new", "status": "inProgress", "items": [{"id": "b", "type": "agentMessage", "text": "work"}]})
+        self.assertEqual(terminal.messages[0].selection.value, "terminal_fallback")
+        self.assertEqual(live.messages[0].selection.value, "live")
