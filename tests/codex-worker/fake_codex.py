@@ -23,6 +23,9 @@ class FakeCodex:
         self.active_turn = None
         self.active_turns = {}
         self.write_lock = threading.Lock()
+        self.capture_lock = threading.Lock()
+        self.capture_sequence = 0
+        self.turn_barrier = threading.Event()
         self.approval_request_id = 9001
         self.goal = None
         self.turn_pages = {
@@ -36,30 +39,26 @@ class FakeCodex:
 
     def capture(self, message):
         """Append received JSON-RPC data without making the fake's behavior implicit."""
-        if self.capture_path is None:
-            return
-        line = json.dumps({"kind": "request", "at": time.monotonic(), "method": message.get("method"),
-                           "params": message.get("params", {}),
-                           "id": message.get("id")}, separators=(",", ":")) + "\n"
-        # O_APPEND makes one short JSONL receipt indivisible for concurrent test readers.
-        fd = os.open(str(self.capture_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        try:
-            os.fchmod(fd, 0o600)
-            os.write(fd, line.encode("utf-8"))
-        finally:
-            os.close(fd)
+        self._write_receipt({"kind": "request", "method": message.get("method"),
+                             "params": message.get("params", {}), "id": message.get("id")})
 
     def receipt(self, kind, **values):
+        values["kind"] = kind
+        self._write_receipt(values)
+
+    def _write_receipt(self, payload):
         if self.capture_path is None:
             return
-        payload = {"kind": kind, "at": time.monotonic()}
-        payload.update(values)
-        fd = os.open(str(self.capture_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        try:
-            os.fchmod(fd, 0o600)
-            os.write(fd, (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
-        finally:
-            os.close(fd)
+        with self.capture_lock:
+            self.capture_sequence += 1
+            row = {"seq": self.capture_sequence, "at": time.monotonic(), "pid": os.getpid()}
+            row.update(payload)
+            fd = os.open(str(self.capture_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+                os.write(fd, (json.dumps(row, separators=(",", ":")) + "\n").encode("utf-8"))
+            finally:
+                os.close(fd)
 
     def send(self, message):
         encoded = json.dumps(message, separators=(",", ":")) + "\n"
@@ -71,6 +70,12 @@ class FakeCodex:
         self.send({"id": request_id, "result": result})
 
     def complete_later(self, thread_id, turn_id, prompt):
+        barrier_count = self.option("turn_barrier")
+        if type(barrier_count) is int and barrier_count > 0:
+            if not self.turn_barrier.wait(timeout=5.0):
+                self.receipt("barrier_timeout", prompt=prompt, thread_id=thread_id,
+                             turn_id=turn_id, expected=barrier_count)
+                return
         delays = self.scenario.get("turn_delays", {})
         time.sleep(delays.get(prompt, self.delay) if isinstance(delays, dict) else self.delay)
         if self.active_turns.get(thread_id) != turn_id:
@@ -117,6 +122,9 @@ class FakeCodex:
 
     def handle_turn_start(self, message):
         self.turn_number += 1
+        barrier_count = self.option("turn_barrier")
+        if type(barrier_count) is int and self.turn_number >= barrier_count:
+            self.turn_barrier.set()
         turn_id = "turn-%d" % self.turn_number
         thread_id = message["params"]["threadId"]
         inputs = message["params"].get("input", [])

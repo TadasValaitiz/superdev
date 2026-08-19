@@ -18,6 +18,7 @@ from codex_worker.registry import (
     RegistryConflict,
     SessionRegistry,
 )
+import codex_worker.registry as registry_module
 
 
 class ModelTests(unittest.TestCase):
@@ -226,6 +227,19 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SessionRegistry(self.state_path)
 
+    def test_nonempty_malformed_and_truncated_registry_bytes_are_preserved_exactly(self):
+        cases = {
+            "malformed": b"not json\n",
+            "truncated": b'{"schema_version":2,"sessions":[',
+        }
+        for label, original in cases.items():
+            with self.subTest(label=label):
+                path = Path(self.cwd) / ("%s.json" % label)
+                path.write_bytes(original)
+                with self.assertRaisesRegex(ValueError, "expected schema versions 1 or 2"):
+                    SessionRegistry(path)
+                self.assertEqual(path.read_bytes(), original)
+
     def test_create_canonicalizes_cwd_and_rejects_bad_inputs(self):
         real = Path(self.cwd) / "real"
         real.mkdir()
@@ -261,20 +275,22 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SessionRegistry(self.state_path)
 
-    def test_foreign_owner_state_is_rejected_when_testable(self):
-        if os.getuid() == 0:
-            self.skipTest("root cannot exercise foreign-owner behavior")
+    def test_foreign_owner_state_is_rejected_with_deterministic_owner_injection(self):
         self.state_path.parent.mkdir()
-        self.state_path.write_text(json.dumps({"schema_version": 1, "sessions": []}))
-        try:
-            os.chown(self.state_path, os.getuid() + 1, os.getgid())
-        except PermissionError:
-            self.skipTest("cannot alter owner on this host")
-        with self.assertRaises(ValueError):
-            SessionRegistry(self.state_path)
-        self.state_path.write_text(json.dumps({"schema_version": 2, "sessions": []}))
-        with self.assertRaises(ValueError):
-            SessionRegistry(self.state_path)
+        original = json.dumps({"schema_version": 2, "sessions": []}).encode("utf-8")
+        self.state_path.write_bytes(original)
+        real_lstat = registry_module.os.lstat
+        observed = real_lstat(self.state_path)
+
+        class ForeignStat:
+            st_mode = observed.st_mode
+            st_uid = os.getuid() + 1
+
+        with mock.patch("codex_worker.registry.os.lstat", side_effect=lambda path: (
+                ForeignStat() if Path(path) == self.state_path else real_lstat(path))):
+            with self.assertRaisesRegex(ValueError, "owner-owned regular file"):
+                SessionRegistry(self.state_path)
+        self.assertEqual(self.state_path.read_bytes(), original)
 
 
 if __name__ == "__main__":

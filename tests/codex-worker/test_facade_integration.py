@@ -44,6 +44,12 @@ class FacadeIntegrationTests(unittest.TestCase):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12)
 
     def test_five_fresh_processes_converge_on_one_daemon_without_crossing_outputs(self):
+        self.set_scenario({"turn_barrier": 5, "turn_delays": {
+            "prompt-0": 0.50, "prompt-1": 0.40, "prompt-2": 0.30,
+            "prompt-3": 0.20, "prompt-4": 0.10,
+        }, "turn_outputs": {"prompt-0": "token-0", "prompt-1": "token-1",
+                            "prompt-2": "token-2", "prompt-3": "token-3",
+                            "prompt-4": "token-4"}})
         workspaces = []
         processes = []
         for index in range(5):
@@ -53,15 +59,31 @@ class FacadeIntegrationTests(unittest.TestCase):
                  [str(COMMAND), "--instance", self.instance, "start", "--name", "worker-%d" % index,
                  "--cwd", str(cwd), "--prompt", "prompt-%d" % index,
                  "--model", "fake-model-a", "--effort", "medium",
-                 ],
+                ],
                 env=self.env, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
-        finished = []
+            self.addCleanup(self.cleanup_process, processes[-1])
+        self.wait_for_capture_count("turn/start", 5)
+        first_active_status = self.daemon_status()
+        daemon_pid = first_active_status["daemon_pid"]
+        codex_pid = first_active_status["codex_pid"]
+        daemon_command = self.process_command(daemon_pid)
+        self.assertIn(first_active_status["instance"]["socket_path"], daemon_command)
+        self.assertIn(str(Path(first_active_status["instance"]["durable_dir"]) / "registry.json"),
+                      daemon_command)
+        self.assertEqual(self.process_parent(codex_pid), daemon_pid)
+        self.assertEqual(self.codex_children(daemon_pid), [codex_pid])
+        self.assertTrue(any(process.poll() is None for process in processes))
+        active_statuses = [first_active_status] + [self.daemon_status() for _ in processes[1:]]
+        self.assertEqual({status["daemon_pid"] for status in active_statuses}, {daemon_pid})
+        self.assertEqual({status["codex_pid"] for status in active_statuses}, {codex_pid})
+
+        observed_client_completion_order = []
         deadline = time.monotonic() + 12
         remaining = set(range(len(processes)))
         while remaining and time.monotonic() < deadline:
             for index in list(remaining):
                 if processes[index].poll() is not None:
-                    finished.append(index); remaining.remove(index)
+                    observed_client_completion_order.append(index); remaining.remove(index)
             time.sleep(0.005)
         self.assertFalse(remaining, "worker clients did not finish before the bounded deadline")
         responses = []; failures = []
@@ -72,7 +94,7 @@ class FacadeIntegrationTests(unittest.TestCase):
             self.assertEqual(returncode, 0, stderr + stdout + self._daemon_log())
             responses.append(json.loads(stdout))
         results = [response["result"] for response in responses]
-        self.assertEqual(finished, [4, 3, 2, 1, 0])
+        self.assertEqual(set(observed_client_completion_order), set(range(5)))
         self.assertEqual({result["worker"]["name"] for result in results},
                          {"worker-%d" % index for index in range(5)})
         self.assertEqual({result["worker"]["thread_id"] for result in results},
@@ -86,17 +108,42 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual(status.returncode, 0, status.stderr)
         managed = json.loads(status.stdout)["result"]
         self.assertEqual(managed["worker_count"], 5)
-        self.assertTrue(_pid_exists(managed["daemon_pid"]))
-        self.assertTrue(_pid_exists(managed["codex_pid"]))
+        self.assertEqual(managed["daemon_pid"], daemon_pid)
+        self.assertEqual(managed["codex_pid"], codex_pid)
         captures = [json.loads(line) for line in self.capture.read_text(encoding="utf-8").splitlines()]
         starts = [row for row in captures if row.get("method") == "thread/start"]
         self.assertEqual(len(starts), 5)
-        self.assertEqual({row["params"]["cwd"] for row in starts}, {str(path.resolve()) for path in workspaces})
-        self.assertEqual({row["params"]["model"] for row in starts}, {"fake-model-a"})
+        initialize = [row for row in captures if row.get("method") == "initialize"]
+        self.assertEqual([row["params"] for row in initialize], [{
+            "clientInfo": {"name": "superdev_codex_worker", "title": "Superdev Codex Worker",
+                           "version": "0.1.0"},
+            "capabilities": {"experimentalApi": True, "optOutNotificationMethods": [
+                "item/agentMessage/delta", "item/reasoning/textDelta",
+                "item/reasoning/summaryTextDelta", "item/commandExecution/outputDelta",
+            ]},
+        }])
+        expected_thread_params = [{
+            "cwd": str(path.resolve()), "approvalPolicy": "never",
+            "sandbox": "danger-full-access", "serviceName": "superdev_codex_worker",
+            "model": "fake-model-a", "allowProviderModelFallback": False,
+        } for path in workspaces]
+        self.assertCountEqual([row["params"] for row in starts], expected_thread_params)
         turns = [row for row in captures if row.get("method") == "turn/start"]
-        self.assertEqual({row["params"]["model"] for row in turns}, {"fake-model-a"})
-        self.assertEqual({row["params"]["effort"] for row in turns}, {"medium"})
-        self.assertEqual({row["params"]["sandboxPolicy"]["type"] for row in turns}, {"dangerFullAccess"})
+        expected_turn_params = [{
+            "threadId": results[index]["worker"]["thread_id"],
+            "input": [{"type": "text", "text": "prompt-%d" % index}],
+            "model": "fake-model-a", "effort": "medium",
+            "sandboxPolicy": {"type": "dangerFullAccess"},
+        } for index in range(5)]
+        self.assertCountEqual([row["params"] for row in turns], expected_turn_params)
+        completions = [row for row in captures if row.get("kind") == "completion"]
+        self.assertEqual([row["prompt"] for row in sorted(completions, key=lambda row: row["seq"])],
+                         ["prompt-4", "prompt-3", "prompt-2", "prompt-1", "prompt-0"])
+        self.assertEqual([row["output"] for row in sorted(completions, key=lambda row: row["seq"])],
+                         ["token-4", "token-3", "token-2", "token-1", "token-0"])
+        self.assertEqual([row["at"] for row in sorted(completions, key=lambda row: row["seq"])],
+                         sorted(row["at"] for row in completions))
+        self.assertEqual({row["pid"] for row in captures}, {codex_pid})
         self.assertEqual(stat.S_IMODE(self.capture.stat().st_mode), 0o600)
 
     def test_stop_then_run_preserves_the_named_thread_and_registry(self):
@@ -113,16 +160,31 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertIn(thread_id, [row["params"].get("threadId") for row in captures
                                   if row.get("method") == "thread/resume"])
 
-    def test_duplicate_and_unknown_names_are_refused_without_mutating_registry(self):
+    def test_section_10_name_and_model_refusals_preserve_registry_state(self):
         created = self.command(["start", "--name", "stable", "--prompt", "first",
                                 "--cwd", str(ROOT), "--model", "fake-model-a"])
         self.assertEqual(created.returncode, 0, created.stderr)
-        duplicate = self.command(["start", "--name", "stable", "--prompt", "again",
-                                  "--cwd", str(ROOT), "--model", "fake-model-a"])
-        unknown = self.command(["run", "--name", "missing", "--prompt", "again"])
-        for result, kind in ((duplicate, "worker_name_exists"), (unknown, "worker_not_found")):
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertEqual(json.loads(result.stdout)["error"]["data"]["kind"], kind)
+        status = self.daemon_status()
+        registry = Path(status["instance"]["durable_dir"]) / "registry.json"
+        preserved = registry.read_bytes()
+        cases = [
+            (["start", "--name", "stable", "--prompt", "again", "--cwd", str(ROOT),
+              "--model", "fake-model-a"], -32021, "worker_name_exists"),
+            (["run", "--name", "missing", "--prompt", "again"],
+             -32022, "worker_not_found"),
+            (["start", "--name", "bad-model", "--prompt", "again", "--cwd", str(ROOT),
+              "--model", "missing-model"], -32026, "model_unavailable"),
+            (["start", "--name", "bad-effort", "--prompt", "again", "--cwd", str(ROOT),
+              "--model", "fake-model-a", "--effort", "high"],
+             -32027, "effort_unsupported"),
+        ]
+        for argv, code, kind in cases:
+            with self.subTest(kind=kind):
+                result = self.command(argv)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                error = json.loads(result.stdout)["error"]
+                self.assertEqual((error["code"], error["data"]["kind"]), (code, kind))
+                self.assertEqual(registry.read_bytes(), preserved)
 
     def test_goal_failure_refuses_before_starting_a_turn(self):
         self.set_scenario({"goal_set_failure": True})
@@ -144,6 +206,30 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual(json.loads(goal.stdout)["result"]["availability"], "absent")
         self.assertEqual(limits.returncode, 1)
         self.assertEqual(json.loads(limits.stdout)["error"]["data"]["kind"], "limits_unavailable")
+        captures = self.captures()
+        thread_id = json.loads(created.stdout)["result"]["worker"]["thread_id"]
+        self.assertEqual([row["params"] for row in captures
+                          if row.get("method") == "thread/goal/get"], [{"threadId": thread_id}])
+        self.assertEqual([row["params"] for row in captures
+                          if row.get("method") == "account/rateLimits/read"], [{}])
+
+    def test_schema_is_forwarded_exactly_on_the_composed_turn(self):
+        self.set_scenario({"turn_outputs": {"structured": '{"verdict":"pass"}'}})
+        schema = Path(self.tempdir.name) / "schema.json"
+        schema_value = {"type": "object", "properties": {"verdict": {"type": "string"}},
+                        "required": ["verdict"], "additionalProperties": False}
+        schema.write_text(json.dumps(schema_value), encoding="utf-8")
+        result = self.command(["start", "--name", "structured", "--prompt", "structured",
+                               "--cwd", str(ROOT), "--model", "fake-model-a",
+                               "--effort", "medium", "--output-schema", str(schema)])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        thread_id = json.loads(result.stdout)["result"]["worker"]["thread_id"]
+        turn = next(row for row in self.captures() if row.get("method") == "turn/start")
+        self.assertEqual(turn["params"], {
+            "threadId": thread_id, "input": [{"type": "text", "text": "structured"}],
+            "model": "fake-model-a", "effort": "medium",
+            "sandboxPolicy": {"type": "dangerFullAccess"}, "outputSchema": schema_value,
+        })
 
     def test_no_agent_and_schema_decode_refusals_preserve_completed_message_evidence(self):
         self.set_scenario({"turn_outputs": {"schema": "not-json"}})
@@ -157,10 +243,20 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual(error["data"]["details"]["messages"][-1]["text"], "not-json")
 
     def test_history_keeps_live_narration_live_and_paginates_terminal_finals(self):
-        self.set_scenario({"history_pages": {"null": {"turns": [{"id": "live", "status": "inProgress",
-            "items": [{"id": "live-message", "type": "agentMessage", "text": "working", "phase": None}]}],
-            "nextCursor": "older"}, "older": {"turns": [{"id": "final", "status": "completed",
-            "items": [{"id": "final-message", "type": "agentMessage", "text": "answer", "phase": "final_answer"}]}], "nextCursor": None}}})
+        live_turn = {
+            "id": "live", "status": "inProgress",
+            "items": [{"id": "live-message", "type": "agentMessage",
+                       "text": "working", "phase": None}],
+        }
+        completed_turn = {
+            "id": "final", "status": "completed",
+            "items": [{"id": "final-message", "type": "agentMessage",
+                       "text": "answer", "phase": "final_answer"}],
+        }
+        self.set_scenario({"history_pages": {
+            "null": {"turns": [live_turn], "nextCursor": "older"},
+            "older": {"turns": [completed_turn], "nextCursor": None},
+        }})
         created = self.command(["start", "--name", "history", "--prompt", "first", "--cwd", str(ROOT),
                                 "--model", "fake-model-a"])
         self.assertEqual(created.returncode, 0, created.stderr)
@@ -170,6 +266,31 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual([turn["turn_id"] for turn in turns], ["final", "live"])
         self.assertEqual(turns[-1]["messages"][0]["selection"], "live")
         self.assertEqual(turns[0]["messages"][0]["selection"], "explicit_final")
+        thread_id = json.loads(created.stdout)["result"]["worker"]["thread_id"]
+        requests = [row["params"] for row in self.captures()
+                    if row.get("method") == "thread/turns/list"]
+        self.assertEqual(requests, [
+            {"threadId": thread_id, "sortDirection": "desc", "itemsView": "full", "limit": 2},
+            {"threadId": thread_id, "sortDirection": "desc", "itemsView": "full",
+             "cursor": "older", "limit": 2},
+        ])
+
+    def test_goal_set_and_show_forward_exact_native_parameters(self):
+        created = self.command(["start", "--name", "goal", "--prompt", "first",
+                                "--cwd", str(ROOT), "--model", "fake-model-a",
+                                "--goal", "finish", "--token-budget", "123"])
+        self.assertEqual(created.returncode, 0, created.stderr)
+        shown = self.command(["goal", "show", "--name", "goal"])
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        thread_id = json.loads(created.stdout)["result"]["worker"]["thread_id"]
+        captures = self.captures()
+        self.assertEqual([row["params"] for row in captures
+                          if row.get("method") == "thread/goal/set"], [{
+                              "threadId": thread_id, "objective": "finish",
+                              "status": "active", "tokenBudget": 123,
+                          }])
+        self.assertEqual([row["params"] for row in captures
+                          if row.get("method") == "thread/goal/get"], [{"threadId": thread_id}])
 
     def test_no_agent_completion_is_a_typed_incomplete_refusal(self):
         self.set_scenario({"no_agent_messages": True})
@@ -184,6 +305,57 @@ class FacadeIntegrationTests(unittest.TestCase):
     def captures(self):
         return [json.loads(line) for line in self.capture.read_text(encoding="utf-8").splitlines()]
 
+    def wait_for_capture_count(self, method, count, timeout=5.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            rows = self.captures() if self.capture.exists() else []
+            if len([row for row in rows if row.get("method") == method]) >= count:
+                return
+            time.sleep(0.005)
+        self.fail("capture did not receive %d %s requests before deadline" % (count, method))
+
+    def daemon_status(self):
+        completed = self.command(["daemon", "status"])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout)["result"]
+
+    def process_parent(self, pid):
+        completed = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return int(completed.stdout.strip())
+
+    def process_command(self, pid):
+        completed = subprocess.run(["ps", "-p", str(pid), "-o", "command="], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return completed.stdout.strip()
+
+    def codex_children(self, daemon_pid):
+        completed = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        children = []
+        for line in completed.stdout.splitlines():
+            fields = line.strip().split(None, 2)
+            if len(fields) == 3 and int(fields[1]) == daemon_pid:
+                self.assertIn(str(FAKE), fields[2])
+                self.assertIn("app-server", fields[2])
+                children.append(int(fields[0]))
+        return children
+
+    def cleanup_process(self, process):
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
     def tearDown(self):
         try:
             self.command(["daemon", "stop"])
@@ -193,17 +365,6 @@ class FacadeIntegrationTests(unittest.TestCase):
     def _daemon_log(self):
         logs = list(Path(self.env["HOME"]).rglob("daemon.log"))
         return logs[0].read_text(encoding="utf-8") if logs else ""
-
-
-def _pid_exists(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
 
 if __name__ == "__main__":
     unittest.main()
