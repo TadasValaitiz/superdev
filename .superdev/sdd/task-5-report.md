@@ -8,3 +8,4 @@
   - `python3 -m py_compile skills/subagent-driven-development/scripts/codex_worker/rpc.py skills/subagent-driven-development/scripts/codex_worker/cli.py` — PASS (prior Task 5 gate).
   - `git diff --check` — PASS (prior Task 5 gate).
 - Scope: only Task 5 runtime files, focused tests, and this report were changed; no design or decision documents were edited.
+- Blocker for the requested five-client process receipt: `tests/codex-worker/fake_codex.py` always returns the single thread identity `thr-fake` for every `thread/start`. The broker correctly refuses multiple worker sessions attached to that one thread, so five distinct worker/thread assertions cannot be made using this fixture without changing it. That fixture is outside Task 5's owned-file commit list; no unscoped interface/fake change was made.
