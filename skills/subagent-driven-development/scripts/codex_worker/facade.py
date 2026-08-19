@@ -38,7 +38,7 @@ class BrokerPort(Protocol):
 @runtime_checkable
 class RuntimePort(Protocol):
     def status(self, session_id: str): ...
-    def wait(self, session_id: str, timeout: float): ...
+    def wait(self, session_id: str, timeout: Optional[float]): ...
     def agent_messages(self, session_id: str, tail: int): ...
 
 @runtime_checkable
@@ -143,7 +143,7 @@ class WorkerFacade:
             pages, cursor = [], None
             while len([turn for page in pages for turn in page]) < request.tail:
                 page = proxy.turns_list(record.thread_id, cursor, request.tail)
-                if not page["turns"] or page["nextCursor"] == cursor:
+                if cursor is not None and page["nextCursor"] == cursor:
                     raise FacadeFault(FacadeFaultCode.CODEX_PROTOCOL_ERROR,
                                       "Codex history pagination did not progress",
                                       "codex_protocol_error")
@@ -209,11 +209,7 @@ class WorkerFacade:
                                                           self._recovery(record)))
 
     def _wait(self, session_id, timeout):
-        if timeout is not None:
-            return self.deps.runtime.wait(session_id, timeout)
-        while True:
-            try: return self.deps.runtime.wait(session_id, 60.0)
-            except WaitTimeout: pass
+        return self.deps.runtime.wait(session_id, timeout)
 
     def _select_model(self, tier, raw_model, effort):
         model = raw_model if raw_model is not None else _TIER_MODELS[tier]
@@ -237,6 +233,7 @@ class WorkerFacade:
         return record
 
     def _control(self, request, action):
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
@@ -250,7 +247,7 @@ class WorkerFacade:
             return Ok(ControlResponse(self._worker(record), action, result["accepted"], turn_id,
                                       "interrupted" if action == "interrupt" else "in_progress"))
         except BaseException as exc:
-            return Err(self._effect_fault(exc, None, request.name))
+            return Err(self._effect_fault(exc, record, request.name))
 
     def _worker(self, record: SessionRecord) -> WorkerView:
         return WorkerView(self.deps.instance.value, record.name, record.session_id, record.thread_id,
@@ -279,10 +276,17 @@ class WorkerFacade:
         return RecoveryView(self._command("status --name %s" % name),
                             self._command("messages --name %s" % name),
                             self._command("interrupt --name %s" % name),
-                            self._command("session resume --thread %s" % record.thread_id))
+                            self._raw_resume_command(record.thread_id))
 
     def _command(self, suffix):
         return "codex-worker --instance %s %s" % (shlex.quote(self.deps.instance.value), suffix)
+
+    def _raw_resume_command(self, thread_id):
+        return self._command("session resume --thread %s" % shlex.quote(thread_id))
+
+    def _raw_resume_action(self, thread_id):
+        return {"command": self._raw_resume_command(thread_id),
+                "reason": "Recover through the advanced raw session path"}
 
     def _not_found_fault(self, name):
         return FacadeFault(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found",
@@ -296,17 +300,26 @@ class WorkerFacade:
                 "thread_id": record.thread_id if record else None, "turn_id": turn_id}
 
     def _exists_fault(self, record):
+        if not record.common_policy_complete:
+            actions = self._legacy_actions(record)
+        else:
+            actions = [
+                {"command": self._command("run --name %s" % record.name), "reason": "Continue the existing worker"},
+                {"command": self._command("start --name <different-name>"), "reason": "Create an independent worker"}]
         return FacadeFault(FacadeFaultCode.WORKER_NAME_EXISTS, "Worker name already exists", "worker_name_exists",
-                           known_ids=self._known(record), next_actions=[
-                               {"command": self._command("run --name %s" % record.name), "reason": "Continue the existing worker"},
-                               {"command": self._command("start --name <different-name>"), "reason": "Create an independent worker"}])
+                           known_ids=self._known(record), next_actions=actions)
+
+    def _legacy_actions(self, record):
+        return [self._raw_resume_action(record.thread_id),
+                {"command": self._command("turn start --session %s --prompt <text>" % record.session_id),
+                 "reason": "Use the advanced raw turn path without inventing policy"},
+                {"command": self._command("start --name <different-name>"),
+                 "reason": "Create a common worker with explicit policy"}]
 
     def _legacy_fault(self, record):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Worker policy is incomplete in legacy state", "registry_error",
-                           details={"policy_state": "incomplete_legacy"}, known_ids=self._known(record), next_actions=[
-                               {"command": self._command("session resume --thread %s" % record.thread_id), "reason": "Recover through the advanced raw session path"},
-                               {"command": self._command("turn start --session %s --prompt <text>" % record.session_id), "reason": "Use the advanced raw turn path without inventing policy"},
-                               {"command": self._command("start --name <different-name>"), "reason": "Create a common worker with explicit policy"}])
+                           details={"policy_state": "incomplete_legacy"}, known_ids=self._known(record),
+                           next_actions=self._legacy_actions(record))
 
     def _registry_fault(self, exc, name):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Could not read worker registry", "registry_error",
@@ -320,6 +333,13 @@ class WorkerFacade:
                                {"command": self._command("interrupt --name %s" % record.name), "reason": "Cancel only if deliberate"}])
 
     def _stopped_fault(self, name, record):
+        if name is None:
+            return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+                               known_ids=self._known(), next_actions=[
+                                   {"command": self._command("daemon status"),
+                                    "reason": "Inspect the selected instance"},
+                                   {"command": self._command("start --name <name> --prompt <text>"),
+                                    "reason": "Start a named worker to launch the selected instance"}])
         return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
                            known_ids=self._known(record, name), next_actions=[
                                {"command": self._command("run --name %s --prompt <text>" % name), "reason": "Resume deliberately"}])
@@ -341,8 +361,11 @@ class WorkerFacade:
                 for key in ("session_id", "thread_id", "turn_id"):
                     if isinstance(exc.details.get(key), str):
                         known[key] = exc.details[key]
+            next_actions = []
+            if isinstance(known["thread_id"], str):
+                next_actions.append(self._raw_resume_action(known["thread_id"]))
             return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
-                               known_ids=known)
+                               known_ids=known, next_actions=next_actions)
         if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name)
         code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
         return FacadeFault(code, "Codex operation failed" if not limits else "Codex limits are unavailable",

@@ -308,15 +308,15 @@ class RuntimeStore:
             if runtime.start_pending or runtime.awaiting_start_response or runtime.active_turn_id is not None:
                 raise TurnActive("session has an active or pending turn")
 
-    def wait(self, session_id: str, timeout: float) -> TurnSnapshot:
+    def wait(self, session_id: str, timeout: Optional[float]) -> TurnSnapshot:
         runtime = self._get(session_id)
-        if timeout < 0:
+        if timeout is not None and timeout < 0:
             raise ValueError("timeout must be non-negative")
-        deadline = time.monotonic() + timeout
+        deadline = None if timeout is None else time.monotonic() + timeout
         with runtime.condition:
             while runtime.start_pending or runtime.active_turn_id is not None:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
                     raise WaitTimeout(session_id, runtime.active_turn_id)
                 runtime.condition.wait(remaining)
             if runtime.latest_turn is None:
