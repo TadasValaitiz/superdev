@@ -19,6 +19,11 @@ class FakeCodex:
         self.write_lock = threading.Lock()
         self.approval_request_id = 9001
         self.goal = None
+        self.turn_pages = {
+            None: ([{"id": "turn-new", "status": "completed", "items": []}], "cursor-old"),
+            "cursor-old": ([{"id": "turn-old", "status": "completed", "items": []}], None),
+        }
+        self.turn_list_requests = []
 
     def send(self, message):
         encoded = json.dumps(message, separators=(",", ":")) + "\n"
@@ -141,7 +146,10 @@ class FakeCodex:
         elif method == "thread/goal/get":
             self.response(request_id, {"goal": self.goal})
         elif method == "thread/turns/list":
-            self.response(request_id, {"turns": [], "nextCursor": None})
+            params = message["params"]
+            self.turn_list_requests.append({"threadId": params.get("threadId"), "cursor": params.get("cursor"), "limit": params.get("limit")})
+            turns, cursor = self.turn_pages.get(params.get("cursor"), ([], None))
+            self.response(request_id, {"turns": turns, "nextCursor": cursor})
         elif method == "account/rateLimits/read":
             self.response(request_id, {"rateLimits": {"primary": {"usedPercent": 1}}})
         elif method == "turn/steer":

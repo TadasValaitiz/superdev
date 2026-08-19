@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "script
 
 from codex_worker.commands import AccessMode, FacadeFault, FacadeFaultCode, Tier, WorkerView
 from codex_worker.models import ItemRecord, TurnSnapshot
-from codex_worker.projection import derive_metrics, project_completion, project_history_turn, select_completion_messages
+from codex_worker.projection import chronological_history_pages, derive_metrics, project_completion, project_history_turn, select_completion_messages
 
 
 class ProjectionTests(unittest.TestCase):
@@ -73,3 +73,8 @@ class ProjectionTests(unittest.TestCase):
         live = project_history_turn({"id": "new", "status": "inProgress", "items": [{"id": "b", "type": "agentMessage", "text": "work"}]})
         self.assertEqual(terminal.messages[0].selection.value, "terminal_fallback")
         self.assertEqual(live.messages[0].selection.value, "live")
+
+    def test_newest_first_provider_pages_become_chronological(self):
+        self.assertEqual([turn["id"] for turn in chronological_history_pages([
+            [{"id": "new"}], [{"id": "old"}],
+        ])], ["old", "new"])

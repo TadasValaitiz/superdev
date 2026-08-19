@@ -197,6 +197,20 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(proxy.rate_limits_read()["rateLimits"]["primary"]["usedPercent"], 1)
         self.assertEqual(raw.calls[2], ("thread/turns/list", {"threadId": "t", "sortDirection": "desc", "itemsView": "full", "cursor": "cursor", "limit": 2}))
 
+    def test_native_proxy_pages_newest_first_with_exact_cursors(self):
+        from codex_worker.broker import NativeCodexProxy
+        class Raw:
+            def __init__(self): self.calls = []
+            def call(self, method, params):
+                self.calls.append((method, params))
+                if params.get("cursor") is None:
+                    return {"turns": [{"id": "new", "status": "completed", "items": []}], "nextCursor": "old"}
+                return {"turns": [{"id": "old", "status": "completed", "items": []}], "nextCursor": None}
+        raw = Raw(); proxy = NativeCodexProxy(raw)
+        first = proxy.turns_list("thread", None, 1); second = proxy.turns_list("thread", first["nextCursor"], 1)
+        self.assertEqual([turn["id"] for turn in first["turns"] + second["turns"]], ["new", "old"])
+        self.assertEqual(raw.calls, [("thread/turns/list", {"threadId": "thread", "sortDirection": "desc", "itemsView": "full", "limit": 1}), ("thread/turns/list", {"threadId": "thread", "sortDirection": "desc", "itemsView": "full", "cursor": "old", "limit": 1})])
+
     def tearDown(self):
         self.tempdir.cleanup()
 

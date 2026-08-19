@@ -53,6 +53,12 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(client.steer("thr-resumed", turn_id, "narrow"), turn_id)
         client.interrupt("thr-resumed", turn_id)
 
+    def test_fake_history_pages_preserve_provider_newest_first_items(self):
+        client = self.make_client()
+        first = client.call("thread/turns/list", {"threadId": "thr-fake", "sortDirection": "desc", "itemsView": "full", "limit": 1})
+        second = client.call("thread/turns/list", {"threadId": "thr-fake", "sortDirection": "desc", "itemsView": "full", "cursor": first["nextCursor"], "limit": 1})
+        self.assertEqual([turn["id"] for turn in first["turns"] + second["turns"]], ["turn-new", "turn-old"])
+
     def test_concurrent_calls_do_not_interleave_json_lines(self):
         client = self.make_client()
         with ThreadPoolExecutor(max_workers=8) as pool:

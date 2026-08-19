@@ -108,3 +108,11 @@ def project_history_turn(turn: dict) -> HistoryTurnView:
     error = turn.get("error") if isinstance(turn.get("error"), dict) else None
     return HistoryTurnView(turn["id"], status, turn.get("startedAt"), turn.get("completedAt"),
                            select_completion_messages(records, terminal), error)
+
+
+def chronological_history_pages(pages: Sequence[Sequence[dict]]) -> List[dict]:
+    """Reverse provider newest-first pages without interpreting their contents."""
+    flattened = []
+    for page in pages:
+        flattened.extend(page)
+    return list(reversed(flattened))
