@@ -90,7 +90,7 @@ class _Native:
         self.goal = {"threadId": thread_id, "objective": objective or "existing",
                          "status": status or "active", "tokenBudget": token_budget,
                          "tokensUsed": 0, "timeUsedSeconds": 0,
-                         "createdAt": "created", "updatedAt": "updated"}
+                         "createdAt": 1, "updatedAt": 2}
         return {"goal": self.goal}
 
     def call(self, method, params):
@@ -102,7 +102,7 @@ class _Native:
         if method == "account/rateLimits/read": return {"rateLimits": {"primary": {"usedPercent": 1}}}
         if method == "thread/turns/list":
             turns, cursor = self.pages[params.get("cursor")]
-            return {"turns": turns, "nextCursor": cursor}
+            return {"data": turns, "nextCursor": cursor, "backwardsCursor": "newer"}
         raise AssertionError("unexpected native call: %s" % method)
 
 
@@ -315,11 +315,11 @@ class FacadeTests(unittest.TestCase):
     def test_history_response_asserts_every_field(self):
         record = self._record("history-all")
         self.native.pages = {None: ([{
-            "id": "new", "status": "inProgress", "startedAt": "s2", "completedAt": None,
+            "id": "new", "status": "inProgress", "startedAt": 2, "completedAt": None,
             "items": [{"id": "live", "type": "agentMessage", "text": "working", "phase": None}],
             "error": None,
         }, {
-            "id": "old", "status": "failed", "startedAt": "s1", "completedAt": "c1",
+            "id": "old", "status": "failed", "startedAt": 1, "completedAt": 3,
             "items": [{"id": "final", "type": "agentMessage", "text": "failed answer", "phase": "final_answer"}],
             "error": {"message": "boom"},
         }], None)}
@@ -328,11 +328,11 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(result.value.to_dict(), {
             "worker": self._worker_dict(record),
             "turns": [
-                {"turn_id": "old", "status": "failed", "started_at": "s1", "completed_at": "c1",
+                {"turn_id": "old", "status": "failed", "started_at": 1, "completed_at": 3,
                  "messages": [{"type": "agent_message", "item_id": "final", "phase": "final_answer",
                                "selection": "explicit_final", "text": "failed answer"}],
                  "error": {"message": "boom"}},
-                {"turn_id": "new", "status": "in_progress", "started_at": "s2", "completed_at": None,
+                {"turn_id": "new", "status": "in_progress", "started_at": 2, "completed_at": None,
                  "messages": [{"type": "agent_message", "item_id": "live", "phase": None,
                                "selection": "live", "text": "working"}], "error": None},
             ],
@@ -385,7 +385,7 @@ class FacadeTests(unittest.TestCase):
         expected_goal = {
             "thread_id": record.thread_id, "objective": "finish", "status": "paused",
             "token_budget": 9, "tokens_used": 0, "time_used_seconds": 0,
-            "created_at": "created", "updated_at": "updated",
+            "created_at": 1, "updated_at": 2,
         }
         self.assertEqual(set_result.value.to_dict(), {
             "worker": self._worker_dict(record), "availability": "present", "goal": expected_goal,

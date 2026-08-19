@@ -1,0 +1,75 @@
+{
+  "result": {
+    "codex_pid": 6809,
+    "daemon_pid": 6805,
+    "names": [
+      "five-4ce5de-one",
+      "five-4ce5de-two",
+      "five-4ce5de-three",
+      "five-4ce5de-four",
+      "five-4ce5de-five"
+    ],
+    "simultaneous_worker_count": 5,
+    "worker_count_source": "codex-worker daemon status transcript",
+    "workers": [
+      {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/workspace-1",
+        "effort": "medium",
+        "instance": "task8-five-fbbff72aa863",
+        "model": "gpt-5.6-terra",
+        "name": "five-4ce5de-one",
+        "session_id": "0be1a6f4-7609-4b76-9470-461c410e8731",
+        "thread_id": "01a01bbb-1490-71c2-aeb3-6db4488a4200",
+        "tier": "medium"
+      },
+      {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/workspace-2",
+        "effort": "medium",
+        "instance": "task8-five-fbbff72aa863",
+        "model": "gpt-5.6-terra",
+        "name": "five-4ce5de-two",
+        "session_id": "1d0c3ee2-3a9e-4a48-a89d-e825308db2d7",
+        "thread_id": "01a01bbb-1499-7f51-b2fd-4ec97270e7ac",
+        "tier": "medium"
+      },
+      {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/workspace-3",
+        "effort": "medium",
+        "instance": "task8-five-fbbff72aa863",
+        "model": "gpt-5.6-terra",
+        "name": "five-4ce5de-three",
+        "session_id": "bef199ed-bd4f-439b-88af-9053a675a52f",
+        "thread_id": "01a01bbb-14a5-7cf3-bfc3-27b01280f47a",
+        "tier": "medium"
+      },
+      {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/workspace-4",
+        "effort": "medium",
+        "instance": "task8-five-fbbff72aa863",
+        "model": "gpt-5.6-terra",
+        "name": "five-4ce5de-four",
+        "session_id": "d5c641c2-9293-458f-91b7-cfd3e6248318",
+        "thread_id": "01a01bbb-1490-71c2-aeb3-6daf681d1798",
+        "tier": "medium"
+      },
+      {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/workspace-5",
+        "effort": "medium",
+        "instance": "task8-five-fbbff72aa863",
+        "model": "gpt-5.6-terra",
+        "name": "five-4ce5de-five",
+        "session_id": "e3a044f0-f589-4d2a-a542-eb729fbaff9e",
+        "thread_id": "01a01bbb-1497-7911-82ee-6474b825ba35",
+        "tier": "medium"
+      }
+    ]
+  },
+  "scenario": "five-workers",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260819T203400.245422Z-6783-five-workers/transcript.jsonl"
+}

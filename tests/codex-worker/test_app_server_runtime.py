@@ -57,7 +57,7 @@ class AppServerTests(unittest.TestCase):
         client = self.make_client()
         first = client.call("thread/turns/list", {"threadId": "thr-fake", "sortDirection": "desc", "itemsView": "full", "limit": 1})
         second = client.call("thread/turns/list", {"threadId": "thr-fake", "sortDirection": "desc", "itemsView": "full", "cursor": first["nextCursor"], "limit": 1})
-        self.assertEqual([turn["id"] for turn in first["turns"] + second["turns"]], ["turn-new", "turn-old"])
+        self.assertEqual([turn["id"] for turn in first["data"] + second["data"]], ["turn-new", "turn-old"])
 
     def test_concurrent_calls_do_not_interleave_json_lines(self):
         client = self.make_client()

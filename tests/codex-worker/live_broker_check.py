@@ -22,9 +22,18 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"
+CLI = ROOT / "bin" / "codex-worker"
+RAW_CLI = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"
 LIVE_ROOT = ROOT / ".superdev" / "codex-worker-live"
 Json = Dict[str, Any]
+REQUIRED_ROUTES = {
+    "medium": {"model": "gpt-5.6-terra", "effort": "medium"},
+    "very-smart": {"model": "gpt-5.6-sol", "effort": "medium"},
+}
+TASK_8_SCENARIOS = (
+    "common-journey", "five-workers", "control-recovery",
+    "native-proxies", "access-schema",
+)
 
 
 def utc_stamp() -> str:
@@ -67,6 +76,158 @@ class Recorder:
         })
         return completed
 
+    def start(self, argv: Sequence[str], cwd: Optional[Path] = None,
+              env: Optional[Dict[str, str]] = None) -> subprocess.Popen:
+        process = subprocess.Popen(
+            list(argv), cwd=str(cwd) if cwd is not None else None, env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.record("command_start", {
+            "argv": list(argv), "cwd": str(cwd) if cwd is not None else None,
+            "pid": process.pid,
+        })
+        return process
+
+    def collect(self, process: subprocess.Popen, argv: Sequence[str],
+                timeout: float = 930.0) -> subprocess.CompletedProcess:
+        stdout, stderr = process.communicate(timeout=timeout)
+        completed = subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
+        self.record("command_result", {
+            "argv": list(argv), "pid": process.pid, "returncode": process.returncode,
+            "stdout": stdout, "stderr": stderr,
+        })
+        return completed
+
+
+def parse_cli_envelope(completed: subprocess.CompletedProcess) -> Json:
+    stdout = completed.stdout
+    assert isinstance(stdout, str) and stdout.strip(), completed
+    decoder = json.JSONDecoder()
+    try:
+        value, offset = decoder.raw_decode(stdout.lstrip())
+    except ValueError as exc:
+        raise AssertionError("CLI did not emit one JSON object: %r" % stdout) from exc
+    assert not stdout.lstrip()[offset:].strip(), stdout
+    assert isinstance(value, dict), value
+    assert value.get("jsonrpc") == "2.0" and value.get("id") == "cli", value
+    return value
+
+
+def require_provenance_metrics(metrics: Json) -> None:
+    assert isinstance(metrics, dict) and metrics, metrics
+    allowed = {"measured", "reported", "derived", "unavailable"}
+    for name, evidence in metrics.items():
+        assert isinstance(name, str) and name
+        assert isinstance(evidence, dict) and set(evidence) == {
+            "value", "source", "availability",
+        }, evidence
+        assert isinstance(evidence["source"], str) and evidence["source"], evidence
+        assert evidence["availability"] in allowed, evidence
+        if evidence["availability"] == "unavailable":
+            assert evidence["value"] is None, evidence
+        else:
+            assert evidence["value"] is not None, evidence
+
+
+def select_required_routes(models: List[Json]) -> Dict[str, Json]:
+    by_id = {
+        model.get("id"): model for model in models
+        if isinstance(model, dict) and isinstance(model.get("id"), str)
+    }
+    missing = []
+    for tier, route in REQUIRED_ROUTES.items():
+        model = by_id.get(route["model"])
+        efforts = model.get("supported_efforts") if isinstance(model, dict) else None
+        if not isinstance(efforts, list) or route["effort"] not in efforts:
+            missing.append(tier)
+    if missing:
+        raise SystemExit(
+            "BLOCKED: required live Terra/Sol medium route unavailable: %s" % ", ".join(missing)
+        )
+    return {tier: dict(route) for tier, route in REQUIRED_ROUTES.items()}
+
+
+def five_worker_names(prefix: str) -> List[str]:
+    return ["%s-%s" % (prefix, suffix) for suffix in ("one", "two", "three", "four", "five")]
+
+
+class ManagedCLI:
+    def __init__(self, recorder: Recorder, instance: str, use_environment: bool = False):
+        self.recorder = recorder
+        self.instance = instance
+        self.use_environment = use_environment
+        self.env = os.environ.copy()
+        self.env["PATH"] = str(ROOT / "bin") + os.pathsep + self.env.get("PATH", "")
+        self.env.pop("CLAUDE_CODE_SESSION_ID", None)
+        self.env.pop("CODEX_WORKER_INSTANCE", None)
+        if use_environment:
+            self.env["CODEX_WORKER_INSTANCE"] = instance
+
+    def argv(self, *args: str) -> List[str]:
+        command = [str(CLI)]
+        if not self.use_environment:
+            command.extend(["--instance", self.instance])
+        command.extend(args)
+        return command
+
+    def run(self, *args: str, cwd: Optional[Path] = None, timeout: float = 930.0,
+            check: bool = True) -> Tuple[Json, subprocess.CompletedProcess]:
+        completed = self.recorder.run(self.argv(*args), timeout=timeout, cwd=cwd, env=self.env)
+        payload = parse_cli_envelope(completed)
+        if check:
+            assert completed.returncode == 0, payload
+            assert "result" in payload and "error" not in payload, payload
+        return payload, completed
+
+    def result(self, *args: str, cwd: Optional[Path] = None,
+               timeout: float = 930.0) -> Json:
+        return self.run(*args, cwd=cwd, timeout=timeout)[0]["result"]
+
+    def start(self, *args: str, cwd: Optional[Path] = None) -> Tuple[List[str], subprocess.Popen]:
+        argv = self.argv(*args)
+        return argv, self.recorder.start(argv, cwd=cwd, env=self.env)
+
+    def collect(self, argv: Sequence[str], process: subprocess.Popen,
+                timeout: float = 930.0, check: bool = True) -> Json:
+        completed = self.recorder.collect(process, argv, timeout=timeout)
+        payload = parse_cli_envelope(completed)
+        if check:
+            assert completed.returncode == 0, payload
+            assert "result" in payload and "error" not in payload, payload
+        return payload
+
+    def stop(self) -> Optional[Json]:
+        try:
+            payload, _ = self.run("daemon", "stop", timeout=30.0, check=False)
+            return payload
+        except (AssertionError, OSError, subprocess.TimeoutExpired) as exc:
+            self.recorder.record("cleanup_error", {
+                "phase": "managed_stop", "type": type(exc).__name__, "message": str(exc),
+            })
+            return None
+
+
+def require_completion(result: Json, name: str, cwd: Path,
+                       tier: Optional[str] = None, access: Optional[str] = None) -> Json:
+    assert set(result) == {
+        "worker", "turn", "messages", "structured_output", "metrics", "recovery",
+    }, result
+    worker = result["worker"]
+    assert worker["name"] == name and worker["cwd"] == str(cwd.resolve()), worker
+    if tier is not None:
+        route = REQUIRED_ROUTES[tier]
+        assert worker["tier"] == tier, worker
+        assert worker["model"] == route["model"] and worker["effort"] == route["effort"], worker
+    if access is not None:
+        assert worker["access"] == access, worker
+    assert result["turn"]["status"] == "completed", result["turn"]
+    assert isinstance(result["messages"], list) and result["messages"], result
+    for message in result["messages"]:
+        assert message["selection"] in ("explicit_final", "terminal_fallback"), message
+        assert isinstance(message["text"], str) and message["text"], message
+    require_provenance_metrics(result["metrics"])
+    return worker
+
 
 class Daemon:
     def __init__(self, recorder: Recorder, name: str = "daemon", event_limit: int = 8,
@@ -95,7 +256,7 @@ class Daemon:
         env = os.environ.copy()
         env.update(self.extra_env)
         argv = [
-            sys.executable, str(CLI), "--socket", str(self.socket_path),
+            sys.executable, str(RAW_CLI), "--socket", str(self.socket_path),
             "daemon", "serve", "--state", str(self.state_path),
             "--codex-bin", self.codex_bin, "--event-limit", str(self.event_limit),
         ]
@@ -125,7 +286,7 @@ class Daemon:
     def cli(self, *args: str, timeout: float = 120.0,
             check: bool = True) -> Tuple[Json, subprocess.CompletedProcess]:
         completed = self.recorder.run(
-            [sys.executable, str(CLI), "--socket", str(self.socket_path)] + list(args),
+            [sys.executable, str(RAW_CLI), "--socket", str(self.socket_path)] + list(args),
             timeout=timeout, cwd=ROOT,
         )
         try:
@@ -561,7 +722,7 @@ Do not finish before the command completes.
 
 def waiter_command(daemon: Daemon, session_id: str, timeout: float) -> List[str]:
     return [
-        sys.executable, str(CLI), "--socket", str(daemon.socket_path),
+        sys.executable, str(RAW_CLI), "--socket", str(daemon.socket_path),
         "turn", "wait", "--session", session_id, "--timeout", str(timeout),
     ]
 
@@ -643,7 +804,7 @@ Then inspect README.md, create observe.txt with exact content `observed\\n`, run
         assert lsof.stdout.strip() == "", lsof.stdout
 
         collision_argv = [
-            sys.executable, str(CLI), "--socket", str(daemon.socket_path),
+            sys.executable, str(RAW_CLI), "--socket", str(daemon.socket_path),
             "daemon", "serve", "--state", str(recorder.run_dir / "collision-state.json"),
             "--codex-bin", "codex", "--event-limit", "3",
         ]
@@ -881,6 +1042,336 @@ def scenario_approvals() -> Json:
             cleanup_daemon(recorder, daemon)
 
 
+def _workspace(recorder: Recorder, name: str) -> Path:
+    path = recorder.run_dir / name
+    path.mkdir(mode=0o700)
+    (path / "README.md").write_text("# Task 8 live workspace\n", encoding="utf-8")
+    return path
+
+
+def _identity(worker: Json) -> Tuple[str, str, str, str, str, str]:
+    return (
+        worker["session_id"], worker["thread_id"], worker["cwd"],
+        worker["model"], worker["effort"], worker["access"],
+    )
+
+
+def scenario_common_journey() -> Json:
+    recorder = Recorder("common-journey")
+    instance = "task8-common-%s" % uuid.uuid4().hex[:12]
+    runner = ManagedCLI(recorder, instance)
+    cwd = _workspace(recorder, "common-workspace")
+    name = "common-%s" % uuid.uuid4().hex[:8]
+    stopped = False
+    try:
+        first = runner.result(
+            "start", "--name", name, "--prompt",
+            "Reply with exactly COMMON-FIRST and no other text.", cwd=cwd,
+        )
+        first_worker = require_completion(first, name, cwd, "medium", "full")
+        follow = runner.result(
+            "run", "--name", name, "--prompt",
+            "Reply with exactly COMMON-FOLLOWUP and no other text.", cwd=cwd,
+        )
+        follow_worker = require_completion(follow, name, cwd, "medium", "full")
+        assert _identity(first_worker) == _identity(follow_worker), (first_worker, follow_worker)
+        status = runner.result("status", "--name", name, cwd=cwd)
+        messages = runner.result("messages", "--name", name, "--tail", "2", cwd=cwd)
+        assert status["worker"] == follow_worker and status["daemon_status"] == "ready", status
+        assert messages["worker"] == follow_worker and messages["returned"] >= 1, messages
+        stop = runner.result("daemon", "stop", cwd=cwd, timeout=30.0)
+        stopped = True
+        assert stop["status_after"] == "stopped" and stop["durable_state"] == "preserved", stop
+        restarted = runner.result(
+            "run", "--name", name, "--prompt",
+            "Reply with exactly COMMON-RESTARTED and no other text.", cwd=cwd,
+        )
+        restarted_worker = require_completion(restarted, name, cwd, "medium", "full")
+        stopped = False
+        assert _identity(first_worker) == _identity(restarted_worker), restarted_worker
+        result = {
+            "instance": instance,
+            "worker": first_worker,
+            "first_turn": first["turn"],
+            "follow_turn": follow["turn"],
+            "restart_turn": restarted["turn"],
+            "same_recovery_identity": True,
+            "messages_returned": messages["returned"],
+            "stop": stop,
+            "metric_evidence": restarted["metrics"],
+        }
+        runner.stop()
+        stopped = True
+        return finish_scenario(recorder, "common-journey", result, ["AH1", "AH2", "AH5"])
+    finally:
+        if not stopped:
+            runner.stop()
+
+
+def scenario_five_workers() -> Json:
+    recorder = Recorder("five-workers")
+    instance = "task8-five-%s" % uuid.uuid4().hex[:12]
+    runner = ManagedCLI(recorder, instance)
+    names = five_worker_names("five-%s" % uuid.uuid4().hex[:6])
+    workspaces = [_workspace(recorder, "workspace-%d" % index) for index in range(1, 6)]
+    commands = []
+    processes = []
+    try:
+        for index, (name, cwd) in enumerate(zip(names, workspaces), 1):
+            argv, process = runner.start(
+                "start", "--name", name, "--prompt",
+                "Reply with exactly FIVE-WORKER-%d and no other text." % index,
+                cwd=cwd,
+            )
+            commands.append(argv)
+            processes.append(process)
+        assert len(processes) == 5 and all(process.poll() is None for process in processes), [
+            process.poll() for process in processes
+        ]
+        results = []
+        for name, cwd, argv, process in zip(names, workspaces, commands, processes):
+            payload = runner.collect(argv, process)
+            results.append(payload["result"])
+            require_completion(payload["result"], name, cwd, "medium", "full")
+        workers = [result["worker"] for result in results]
+        assert len(workers) == 5
+        assert {worker["name"] for worker in workers} == set(names)
+        assert len({worker["session_id"] for worker in workers}) == 5
+        assert len({worker["thread_id"] for worker in workers}) == 5
+        assert {worker["cwd"] for worker in workers} == {str(path.resolve()) for path in workspaces}
+        status = runner.result("daemon", "status")
+        assert status["status"] == "ready" and status["worker_count"] == 5, status
+        result = {
+            "simultaneous_worker_count": 5,
+            "names": names,
+            "workers": workers,
+            "daemon_pid": status["daemon_pid"],
+            "codex_pid": status["codex_pid"],
+            "worker_count_source": "codex-worker daemon status transcript",
+        }
+        runner.stop()
+        return finish_scenario(recorder, "five-workers", result, ["AH3"])
+    finally:
+        for argv, process in zip(commands, processes):
+            if process.poll() is None:
+                process.terminate()
+                recorder.collect(process, argv, timeout=10.0)
+        runner.stop()
+
+
+def _wait_active(runner: ManagedCLI, name: str, cwd: Path,
+                 timeout: float = 45.0) -> Json:
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        payload, completed = runner.run("status", "--name", name, cwd=cwd, check=False)
+        last = payload
+        if completed.returncode == 0 and payload.get("result", {}).get("active_turn_id"):
+            return payload["result"]
+        time.sleep(0.1)
+    raise AssertionError("worker did not become active: %r" % last)
+
+
+def scenario_control_recovery() -> Json:
+    recorder = Recorder("control-recovery")
+    instance = "task8-control-%s" % uuid.uuid4().hex[:12]
+    runner = ManagedCLI(recorder, instance)
+    steer_cwd = _workspace(recorder, "steer-workspace")
+    interrupt_cwd = _workspace(recorder, "interrupt-workspace")
+    steer_name = "steer-%s" % uuid.uuid4().hex[:8]
+    interrupt_name = "interrupt-%s" % uuid.uuid4().hex[:8]
+    pending = []
+    try:
+        steer_argv, steer_proc = runner.start(
+            "start", "--name", steer_name, "--prompt",
+            "Run `python3 -c \"import time; time.sleep(10)\"`, then reply STEER-ORIGINAL.",
+            cwd=steer_cwd,
+        )
+        pending.append((steer_argv, steer_proc))
+        steer_status = _wait_active(runner, steer_name, steer_cwd)
+        live_messages = runner.result("messages", "--name", steer_name, "--tail", "2", cwd=steer_cwd)
+        steered = runner.result(
+            "steer", "--name", steer_name, "--prompt",
+            "After the current command, reply with exactly STEER-ACCEPTED and finish.", cwd=steer_cwd,
+        )
+        steer_payload = runner.collect(steer_argv, steer_proc, timeout=120.0)
+        pending.remove((steer_argv, steer_proc))
+        require_completion(steer_payload["result"], steer_name, steer_cwd, "medium", "full")
+        idle_payload, idle_completed = runner.run(
+            "steer", "--name", steer_name, "--prompt", "must refuse", cwd=steer_cwd,
+            check=False,
+        )
+        idle = assert_typed_error(idle_payload, idle_completed, "turn_not_active")
+
+        interrupt_argv, interrupt_proc = runner.start(
+            "start", "--name", interrupt_name, "--prompt",
+            "Run `python3 -c \"import time; time.sleep(30)\"`, then reply TOO-LATE.",
+            cwd=interrupt_cwd,
+        )
+        pending.append((interrupt_argv, interrupt_proc))
+        interrupt_status = _wait_active(runner, interrupt_name, interrupt_cwd)
+        interrupted = runner.result("interrupt", "--name", interrupt_name, cwd=interrupt_cwd)
+        interrupt_payload = runner.collect(interrupt_argv, interrupt_proc, timeout=60.0)
+        pending.remove((interrupt_argv, interrupt_proc))
+        assert interrupt_payload["result"]["turn"]["status"] == "interrupted", interrupt_payload
+
+        daemon_status = runner.result("daemon", "status")
+        socket_path = daemon_status["instance"]["socket_path"]
+        raw_status_completed = recorder.run(
+            [str(CLI), "--socket", socket_path, "daemon", "status"],
+            env=runner.env, timeout=30.0,
+        )
+        raw_status = parse_cli_envelope(raw_status_completed)
+        assert raw_status_completed.returncode == 0 and raw_status["result"]["ready"] is True
+        raw_shutdown_completed = recorder.run(
+            [str(CLI), "--socket", socket_path, "daemon", "shutdown"],
+            env=runner.env, timeout=30.0,
+        )
+        raw_shutdown = parse_cli_envelope(raw_shutdown_completed)
+        assert raw_shutdown_completed.returncode == 0
+        assert raw_shutdown["result"] == {"accepted": True}, raw_shutdown
+        result = {
+            "steer_active_turn_id": steer_status["active_turn_id"],
+            "live_messages_returned": live_messages["returned"],
+            "steer": steered,
+            "idle_steer": idle,
+            "interrupt_active_turn_id": interrupt_status["active_turn_id"],
+            "interrupt": interrupted,
+            "interrupted_turn": interrupt_payload["result"]["turn"],
+            "legacy_socket_status": raw_status["result"],
+            "legacy_socket_shutdown": raw_shutdown["result"],
+        }
+        return finish_scenario(recorder, "control-recovery", result, ["AH4", "AH12"])
+    finally:
+        for argv, process in pending:
+            if process.poll() is None:
+                process.terminate()
+                recorder.collect(process, argv, timeout=10.0)
+        runner.stop()
+
+
+def scenario_native_proxies() -> Json:
+    recorder = Recorder("native-proxies")
+    instance = "task8-native-%s" % uuid.uuid4().hex[:12]
+    runner = ManagedCLI(recorder, instance)
+    cwd = _workspace(recorder, "native-workspace")
+    name = "native-%s" % uuid.uuid4().hex[:8]
+    try:
+        first = runner.result(
+            "start", "--name", name, "--goal", "Complete the Task 8 native proxy check",
+            "--token-budget", "20000", "--prompt",
+            "Reply with exactly NATIVE-FIRST and no other text.", cwd=cwd,
+        )
+        worker = require_completion(first, name, cwd, "medium", "full")
+        goal_initial = runner.result("goal", "show", "--name", name, cwd=cwd)
+        assert goal_initial["availability"] == "present", goal_initial
+        assert goal_initial["goal"]["objective"] == "Complete the Task 8 native proxy check"
+        history = runner.result("history", "--name", name, "--tail", "2", cwd=cwd)
+        assert history["returned"] >= 1 and history["returned"] == len(history["turns"]), history
+        goal_updated = runner.result(
+            "goal", "set", "--name", name, "--status", "paused",
+            "--token-budget", "25000", cwd=cwd,
+        )
+        assert goal_updated["goal"]["status"] == "paused"
+        status_after_pause = runner.result("status", "--name", name, cwd=cwd)
+        limits_payload, limits_completed = runner.run("limits", cwd=cwd, check=False)
+        if limits_completed.returncode == 0:
+            limits = limits_payload["result"]
+            assert limits["availability"] == "available" and isinstance(limits["rate_limits"], dict)
+            limits_outcome = {"kind": "available", "payload": limits}
+        else:
+            error = assert_typed_error(limits_payload, limits_completed, "limits_unavailable")
+            limits_outcome = {"kind": "typed_unavailable", "payload": error}
+        result = {
+            "worker": worker,
+            "goal_initial": goal_initial,
+            "goal_updated": goal_updated,
+            "history": history,
+            "status_after_pause": status_after_pause,
+            "limits": limits_outcome,
+            "first_metrics": first["metrics"],
+        }
+        runner.stop()
+        return finish_scenario(recorder, "native-proxies", result, ["AH6", "AH10"])
+    finally:
+        runner.stop()
+
+
+def scenario_access_schema() -> Json:
+    recorder = Recorder("access-schema")
+    instance = "task8-access-%s" % uuid.uuid4().hex[:12]
+    runner = ManagedCLI(recorder, instance, use_environment=True)
+    full_cwd = _workspace(recorder, "full-workspace")
+    readonly_cwd = _workspace(recorder, "readonly-workspace")
+    schema_cwd = _workspace(recorder, "schema-workspace")
+    external = recorder.run_dir / "external-context.txt"
+    external.write_text("EXTERNAL-CONTEXT-%s\n" % uuid.uuid4().hex, encoding="utf-8")
+    readonly_target = readonly_cwd / "must-not-exist.txt"
+    schema_path = recorder.run_dir / "verdict-schema.json"
+    schema_path.write_text(json.dumps({
+        "type": "object",
+        "properties": {
+            "verdict": {"type": "string"},
+            "report": {"type": "string"},
+            "review": {"type": "string"},
+        },
+        "required": ["verdict", "report", "review"],
+        "additionalProperties": False,
+    }), encoding="utf-8")
+    full_name = "full-%s" % uuid.uuid4().hex[:8]
+    readonly_name = "readonly-%s" % uuid.uuid4().hex[:8]
+    schema_name = "schema-%s" % uuid.uuid4().hex[:8]
+    try:
+        full = runner.result(
+            "start", "--name", full_name, "--tier", "very-smart", "--prompt",
+            "Read the absolute file %s and report its exact single line." % external,
+            cwd=full_cwd,
+        )
+        full_worker = require_completion(full, full_name, full_cwd, "very-smart", "full")
+        assert external.read_text(encoding="utf-8").strip() in "\n".join(
+            message["text"] for message in full["messages"]
+        ), full["messages"]
+        readonly = runner.result(
+            "start", "--name", readonly_name, "--read-only", "--prompt",
+            "Attempt to create must-not-exist.txt in the current directory with any content. "
+            "Report whether the sandbox allowed the write.", cwd=readonly_cwd,
+        )
+        readonly_worker = require_completion(
+            readonly, readonly_name, readonly_cwd, "medium", "read_only",
+        )
+        assert not readonly_target.exists(), readonly_target
+        schema = runner.result(
+            "start", "--name", schema_name, "--output-schema", str(schema_path),
+            "--prompt", "Return verdict PASS, report Task 8 schema live, review complete.",
+            cwd=schema_cwd,
+        )
+        schema_worker = require_completion(schema, schema_name, schema_cwd, "medium", "full")
+        structured = schema["structured_output"]
+        assert isinstance(structured, dict) and set(structured) == {
+            "verdict", "report", "review",
+        }, structured
+        daemon_status = runner.result("daemon", "status")
+        assert daemon_status["instance"]["source"] == "environment", daemon_status
+        selections = {
+            message["selection"] for result in (full, readonly, schema)
+            for message in result["messages"]
+        }
+        result = {
+            "instance_source": daemon_status["instance"]["source"],
+            "full_worker": full_worker,
+            "read_only_worker": readonly_worker,
+            "schema_worker": schema_worker,
+            "read_only_write_present": readonly_target.exists(),
+            "structured_output": structured,
+            "message_selections": sorted(selections),
+            "schema_messages": schema["messages"],
+        }
+        runner.stop()
+        return finish_scenario(recorder, "access-schema", result, ["AH7", "AH8", "AH10"])
+    finally:
+        runner.stop()
+
+
 def preflight() -> Json:
     recorder = Recorder("preflight")
     daemon = Daemon(recorder)
@@ -892,9 +1383,7 @@ def preflight() -> Json:
         status = daemon.client("daemon", "status")
         models = daemon.client("model", "list")["models"]
         assert isinstance(models, list)
-        selected = choose_two_distinct_models_and_efforts(models)
-        assert len({item["model"] for item in selected}) >= 2
-        assert len({item["effort"] for item in selected}) >= 2
+        selected = select_required_routes(models)
         result = {
             "codex_version": codex_version.stdout.strip(),
             "daemon_pid": status["daemon_pid"],
@@ -916,10 +1405,8 @@ def preflight() -> Json:
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preflight", action="store_true", help="discover the D14 model/effort pairs")
-    parser.add_argument("--scenario", choices=[
-        "concurrent-worktrees", "control", "observe-socket", "recovery", "approvals",
-    ])
+    parser.add_argument("--preflight", action="store_true", help="validate required Terra/Sol routes")
+    parser.add_argument("--scenario", choices=TASK_8_SCENARIOS)
     return parser.parse_args(argv)
 
 
@@ -928,28 +1415,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.preflight:
         preflight()
         return 0
-    if args.scenario == "concurrent-worktrees":
-        scenario_concurrent_worktrees()
-        return 0
-    if args.scenario == "control":
-        scenario_control()
-        return 0
-    if args.scenario == "observe-socket":
-        scenario_observe_socket()
-        return 0
-    if args.scenario == "recovery":
-        scenario_recovery()
-        return 0
-    if args.scenario == "approvals":
-        scenario_approvals()
+    scenarios = {
+        "common-journey": scenario_common_journey,
+        "five-workers": scenario_five_workers,
+        "control-recovery": scenario_control_recovery,
+        "native-proxies": scenario_native_proxies,
+        "access-schema": scenario_access_schema,
+    }
+    if args.scenario is not None:
+        scenarios[args.scenario]()
         return 0
     if args.scenario is None:
         preflight()
-        scenario_concurrent_worktrees()
-        scenario_control()
-        scenario_observe_socket()
-        scenario_recovery()
-        scenario_approvals()
+        for scenario in TASK_8_SCENARIOS:
+            scenarios[scenario]()
         print(json.dumps({"status": "PASS", "scenario": "all-live-broker-checks"}))
         return 0
     raise AssertionError("unreachable scenario")

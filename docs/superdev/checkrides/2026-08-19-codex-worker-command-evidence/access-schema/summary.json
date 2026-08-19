@@ -1,0 +1,59 @@
+{
+  "result": {
+    "full_worker": {
+      "access": "full",
+      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204136.069177Z-28915-access-schema/full-workspace",
+      "effort": "medium",
+      "instance": "task8-access-546819fd3988",
+      "model": "gpt-5.6-sol",
+      "name": "full-a19cf707",
+      "session_id": "6efdf282-e64a-434f-96ff-703905220446",
+      "thread_id": "01a01bc2-0908-7c22-8f95-a3dbb9fd4733",
+      "tier": "very-smart"
+    },
+    "instance_source": "environment",
+    "message_selections": [
+      "explicit_final"
+    ],
+    "read_only_worker": {
+      "access": "read_only",
+      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204136.069177Z-28915-access-schema/readonly-workspace",
+      "effort": "medium",
+      "instance": "task8-access-546819fd3988",
+      "model": "gpt-5.6-terra",
+      "name": "readonly-9a26b91b",
+      "session_id": "41ccaca6-f8cc-411c-bc53-d4c46cb46439",
+      "thread_id": "01a01bc2-5dbd-7a30-88e7-09e143bbc0ac",
+      "tier": "medium"
+    },
+    "read_only_write_present": false,
+    "schema_messages": [
+      {
+        "item_id": "msg_0733ed49942cf6f0016a86153185bc87d096950aaa5ce4ce36",
+        "phase": "final_answer",
+        "selection": "explicit_final",
+        "text": "{\"verdict\":\"PASS\",\"report\":\"Task 8 schema live\",\"review\":\"complete\"}",
+        "type": "agent_message"
+      }
+    ],
+    "schema_worker": {
+      "access": "full",
+      "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T204136.069177Z-28915-access-schema/schema-workspace",
+      "effort": "medium",
+      "instance": "task8-access-546819fd3988",
+      "model": "gpt-5.6-terra",
+      "name": "schema-ffec6fa0",
+      "session_id": "7b7ddfa1-d403-4841-ba25-7e01b1e970d3",
+      "thread_id": "01a01bc2-a3a1-7163-8c14-f84b73694658",
+      "tier": "medium"
+    },
+    "structured_output": {
+      "report": "Task 8 schema live",
+      "review": "complete",
+      "verdict": "PASS"
+    }
+  },
+  "scenario": "access-schema",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260819T204136.069177Z-28915-access-schema/transcript.jsonl"
+}

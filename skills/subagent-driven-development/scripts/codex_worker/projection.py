@@ -99,7 +99,8 @@ def project_history_turn(turn: dict) -> HistoryTurnView:
             raise ValueError("malformed Codex history item")
         records.append(ItemRecord(item["id"], item["type"], {key: value for key, value in item.items() if key not in ("id", "type")}))
     for field in ("startedAt", "completedAt"):
-        if field in turn and turn[field] is not None and not isinstance(turn[field], str):
+        if (field in turn and turn[field] is not None
+                and (type(turn[field]) is not int or turn[field] < 0)):
             raise ValueError("malformed Codex history timestamp")
     if turn.get("error") is not None and not isinstance(turn.get("error"), dict):
         raise ValueError("malformed Codex history error")

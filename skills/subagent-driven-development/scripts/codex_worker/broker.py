@@ -84,10 +84,12 @@ class NativeCodexProxy:
         required = {"threadId", "objective", "status", "tokenBudget", "tokensUsed", "timeUsedSeconds", "createdAt", "updatedAt"}
         if not isinstance(goal, dict) or set(goal) != required:
             self._protocol(method, "malformed goal")
-        if (not all(isinstance(goal[key], str) and goal[key] for key in ("threadId", "objective", "createdAt", "updatedAt"))
+        if (not all(isinstance(goal[key], str) and goal[key] for key in ("threadId", "objective"))
                 or goal["status"] not in ("active", "paused", "blocked", "usageLimited", "budgetLimited", "complete")
                 or (goal["tokenBudget"] is not None and (type(goal["tokenBudget"]) is not int or goal["tokenBudget"] <= 0))
-                or any(type(goal[key]) is not int or goal[key] < 0 for key in ("tokensUsed", "timeUsedSeconds"))):
+                or any(type(goal[key]) is not int or goal[key] < 0 for key in (
+                    "tokensUsed", "timeUsedSeconds", "createdAt", "updatedAt"
+                ))):
             self._protocol(method, "malformed goal fields")
         return result
     def goal_set(self, thread_id: str, objective: Optional[str] = None, status: Optional[str] = None,
@@ -104,15 +106,18 @@ class NativeCodexProxy:
         if cursor is not None: params["cursor"] = cursor
         if limit is not None: params["limit"] = limit
         result = self._call("thread/turns/list", params)
-        if set(result) != {"turns", "nextCursor"} or not isinstance(result["turns"], list) or result["nextCursor"] is not None and not isinstance(result["nextCursor"], str):
+        if (set(result) != {"data", "nextCursor", "backwardsCursor"}
+                or not isinstance(result["data"], list)
+                or any(result[key] is not None and not isinstance(result[key], str)
+                       for key in ("nextCursor", "backwardsCursor"))):
             self._protocol("thread/turns/list", "malformed turn page")
         from .projection import project_history_turn
-        for turn in result["turns"]:
+        for turn in result["data"]:
             try:
                 project_history_turn(turn)
             except ValueError as exc:
                 self._protocol("thread/turns/list", str(exc))
-        return result
+        return {"turns": result["data"], "nextCursor": result["nextCursor"]}
     def rate_limits_read(self) -> JsonObject:
         result = self._call("account/rateLimits/read", {})
         if set(result) != {"rateLimits"} or not isinstance(result["rateLimits"], dict):

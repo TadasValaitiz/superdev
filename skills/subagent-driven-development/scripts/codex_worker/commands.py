@@ -218,9 +218,11 @@ def _check_contract(value: Any) -> None:
     if name == "WorkerMessagesResponse" and value.latest_cursor is not None and (type(value.latest_cursor) is not int or value.latest_cursor < 0): raise ValueError("latest_cursor must be non-negative")
     if name == "ControlResponse" and value.accepted is not True: raise ValueError("accepted must be true")
     if name == "GoalView":
-        if not value.thread_id or not value.objective or not value.created_at or not value.updated_at: raise ValueError("goal identity fields must be non-empty")
+        if not value.thread_id or not value.objective: raise ValueError("goal identity fields must be non-empty")
         if value.token_budget is not None: _positive(value.token_budget, "token_budget")
-        if type(value.tokens_used) is not int or value.tokens_used < 0 or type(value.time_used_seconds) is not int or value.time_used_seconds < 0: raise ValueError("goal usage must be non-negative")
+        if any(type(item) is not int or item < 0 for item in (
+            value.tokens_used, value.time_used_seconds, value.created_at, value.updated_at
+        )): raise ValueError("goal usage and timestamps must be non-negative")
     if name == "GoalResponse" and ((value.availability == "present") != (value.goal is not None)): raise ValueError("goal availability does not match goal")
     if name == "InstanceView":
         if not value.instance: raise ValueError("instance must be non-empty")
@@ -375,13 +377,13 @@ class WorkerStatusResponse(StrictModel): worker: WorkerView; daemon_status: str;
 @dataclass(frozen=True)
 class WorkerMessagesResponse(StrictModel): worker: WorkerView; messages: List[AgentMessageView]; requested_tail: int; returned: int; truncated: bool; latest_cursor: Optional[int]
 @dataclass(frozen=True)
-class HistoryTurnView(StrictModel): turn_id: str; status: str; started_at: Optional[str]; completed_at: Optional[str]; messages: List[AgentMessageView]; error: Optional[JsonObject]
+class HistoryTurnView(StrictModel): turn_id: str; status: str; started_at: Optional[int]; completed_at: Optional[int]; messages: List[AgentMessageView]; error: Optional[JsonObject]
 @dataclass(frozen=True)
 class WorkerHistoryResponse(StrictModel): worker: WorkerView; turns: List[HistoryTurnView]; requested_tail: int; returned: int; older_available: bool
 @dataclass(frozen=True)
 class ControlResponse(StrictModel): worker: WorkerView; action: str; accepted: bool; turn_id: str; status: str
 @dataclass(frozen=True)
-class GoalView(StrictModel): thread_id: str; objective: str; status: str; token_budget: Optional[int]; tokens_used: int; time_used_seconds: int; created_at: str; updated_at: str
+class GoalView(StrictModel): thread_id: str; objective: str; status: str; token_budget: Optional[int]; tokens_used: int; time_used_seconds: int; created_at: int; updated_at: int
 @dataclass(frozen=True)
 class GoalResponse(StrictModel): worker: WorkerView; availability: str; goal: Optional[GoalView]
 @dataclass(frozen=True)

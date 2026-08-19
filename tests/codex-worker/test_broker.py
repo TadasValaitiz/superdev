@@ -197,12 +197,14 @@ class WorkerBrokerTests(unittest.TestCase):
             def call(self, method, params):
                 self.calls.append((method, params))
                 if method == "thread/goal/get": return {"goal": None}
-                if method == "thread/goal/set": return {"goal": {"threadId": "t", "objective": "o", "status": "active", "tokenBudget": None, "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": "x", "updatedAt": "x"}}
-                if method == "thread/turns/list": return {"turns": [{"id": "t", "status": "completed", "items": []}], "nextCursor": "next"}
+                if method == "thread/goal/set": return {"goal": {"threadId": "t", "objective": "o", "status": "active", "tokenBudget": None, "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": 1, "updatedAt": 2}}
+                if method == "thread/turns/list": return {"data": [{"id": "t", "status": "completed", "items": []}], "nextCursor": "next", "backwardsCursor": "back"}
                 return {"rateLimits": {"primary": {"usedPercent": 1}}}
         raw = Raw(); proxy = NativeCodexProxy(raw)
         self.assertIsNone(proxy.goal_get("t")["goal"])
-        self.assertEqual(proxy.goal_set("t", "o", "active")["goal"]["objective"], "o")
+        goal = proxy.goal_set("t", "o", "active")["goal"]
+        self.assertEqual(goal["objective"], "o")
+        self.assertEqual(goal["createdAt"], 1)
         self.assertEqual(proxy.turns_list("t", "cursor", 2)["nextCursor"], "next")
         self.assertEqual(proxy.rate_limits_read()["rateLimits"]["primary"]["usedPercent"], 1)
         self.assertEqual(raw.calls[2], ("thread/turns/list", {"threadId": "t", "sortDirection": "desc", "itemsView": "full", "cursor": "cursor", "limit": 2}))
@@ -214,8 +216,8 @@ class WorkerBrokerTests(unittest.TestCase):
             def call(self, method, params):
                 self.calls.append((method, params))
                 if params.get("cursor") is None:
-                    return {"turns": [{"id": "new", "status": "completed", "items": []}], "nextCursor": "old"}
-                return {"turns": [{"id": "old", "status": "completed", "items": []}], "nextCursor": None}
+                    return {"data": [{"id": "new", "status": "completed", "items": []}], "nextCursor": "old", "backwardsCursor": "newer"}
+                return {"data": [{"id": "old", "status": "completed", "items": []}], "nextCursor": None, "backwardsCursor": "newer"}
         raw = Raw(); proxy = NativeCodexProxy(raw)
         first = proxy.turns_list("thread", None, 1); second = proxy.turns_list("thread", first["nextCursor"], 1)
         self.assertEqual([turn["id"] for turn in first["turns"] + second["turns"]], ["new", "old"])

@@ -221,8 +221,8 @@ class FakeCodex:
             params = message["params"]
             self.goal = {"threadId": params["threadId"], "objective": params.get("objective", "goal"),
                          "status": params.get("status", "active"), "tokenBudget": params.get("tokenBudget"),
-                         "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": "2026-01-01T00:00:00Z",
-                         "updatedAt": "2026-01-01T00:00:00Z"}
+                         "tokensUsed": 0, "timeUsedSeconds": 0, "createdAt": 1767225600,
+                         "updatedAt": 1767225600}
             self.response(request_id, {"goal": self.goal})
         elif method == "thread/goal/get":
             self.response(request_id, {"goal": None if self.option("goal_absent", False) else self.goal})
@@ -235,7 +235,9 @@ class FakeCodex:
                 turns, cursor = page.get("turns", []), page.get("nextCursor")
             else:
                 turns, cursor = self.turn_pages.get(params.get("cursor"), ([], None))
-            self.response(request_id, {"turns": turns, "nextCursor": cursor})
+            self.response(request_id, {
+                "data": turns, "nextCursor": cursor, "backwardsCursor": "newer",
+            })
         elif method == "account/rateLimits/read":
             if self.option("limits_unavailable", False):
                 self.send({"id": request_id, "error": {"code": -32601, "message": "unsupported"}})

@@ -1,0 +1,23 @@
+{
+  "broker_commands": [
+    "codex-worker start --name claude-caller-f85d07de --prompt 'Reply with exactly CLAUDE-FIRST and no other text.'",
+    "codex-worker run --name claude-caller-f85d07de --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'",
+    "codex-worker goal show --name claude-caller-f85d07de",
+    "codex-worker history --name claude-caller-f85d07de --tail 2",
+    "codex-worker status --name claude-caller-f85d07de",
+    "codex-worker daemon stop"
+  ],
+  "direct_codex_invocation": false,
+  "durable_state": "preserved",
+  "effort": "medium",
+  "mcp_invocation": false,
+  "message_count": 2,
+  "model": "gpt-5.6-terra",
+  "native_claude_available": true,
+  "raw_codex_worker_invocation": false,
+  "session_id": "5efd8a2c-02cd-4475-9a5b-840d4fa6a910",
+  "terminal_status": "completed",
+  "thread_id": "01a01bc3-beb3-7581-8ac6-7f27641d001a",
+  "turn_id": "01a01bc3-bf09-7ea2-91e7-91add623cd09",
+  "worker_name": "claude-caller-f85d07de"
+}

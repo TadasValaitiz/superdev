@@ -626,7 +626,7 @@ class RpcServerTests(unittest.TestCase):
         )
         goal = GoalView(
             "thread-a", "finish", "active", 10, 1, 2,
-            "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z",
+            1787160000, 1787160001,
         )
         responses = {
             "start": completion,

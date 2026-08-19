@@ -1,0 +1,83 @@
+{
+  "result": {
+    "idle_steer": {
+      "code": -32005,
+      "data": {
+        "details": {},
+        "kind": "turn_not_active",
+        "known_ids": {
+          "instance": "task8-control-6378e8f4d746",
+          "name": "steer-00482b46",
+          "session_id": "1e599e4f-55c0-4da2-8be7-acb1211c2447",
+          "thread_id": "01a01bbb-5b30-75c1-b82e-3cf566f8895c",
+          "turn_id": null
+        },
+        "next_actions": [
+          {
+            "command": "codex-worker --instance task8-control-6378e8f4d746 status --name steer-00482b46",
+            "reason": "Inspect the latest turn"
+          }
+        ],
+        "retryable": false,
+        "source": "codex-worker"
+      },
+      "message": "Turn is not active"
+    },
+    "interrupt": {
+      "accepted": true,
+      "action": "interrupt",
+      "status": "interrupted",
+      "turn_id": "01a01bbb-a412-7b93-9776-abc4b9f13215",
+      "worker": {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203418.340803Z-11134-control-recovery/interrupt-workspace",
+        "effort": "medium",
+        "instance": "task8-control-6378e8f4d746",
+        "model": "gpt-5.6-terra",
+        "name": "interrupt-b2df864a",
+        "session_id": "0a9f7a72-4838-4658-bc6c-e497ad03af6e",
+        "thread_id": "01a01bbb-a3d8-7fc3-83b6-49a48d413a34",
+        "tier": "medium"
+      }
+    },
+    "interrupt_active_turn_id": "01a01bbb-a412-7b93-9776-abc4b9f13215",
+    "interrupted_turn": {
+      "error": null,
+      "status": "interrupted",
+      "turn_id": "01a01bbb-a412-7b93-9776-abc4b9f13215"
+    },
+    "legacy_socket_shutdown": {
+      "accepted": true
+    },
+    "legacy_socket_status": {
+      "codex_pid": 11148,
+      "daemon_pid": 11144,
+      "ready": true,
+      "session_count": 2,
+      "socket_path": "/var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/superdev-cw-501/68cffb/worker.sock",
+      "state_path": "/Users/tadas/Library/Application Support/superdev/codex-worker/instances/68cffbb950dd819b1b06d5356f62f1c5b95a07b51b630d18d6d0faf6ed1f12df/registry.json"
+    },
+    "live_messages_returned": 0,
+    "steer": {
+      "accepted": true,
+      "action": "steer",
+      "status": "in_progress",
+      "turn_id": "01a01bbb-5b71-7713-9618-9924730f0e1a",
+      "worker": {
+        "access": "full",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-command-facade/.superdev/codex-worker-live/20260819T203418.340803Z-11134-control-recovery/steer-workspace",
+        "effort": "medium",
+        "instance": "task8-control-6378e8f4d746",
+        "model": "gpt-5.6-terra",
+        "name": "steer-00482b46",
+        "session_id": "1e599e4f-55c0-4da2-8be7-acb1211c2447",
+        "thread_id": "01a01bbb-5b30-75c1-b82e-3cf566f8895c",
+        "tier": "medium"
+      }
+    },
+    "steer_active_turn_id": "01a01bbb-5b71-7713-9618-9924730f0e1a"
+  },
+  "scenario": "control-recovery",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260819T203418.340803Z-11134-control-recovery/transcript.jsonl"
+}
