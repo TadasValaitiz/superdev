@@ -657,6 +657,8 @@ implementation-facing distillation.
 | D44 | locked | Map full/read-only at both thread sandbox and turn sandboxPolicy seams. | Current protocol uses two encodings; revisit if upstream unifies them. |
 | D55 | locked | Preserve native goal/history timestamps as upstream `int64` values and normalize the measured turns-list `data` envelope at the adapter seam. | Real Codex 0.147.0 schema and authenticated pagination contradicted the speculative fixture shape; revisit on supported-provider schema drift. |
 | D56 | locked | Preserve broker `-32004 turn_active` through the common façade with full known identity and named observation/control recovery. | A generic checkride refusal stranded the operator even though the lower layer already had a precise conflict; revisit when common wait/join exists. |
+| D59 | locked | Derive managed socket/lock paths from a compact 80-bit identity and never adopt or delete legacy six-hex endpoints implicitly. | Six hex can alias; 32 hex exceeded the measured macOS AF_UNIX budget. Revisit if transport/path constraints change. |
+| D60 | locked | Keep broker catalog revalidation and translate creation-time drift to existing typed model/effort refusals. | Defense-in-depth remains without widening final creation seams; revisit for an atomic/versioned catalog snapshot. |
 
 ## 7. Assumptions & open questions
 

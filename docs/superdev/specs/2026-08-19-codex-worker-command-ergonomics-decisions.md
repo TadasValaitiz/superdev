@@ -1298,3 +1298,41 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** D49 local install sequence, Task 8 evidence, final integration cleanup.
 - **Revisit-when:** Claude Code can update a local plugin from an explicit candidate path
   without changing marketplace association.
+
+## D59 — Use an 80-bit compact runtime identity within the macOS socket budget
+**When:** 2026-08-19T22:23:26Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Final review proved the six-hex runtime prefix let distinct full instance
+  identities share a socket and startup lock. The suggested 32-hex replacement exceeded
+  the measured AF_UNIX path budget under macOS `/var/folders` runtime roots.
+- **Options weighed:** retain 24 bits; use 32 hex and fail on long runtime roots; use a
+  compact directory/leaf layout with a longer practical digest component.
+- **Decided:** Use `scw-<uid>-<20 hex>/s` and `/l`: 80 digest bits with a compact layout.
+  Durable state keeps the full digest. Legacy six-hex endpoints are neither connected to
+  nor deleted; a legacy daemon may coexist until explicitly stopped through its raw path.
+- **Rests on:** MEASURED macOS socket-length failure plus a deterministic pair sharing the
+  old six-hex prefix and remaining distinct under the new layout.
+- **Affects:** R1/R10/R13, UC7/UC9, AH7/AH9; managed runtime paths, start locks, metadata,
+  logs/recovery output, and endpoint collision tests.
+- **Revisit-when:** The transport moves away from AF_UNIX pathnames or a platform runtime
+  root guarantees enough room for a larger digest.
+
+## D60 — Translate creation-time catalog drift at the façade boundary
+**When:** 2026-08-19T22:23:26Z (MEASURED) · **Phase:** build · **Status:** locked
+**Decided by:** Codex under Tadas's autonomous handoff
+
+- **Trigger:** Final review found that the model catalog can change after façade
+  validation but before the broker's creation validation, where legacy `-32010` then
+  collapsed to generic `codex_failure`.
+- **Options weighed:** thread one catalog snapshot through all creation seams; remove
+  broker revalidation; preserve revalidation and precisely translate its structured cause.
+- **Decided:** Keep broker defense-in-depth and translate `ModelSelectionError` causes to
+  existing `model_unavailable` or `effort_unsupported` façade faults, with live model-list
+  recovery and an explicit no-fallback statement. No upstream thread or durable worker is
+  created after either drift refusal.
+- **Rests on:** deterministic catalog-change regressions for both missing model and lost
+  effort support.
+- **Affects:** R8/R13, UC8/UC9, AH8/AH9; façade error translation and creation recovery.
+- **Revisit-when:** the app-server supplies a versioned catalog token or creation accepts
+  a validated catalog snapshot atomically.
