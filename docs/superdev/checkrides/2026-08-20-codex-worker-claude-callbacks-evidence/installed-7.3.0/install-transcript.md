@@ -153,3 +153,43 @@ The final selected `claude plugin list --json` object is the restored original p
 The 7.3.0 installed cache and executable remain present for reconstruction; the active
 marketplace pointer and enabled plugin were restored to their original main-checkout
 source/version. No uninstall or cleanup deleted durable worker/callback state.
+
+## Post-review installed refresh
+
+After fix commit `79d6ec2`, the controller repeated the reversible worktree marketplace
+selection and `claude plugin install superdev@superdev-dev --scope user`; all three
+commands exited 0. The installed manifest remained 7.3.0. These checks exited 0:
+
+```text
+test -x /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.3.0/bin/codex-worker
+cmp -s skills/subagent-driven-development/scripts/codex_worker/claude_transport.py /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.3.0/skills/subagent-driven-development/scripts/codex_worker/claude_transport.py
+cmp -s tests/codex-worker/live_claude_evidence.py /Users/tadas/.claude/plugins/cache/superdev-dev/superdev/7.3.0/tests/codex-worker/live_claude_evidence.py
+```
+
+External-cwd `--help` and selected stopped-instance status both exited 0. A normal
+installed callback-common smoke passed at
+`.superdev/codex-worker-live/20260820T154233.002174Z-71821-callback-common/`.
+
+The first attempt to run the entire synthetic fixture under Lithuanian `LC_ALL` exposed
+that the fixture itself generated a localized fake registry value. The harness was
+corrected to emit the measured stable Claude registry shape. The installed production
+launcher was unchanged. The rerun under literal `LC_ALL=lt_LT.UTF-8` then passed:
+
+```json
+{"result": {"complete_inline_result": true, "delivery_claimed": false, "disabled": "disabled", "standalone": "unavailable", "terminal_event_id": "terminal-a2577ed0afdb2d0553bc43ba73f935df5715b5e77c584f6673a7d42544a52cad", "terminal_written": true}, "scenario": "callback-common", "status": "PASS", "transcript": ".superdev/codex-worker-live/20260820T154330.080510Z-75155-callback-common/transcript.jsonl"}
+```
+
+Its sanitized raw record is tracked at
+`../reviewer-fix-wave/installed-locale-callback-common/transcript.jsonl`.
+
+Finally, these restoration commands again exited 0:
+
+```text
+claude plugin marketplace remove superdev-dev --scope user
+claude plugin marketplace add /Users/tadas/Projects/superdev --scope user
+claude plugin install superdev@superdev-dev --scope user
+```
+
+Final state: original marketplace directory, Superdev 7.2.0 enabled at user scope;
+the reviewed 7.3.0 installed cache remains present. Durable worker/callback data was
+not removed.

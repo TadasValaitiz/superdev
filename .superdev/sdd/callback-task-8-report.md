@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 Base: `cf073be`
-Status: review fixes in progress
+Status: review fixes complete; focused re-review pending
 
 ## TDD and deterministic gate
 
@@ -93,4 +93,6 @@ The initial checkride required one product fix wave and one cleanup correction, 
 closed by the evaluator. During marketplace switching, the old install became
 disassociated before `uninstall --keep-data`, producing an expected safe `not found`
 refusal; installation proceeded and the original state was restored exactly. No open
-acceptance, evaluator, release, install, or ledger blocker remains.
+acceptance, evaluator, release, install, or ledger blocker remains. The post-review
+installed callback smoke also passes under Lithuanian `LC_ALL`; the original external
+marketplace/plugin state is restored.

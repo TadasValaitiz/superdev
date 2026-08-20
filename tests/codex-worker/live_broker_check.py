@@ -201,8 +201,11 @@ class CallbackFixture:
         self.sockets.mkdir(mode=0o700)
         os.chmod(self.root, 0o700)
         self.pid = os.getpid()
+        stable_env = dict(os.environ)
+        stable_env["LC_ALL"] = "C"
         self.proc_start = subprocess.check_output(
-            ["ps", "-o", "lstart=", "-p", str(self.pid)], text=True).strip()
+            ["ps", "-o", "lstart=", "-p", str(self.pid)],
+            text=True, env=stable_env).strip()
         self.token = uuid.uuid4().hex
         self.recorder = recorder
         self.origin = CallbackInbox(self.sockets / (str(self.pid) + ".sock"),

@@ -64,4 +64,7 @@ trading pong records in the tracked evidence directory and uses the correct
 Fresh post-fix live evidence is tracked under `reviewer-fix-wave/`: callback-common
 PASS, callback-security PASS, and a real Claude caller with two ordered terminal
 attestations and exact full result recovery PASS. The installed-product section is
-superseded by the post-review refresh receipt appended after the fix commit.
+superseded by the post-review refresh receipt appended after fix commit `79d6ec2`.
+That refresh includes a PASS installed callback smoke under Lithuanian
+`LC_ALL=lt_LT.UTF-8`, followed by exact restoration of the original marketplace and
+enabled 7.2.0 state.
