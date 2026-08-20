@@ -95,6 +95,7 @@ receipt: `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evid
 - `79d6ec2` — final review locale/validator/provenance fixes
 - `76ee44b` — post-review localized installed-product proof
 - `8e724e6` — exact received-completion contract and live receipt
+- `a83a9f0` — final reviewer PASS and verification receipt
 
 ## Deviations and concerns
 
