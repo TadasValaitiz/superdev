@@ -52,10 +52,30 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     tool_commands = {}  # type: Dict[str, str]
     tool_results = {}  # type: Dict[str, Json]
     all_commands = []  # type: List[str]
+    callback_events = []  # type: List[Json]
+    assistant_text = []  # type: List[str]
     for line in transcript.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         document = json.loads(line)
+        for candidate in _walk(document):
+            if candidate.get("type") == "text" and isinstance(candidate.get("text"), str):
+                assistant_text.append(candidate["text"])
+        for candidate in _walk(document):
+            if (candidate.get("schema") == "codex-worker.claude-callback/v1"
+                    and candidate.get("event") in ("turn_terminal", "turn_terminal_reference")):
+                callback_events.append(candidate)
+        for candidate in _walk(document):
+            content = candidate.get("content")
+            if isinstance(content, str):
+                try:
+                    parsed_content = json.loads(content)
+                except ValueError:
+                    continue
+                if (isinstance(parsed_content, dict)
+                        and parsed_content.get("schema") == "codex-worker.claude-callback/v1"
+                        and parsed_content.get("event") in ("turn_terminal", "turn_terminal_reference")):
+                    callback_events.append(parsed_content)
         for value in _walk(document):
             if value.get("type") == "tool_use":
                 assert value.get("name") == "Bash", value
@@ -80,7 +100,7 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
                for command in all_commands), all_commands
     assert not any(re.search(r"\bcodex-worker\s+(?:--instance\s+\S+\s+)?(?:model|session|turn)\b", command)
                    for command in all_commands), all_commands
-    required = (" start ", " run ", " goal show ", " history ", " status ", " daemon stop")
+    required = (" start ", " message ", " run ", " goal show ", " history ", " status ", " daemon stop")
     assert all(any(fragment in command for command in all_commands) for fragment in required), all_commands
 
     broker_results = []  # type: List[Json]
@@ -111,9 +131,25 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     status = next(result for result, command in zip(broker_results, broker_commands)
                   if " status " in command)
     assert status["worker"] == start_worker and status["daemon_status"] == "ready", status
+    assert status["callback"]["state"] == "enabled", status
+    assert status["callback"]["last_terminal_attempt"]["state"] == "written", status
     stop = next(result for result, command in zip(broker_results, broker_commands)
                 if " daemon stop" in command)
     assert stop["status_after"] == "stopped" and stop["durable_state"] == "preserved", stop
+    unique_callbacks = {event["event_id"]: event for event in callback_events}
+    reported_ids = sorted(set(re.findall(r"terminal-[0-9a-f]{64}", "\n".join(assistant_text))))
+    callback_ids = sorted(unique_callbacks) if unique_callbacks else reported_ids
+    assert callback_ids, {"callback_events": callback_events, "assistant_text": assistant_text}
+    assert status["callback"]["last_terminal_attempt"]["event_id"] in callback_ids
+    recovered = False
+    for event in unique_callbacks.values():
+        payload = event.get("payload", {})
+        if event["event"] == "turn_terminal" and payload.get("completion") == start_result:
+            recovered = True
+    if not unique_callbacks:
+        final_text = "\n".join(assistant_text)
+        recovered = all(message["text"] in final_text for message in start_result["messages"])
+    assert recovered, {"callbacks": unique_callbacks, "reported_ids": reported_ids}
     return {
         "session_id": sid, "thread_id": tid, "turn_id": turn_id,
         "worker_name": start_worker["name"],
@@ -126,6 +162,8 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
         "direct_codex_invocation": False,
         "mcp_invocation": False,
         "raw_codex_worker_invocation": False,
+        "callback_event_ids": callback_ids,
+        "full_result_recovered": recovered,
     }
 
 

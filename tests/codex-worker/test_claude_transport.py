@@ -185,6 +185,15 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(capture_from_env(wrong),
                          CallbackCapture(None, None, None, None, None, str(self.config)))
 
+    def test_capture_ignores_claude_idle_records_without_a_messaging_socket(self):
+        idle = self.sessions / "idle-without-socket.json"
+        idle.write_text(json.dumps({
+            "pid": self.pid, "sessionId": "idle-session", "procStart": self.proc_start,
+            "name": "idle-room", "kind": "interactive", "status": "idle",
+        }), encoding="utf-8")
+        os.chmod(idle, 0o644)
+        self.assertEqual(capture_from_env(self._env()), self._capture())
+
     def test_daemon_revalidates_forged_full_and_root_only_capture(self):
         transport = ClaudeTransport()
         self.assertEqual(transport.validate_capture(self._capture()), self._capture())
@@ -249,6 +258,15 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(self._fault_kind(lambda: transport.send(binding, self._event(), None)),
                          "callback_target_unsafe")
         replacement.close(); self.inboxes.remove(replacement)
+
+    def test_process_start_compares_claude_utc_registry_to_local_ps_time(self):
+        registry_utc = "Tue Aug 11 13:42:33 2026"
+        local_ps = "Tue Aug 11 16:42:33 2026"
+        from codex_worker.claude_transport import _same_process_start
+        shift = lambda value: value + __import__("datetime").timedelta(hours=3)
+        self.assertTrue(_same_process_start(registry_utc, local_ps, shift))
+        self.assertFalse(_same_process_start(
+            registry_utc, "Tue Aug 11 17:42:33 2026", shift))
 
     def test_override_requires_one_live_name_and_safe_peer_key(self):
         transport = ClaudeTransport()

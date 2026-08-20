@@ -17,8 +17,8 @@ WORKER="claude-caller-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:8])')"
 mkdir -p "$RUN_DIR" "$REPO"
 chmod 700 "$RUN_DIR"
 export PATH="$ROOT/bin:$PATH"
-export CLAUDE_CODE_SESSION_ID="$INSTANCE"
-unset CODEX_WORKER_INSTANCE
+export CODEX_WORKER_INSTANCE="$INSTANCE"
+unset CLAUDE_CODE_SESSION_ID CLAUDE_CODE_MESSAGING_SOCKET CLAUDE_CODE_MESSAGING_TOKEN CLAUDE_PID
 
 cleanup() {
   local cleanup_rc=0
@@ -39,19 +39,28 @@ printf '# Disposable Claude caller repository\n' >"$REPO/README.md"
 git -C "$REPO" add README.md
 git -C "$REPO" commit -m seed >"$RUN_DIR/git-commit.stdout" 2>"$RUN_DIR/git-commit.stderr"
 
+# Keep the managed daemon stable before the short-lived `claude -p` caller captures
+# its PID-bound route. The seed is intentionally callback-disabled and remains durable.
+(cd "$REPO" && codex-worker start --name "prewarm-$WORKER" --no-callback \
+  --prompt 'Reply with exactly PREWARM and no other text.') \
+  >"$RUN_DIR/prewarm.stdout" 2>"$RUN_DIR/prewarm.stderr"
+
 PROMPT=$(printf '%s\n' \
   'Use only the Bash tool. Native Claude Code remains the caller; codex-worker is an opt-in local command.' \
   'Invoke only the PATH spelling `codex-worker`. Do not use an absolute path, python wrapper, --socket, MCP, direct codex, or model/session/turn advanced commands.' \
   "Your current directory is the disposable repository $REPO and the unique worker name is $WORKER." \
   'Run these commands one at a time and read each complete one-object JSON response:' \
   "1. codex-worker start --name $WORKER --prompt 'Reply with exactly CLAUDE-FIRST and no other text.'" \
-  "2. codex-worker run --name $WORKER --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'" \
-  "3. codex-worker goal show --name $WORKER" \
-  "4. codex-worker history --name $WORKER --tail 2" \
-  "5. codex-worker status --name $WORKER" \
-  '6. codex-worker daemon stop' \
-  'Then report the worker name, session_id, thread_id, first turn_id, model, effort, access, cwd, both complete final messages, goal availability, history count, and durable_state. Do not omit or abbreviate any command output while reasoning.')
+  "2. codex-worker message --name $WORKER --priority later --message 'MEASURED Claude caller proactive write.'" \
+  "3. codex-worker run --name $WORKER --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'" \
+  "4. codex-worker goal show --name $WORKER" \
+  "5. codex-worker history --name $WORKER --tail 2" \
+  "6. codex-worker status --name $WORKER" \
+  '7. codex-worker daemon stop' \
+  'The automatic callback is an incoming user event with a callback event_id. Read its complete completion payload; do not claim delivery beyond the written receipt.' \
+  'Then report the worker name, session_id, thread_id, first turn_id, model, effort, access, cwd, both complete final messages, callback event IDs, goal availability, history count, and durable_state. Do not omit or abbreviate any command output while reasoning.')
 
+set +e
 (cd "$REPO" && claude -p \
   --safe-mode \
   --strict-mcp-config \
@@ -63,6 +72,9 @@ PROMPT=$(printf '%s\n' \
   --verbose \
   "$PROMPT") \
   >"$CLAUDE_TRANSCRIPT" 2>"$CLAUDE_STDERR"
+CLAUDE_RC=$?
+set -e
+printf '%s\n' "$CLAUDE_RC" >"$RUN_DIR/claude-exit.txt"
 
 python3 - "$CLAUDE_TRANSCRIPT" "$COMMANDS_JSON" <<'PY'
 import json
@@ -128,6 +140,8 @@ summary = {
     "native_claude_available": evidence["native_claude_available"],
     "direct_codex_invocation": evidence["direct_codex_invocation"],
     "mcp_invocation": evidence["mcp_invocation"],
+    "callback_event_ids": evidence["callback_event_ids"],
+    "full_result_recovered": evidence["full_result_recovered"],
 }
 (run_dir / "summary.json").write_text(
     json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -143,6 +157,8 @@ receipt = {
     "session_id": evidence["session_id"],
     "thread_id": evidence["thread_id"],
     "turn_id": evidence["turn_id"],
+    "callback_event_ids": evidence["callback_event_ids"],
+    "full_result_recovered": evidence["full_result_recovered"],
 }
 receipts["CLAUDE_CODE_CALLER"] = receipt
 receipts["AH1"] = receipt

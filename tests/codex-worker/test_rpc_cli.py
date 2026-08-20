@@ -804,6 +804,16 @@ class CliTests(unittest.TestCase):
                 self.assert_json_error(completed, 2)
                 self.assertEqual(self.rpc_calls, [])
 
+    def test_obviously_oversized_unicode_message_refuses_before_rpc_write(self):
+        huge = Path(self.tempdir.name) / "huge-unicode.txt"
+        huge.write_text("😀" * 600000, encoding="utf-8")
+        completed = self.run_cli(
+            ["message", "--name", "build-1", "--message-file", str(huge)],
+            fake_rpc=self.fake_rpc_success, include_socket=False)
+        self.assert_json_error(completed, 1, "callback_payload_too_large")
+        self.assertEqual(json.loads(completed.stdout)["error"]["code"], -32037)
+        self.assertEqual(self.rpc_calls, [])
+
     def test_message_rejects_socket_and_stopped_daemon_does_not_autostart(self):
         self.rpc_calls = []
         socket_refusal = self.run_cli(["message", "--name", "build-1", "--message", "progress"],

@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -123,13 +125,42 @@ class LiveHarnessContractTests(unittest.TestCase):
 
     def test_parser_exposes_only_task_8_named_scenarios(self):
         expected = {
-            "common-journey", "five-workers", "control-recovery",
-            "native-proxies", "access-schema",
+            "callback-common", "callback-proactive", "callback-origin-retention",
+            "callback-recovery", "callback-security", "callback-five-workers",
         }
         for scenario in expected:
             self.assertEqual(LIVE.parse_args(["--scenario", scenario]).scenario, scenario)
-        with self.assertRaises(SystemExit):
-            LIVE.parse_args(["--scenario", "concurrent-worktrees"])
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit):
+                LIVE.parse_args(["--scenario", "concurrent-worktrees"])
+        self.assertIn("invalid choice", stderr.getvalue())
+
+    def test_callback_scenarios_have_separate_implementations(self):
+        expected = {
+            "callback-common": "scenario_callback_common",
+            "callback-proactive": "scenario_callback_proactive",
+            "callback-origin-retention": "scenario_callback_origin_retention",
+            "callback-recovery": "scenario_callback_recovery",
+            "callback-security": "scenario_callback_security",
+            "callback-five-workers": "scenario_callback_five_workers",
+        }
+        self.assertEqual(LIVE.CALLBACK_SCENARIOS, expected)
+        for function_name in expected.values():
+            self.assertTrue(callable(getattr(LIVE, function_name)))
+
+    def test_callback_contract_covers_required_acceptance_mechanisms(self):
+        contract = LIVE.callback_acceptance_contract()
+        self.assertEqual(set(contract), {
+            "automatic_inline", "proactive_then_steer", "alternate_then_origin",
+            "origin_retention", "terminal_statuses", "timeout_then_terminal",
+            "restart_outbox", "artifact_digest", "security_refusals",
+            "standalone_disabled", "five_simultaneous",
+        })
+        self.assertEqual(contract["terminal_statuses"], ["completed", "failed", "interrupted"])
+        self.assertEqual(contract["security_refusals"], [
+            "credential_scrub", "pid_reuse", "unicode_oversize", "stale", "ambiguous",
+        ])
+        self.assertEqual(contract["five_simultaneous"], 5)
 
     def test_cleanup_failure_is_not_suppressed(self):
         daemon = FailingDaemon()

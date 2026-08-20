@@ -457,7 +457,15 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
     if method == "worker/run":
         return {"name": args.name, "prompt": _prompt(args), "output_schema": _output_schema(args.output_schema), "timeout": args.timeout}
     if method == "worker/message":
-        return {"name": args.name, "message": _message(args), "priority": args.priority,
+        message = _message(args)
+        from .claude_transport import MAX_USER_LINE_UTF16_UNITS
+        if len(message.encode("utf-16-le")) // 2 > MAX_USER_LINE_UTF16_UNITS:
+            raise FacadeFault(
+                FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE,
+                "Proactive callback message exceeds the Claude user-line limit",
+                "callback_payload_too_large",
+            )
+        return {"name": args.name, "message": message, "priority": args.priority,
                 "cc_agent_name": args.cc_agent_name}
     if method in ("worker/status", "worker/interrupt", "worker/goal/show"):
         return {"name": args.name}

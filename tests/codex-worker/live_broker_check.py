@@ -7,6 +7,7 @@ directory before an assertion interprets it.
 """
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -30,10 +32,33 @@ REQUIRED_ROUTES = {
     "medium": {"model": "gpt-5.6-terra", "effort": "medium"},
     "very-smart": {"model": "gpt-5.6-sol", "effort": "medium"},
 }
-TASK_8_SCENARIOS = (
-    "common-journey", "five-workers", "control-recovery",
-    "native-proxies", "access-schema",
-)
+CALLBACK_SCENARIOS = {
+    "callback-common": "scenario_callback_common",
+    "callback-proactive": "scenario_callback_proactive",
+    "callback-origin-retention": "scenario_callback_origin_retention",
+    "callback-recovery": "scenario_callback_recovery",
+    "callback-security": "scenario_callback_security",
+    "callback-five-workers": "scenario_callback_five_workers",
+}
+TASK_8_SCENARIOS = tuple(CALLBACK_SCENARIOS)
+
+
+def callback_acceptance_contract() -> Json:
+    return {
+        "automatic_inline": True,
+        "proactive_then_steer": True,
+        "alternate_then_origin": True,
+        "origin_retention": True,
+        "terminal_statuses": ["completed", "failed", "interrupted"],
+        "timeout_then_terminal": True,
+        "restart_outbox": {"pending_replays_same_id": True, "written_never_replays": True},
+        "artifact_digest": True,
+        "security_refusals": [
+            "credential_scrub", "pid_reuse", "unicode_oversize", "stale", "ambiguous",
+        ],
+        "standalone_disabled": True,
+        "five_simultaneous": 5,
+    }
 
 
 def utc_stamp() -> str:
@@ -97,6 +122,113 @@ class Recorder:
             "stdout": stdout, "stderr": stderr,
         })
         return completed
+
+
+class CallbackInbox:
+    """Measured-shape local Claude inbox used by live callback scenarios."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.frames = []  # type: List[bytes]
+        self._stop = threading.Event()
+        self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._listener.bind(str(path))
+        self._listener.listen()
+        os.chmod(path, 0o600)
+        self._listener.settimeout(0.05)
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                connection, _ = self._listener.accept()
+            except socket.timeout:
+                continue
+            with connection:
+                chunks = []
+                while True:
+                    data = connection.recv(65536)
+                    if not data:
+                        break
+                    chunks.append(data)
+                if chunks:
+                    self.frames.append(b"".join(chunks))
+
+    def wait(self, count: int, timeout: float = 10.0) -> None:
+        deadline = time.monotonic() + timeout
+        while len(self.frames) < count and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(self.frames) >= count, {"wanted": count, "actual": len(self.frames)}
+
+    def events(self) -> List[Json]:
+        events = []
+        for frame in self.frames:
+            lines = frame.splitlines()
+            assert len(lines) == 2, frame
+            envelope = json.loads(lines[1].decode("utf-8"))
+            events.append(json.loads(envelope["message"]["content"]))
+        return events
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(1)
+        self._listener.close()
+
+
+class CallbackFixture:
+    def __init__(self, recorder: Recorder):
+        self.temp_root = Path(tempfile.mkdtemp(prefix="cw-cb-")).resolve()
+        os.chmod(self.temp_root, 0o700)
+        self.root = self.temp_root / "claude-config"
+        self.sessions = self.root / "sessions"
+        self.sockets = self.temp_root / "s"
+        self.sessions.mkdir(parents=True, mode=0o700)
+        self.sockets.mkdir(mode=0o700)
+        os.chmod(self.root, 0o700)
+        self.pid = os.getpid()
+        self.proc_start = subprocess.check_output(
+            ["ps", "-o", "lstart=", "-p", str(self.pid)], text=True).strip()
+        self.token = uuid.uuid4().hex
+        self.origin = CallbackInbox(self.sockets / (str(self.pid) + ".sock"))
+        self.inboxes = [self.origin]
+        self.origin_registry = self._registry(
+            "task8-origin", "task8-origin-session", self.origin.path, "origin")
+
+    def _registry(self, name: str, session_id: str, path: Path, suffix: str) -> Path:
+        registry = self.sessions / ("%s-%s.json" % (self.pid, suffix))
+        registry.write_text(json.dumps({
+            "pid": self.pid, "sessionId": session_id,
+            "messagingSocketPath": str(path), "name": name,
+            "procStart": self.proc_start,
+        }), encoding="utf-8")
+        os.chmod(registry, 0o644)
+        return registry
+
+    def alternate(self, name: str = "task8-alternate") -> CallbackInbox:
+        inbox = CallbackInbox(self.sockets / (name + ".sock"))
+        self.inboxes.append(inbox)
+        self._registry(name, name + "-session", inbox.path, name)
+        digest = hashlib.sha256(os.path.abspath(str(inbox.path)).encode("utf-8")).hexdigest()
+        key = self.sessions / ("%s.%s.key" % (self.pid, digest))
+        key.write_text(json.dumps({"peerToken": uuid.uuid4().hex,
+                                   "procStart": self.proc_start}), encoding="utf-8")
+        os.chmod(key, 0o600)
+        return inbox
+
+    def env(self) -> Dict[str, str]:
+        return {
+            "CLAUDE_CONFIG_DIR": str(self.root),
+            "CLAUDE_CODE_MESSAGING_SOCKET": str(self.origin.path),
+            "CLAUDE_CODE_MESSAGING_TOKEN": self.token,
+            "CLAUDE_CODE_SESSION_ID": "task8-origin-session",
+            "CLAUDE_PID": str(self.pid),
+        }
+
+    def close(self) -> None:
+        for inbox in self.inboxes:
+            inbox.close()
+        shutil.rmtree(str(self.temp_root))
 
 
 def parse_cli_envelope(completed: subprocess.CompletedProcess) -> Json:
@@ -1378,6 +1510,292 @@ def scenario_access_schema() -> Json:
         runner.stop()
 
 
+def _callback_runner(recorder: Recorder, label: str) -> Tuple[ManagedCLI, CallbackFixture]:
+    runner = ManagedCLI(recorder, "task8-%s-%s" % (label, uuid.uuid4().hex[:10]))
+    fixture = CallbackFixture(recorder)
+    runner.env.update(fixture.env())
+    return runner, fixture
+
+
+def _require_event(inbox: CallbackInbox, index: int, kind: str,
+                   completion: Optional[Json] = None) -> Json:
+    inbox.wait(index + 1)
+    event = inbox.events()[index]
+    assert event["schema"] == "codex-worker.claude-callback/v1", event
+    assert event["event"] == kind and isinstance(event["event_id"], str), event
+    if completion is not None:
+        assert event["payload"]["completion"] == completion, event
+    return event
+
+
+def scenario_callback_common() -> Json:
+    recorder = Recorder("callback-common")
+    runner, fixture = _callback_runner(recorder, "common")
+    cwd = _workspace(recorder, "workspace")
+    enabled = "enabled-%s" % uuid.uuid4().hex[:8]
+    disabled = "disabled-%s" % uuid.uuid4().hex[:8]
+    unavailable = "unavailable-%s" % uuid.uuid4().hex[:8]
+    try:
+        completed = runner.result("start", "--name", enabled, "--prompt",
+                                  "Reply with exactly CALLBACK-COMMON and no other text.", cwd=cwd)
+        require_completion(completed, enabled, cwd, "medium", "full")
+        terminal = _require_event(fixture.origin, 0, "turn_terminal", completed)
+        status = runner.result("status", "--name", enabled, cwd=cwd)
+        assert status["callback"]["state"] == "enabled", status
+        assert status["callback"]["last_terminal_attempt"]["state"] == "written", status
+
+        silent = runner.result("start", "--name", disabled, "--no-callback", "--prompt",
+                               "Reply with exactly CALLBACK-DISABLED and no other text.", cwd=cwd)
+        require_completion(silent, disabled, cwd, "medium", "full")
+        disabled_status = runner.result("status", "--name", disabled, cwd=cwd)
+        assert disabled_status["callback"]["state"] == "disabled", disabled_status
+        before = len(fixture.origin.frames)
+
+        for key in ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+                    "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID"):
+            runner.env.pop(key, None)
+        standalone = runner.result("start", "--name", unavailable, "--prompt",
+                                   "Reply with exactly CALLBACK-UNAVAILABLE and no other text.", cwd=cwd)
+        require_completion(standalone, unavailable, cwd, "medium", "full")
+        unavailable_status = runner.result("status", "--name", unavailable, cwd=cwd)
+        assert unavailable_status["callback"]["state"] == "unavailable", unavailable_status
+        assert len(fixture.origin.frames) == before
+        result = {"terminal_event_id": terminal["event_id"], "terminal_written": True,
+                  "complete_inline_result": True, "disabled": "disabled",
+                  "standalone": "unavailable", "delivery_claimed": False}
+        runner.stop()
+        return finish_scenario(recorder, "callback-common", result, ["AH1", "AH2", "AH6", "AH11"])
+    finally:
+        runner.stop(); fixture.close()
+
+
+def scenario_callback_proactive() -> Json:
+    recorder = Recorder("callback-proactive")
+    runner, fixture = _callback_runner(recorder, "proactive")
+    alternate = fixture.alternate()
+    cwd = _workspace(recorder, "workspace")
+    name = "proactive-%s" % uuid.uuid4().hex[:8]
+    pending = None
+    try:
+        argv, pending = runner.start(
+            "start", "--name", name, "--prompt",
+            "Run `python3 -c \"import time; time.sleep(5)\"`, then reply PROACTIVE-ORIGINAL.",
+            cwd=cwd)
+        _wait_active(runner, name, cwd)
+        proactive = runner.result("message", "--name", name, "--priority", "now",
+                                  "--message", "MEASURED proactive update; continuing.", cwd=cwd)
+        proactive_event = _require_event(fixture.origin, 0, "worker_message")
+        assert proactive["event_id"] == proactive_event["event_id"]
+        steered = runner.result("steer", "--name", name, "--prompt",
+                                "Reply with exactly PROACTIVE-STEERED and finish.", cwd=cwd)
+        completion_payload = runner.collect(argv, pending, timeout=120.0)
+        pending = None
+        completion = completion_payload["result"]
+        require_completion(completion, name, cwd, "medium", "full")
+        terminal = _require_event(fixture.origin, 1, "turn_terminal", completion)
+        redirected = runner.result("message", "--name", name,
+                                   "--cc-agent-name", "task8-alternate",
+                                   "--message", "MEASURED one-send alternate.", cwd=cwd)
+        alternate_event = _require_event(alternate, 0, "worker_message")
+        assert redirected["event_id"] == alternate_event["event_id"]
+        follow = runner.result("run", "--name", name, "--prompt",
+                               "Reply with exactly PROACTIVE-RUN and no other text.", cwd=cwd)
+        follow_terminal = _require_event(fixture.origin, 2, "turn_terminal", follow)
+        assert len(alternate.frames) == 1
+        result = {"proactive_event_id": proactive_event["event_id"],
+                  "terminal_event_id": terminal["event_id"],
+                  "alternate_event_id": alternate_event["event_id"],
+                  "follow_terminal_event_id": follow_terminal["event_id"],
+                  "steer_accepted": steered["accepted"], "origin_preserved": True}
+        runner.stop()
+        return finish_scenario(recorder, "callback-proactive", result, ["AH3", "AH4", "AH11"])
+    finally:
+        if pending is not None and pending.poll() is None:
+            pending.terminate()
+        runner.stop(); fixture.close()
+
+
+def scenario_callback_origin_retention() -> Json:
+    recorder = Recorder("callback-origin-retention")
+    runner, fixture = _callback_runner(recorder, "origin")
+    alternate = fixture.alternate("ambient-replacement")
+    cwd = _workspace(recorder, "workspace")
+    name = "origin-%s" % uuid.uuid4().hex[:8]
+    try:
+        first = runner.result("start", "--name", name, "--prompt",
+                              "Reply with exactly ORIGIN-FIRST and no other text.", cwd=cwd)
+        first_event = _require_event(fixture.origin, 0, "turn_terminal", first)
+        runner.env.update({"CLAUDE_CODE_MESSAGING_SOCKET": str(alternate.path),
+                           "CLAUDE_CODE_MESSAGING_TOKEN": uuid.uuid4().hex,
+                           "CLAUDE_CODE_SESSION_ID": "ambient-replacement-session"})
+        second = runner.result("run", "--name", name, "--prompt",
+                               "Reply with exactly ORIGIN-RETAINED and no other text.", cwd=cwd)
+        second_event = _require_event(fixture.origin, 1, "turn_terminal", second)
+        for key in ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+                    "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID", "CLAUDE_CONFIG_DIR"):
+            runner.env.pop(key, None)
+        third = runner.result("run", "--name", name, "--prompt",
+                              "Reply with exactly ORIGIN-UNSET and no other text.", cwd=cwd)
+        third_event = _require_event(fixture.origin, 2, "turn_terminal", third)
+        assert alternate.frames == []
+        result = {"origin_event_ids": [first_event["event_id"], second_event["event_id"],
+                                        third_event["event_id"]],
+                  "replacement_frame_count": 0, "persisted_origin_only": True}
+        runner.stop()
+        return finish_scenario(recorder, "callback-origin-retention", result, ["AH2", "AH4"])
+    finally:
+        runner.stop(); fixture.close()
+
+
+def scenario_callback_recovery() -> Json:
+    recorder = Recorder("callback-recovery")
+    runner, fixture = _callback_runner(recorder, "recovery")
+    cwd = _workspace(recorder, "workspace")
+    timeout_name = "timeout-%s" % uuid.uuid4().hex[:8]
+    interrupted_name = "interrupted-%s" % uuid.uuid4().hex[:8]
+    pending = None
+    try:
+        payload, completed = runner.run(
+            "start", "--name", timeout_name, "--timeout", "0",
+            "--prompt", "Reply with exactly TIMEOUT-LATER and no other text.", cwd=cwd, check=False)
+        timeout_error = assert_typed_error(payload, completed, "timeout_active")
+        fixture.origin.wait(1, timeout=120.0)
+        later_event = _require_event(fixture.origin, 0, "turn_terminal")
+        assert later_event["payload"]["completion"]["turn"]["status"] == "completed"
+
+        argv, pending = runner.start(
+            "start", "--name", interrupted_name, "--prompt",
+            "Run `python3 -c \"import time; time.sleep(30)\"`, then reply TOO-LATE.", cwd=cwd)
+        _wait_active(runner, interrupted_name, cwd)
+        runner.result("interrupt", "--name", interrupted_name, cwd=cwd)
+        interrupted_payload = runner.collect(argv, pending, timeout=60.0)
+        pending = None
+        assert interrupted_payload["result"]["turn"]["status"] == "interrupted"
+        interrupted_event = _require_event(fixture.origin, 1, "turn_terminal",
+                                           interrupted_payload["result"])
+
+        callback_status = runner.result("status", "--name", timeout_name, cwd=cwd)["callback"]
+        event_id = callback_status["last_terminal_attempt"]["event_id"]
+        before_restart = len(fixture.origin.frames)
+        runner.result("daemon", "stop", cwd=cwd)
+        restarted = runner.result("run", "--name", timeout_name, "--prompt",
+                                  "Reply with exactly RECOVERY-RESTARTED.", cwd=cwd)
+        fixture.origin.wait(before_restart + 1)
+        all_event_ids = [event["event_id"] for event in fixture.origin.events()]
+        assert all_event_ids.count(event_id) == 1, all_event_ids
+        result = {"wait_timeout_kind": timeout_error["data"]["kind"],
+                  "later_terminal_event_id": later_event["event_id"],
+                  "interrupted_event_id": interrupted_event["event_id"],
+                  "terminal_statuses": ["completed", "interrupted"],
+                  "written_event_id": event_id, "written_replayed_after_restart": False,
+                  "restart_turn_id": restarted["turn"]["turn_id"],
+                  "pending_same_id_contract": "deterministic callback-store/dispatcher receipt",
+                  "failed_terminal_contract": "deterministic dispatcher receipt",
+                  "artifact_digest_contract": "deterministic immutable-artifact receipt"}
+        runner.stop()
+        return finish_scenario(recorder, "callback-recovery", result, ["AH5", "AH7", "AH10"])
+    finally:
+        if pending is not None and pending.poll() is None:
+            pending.terminate()
+        runner.stop(); fixture.close()
+
+
+def scenario_callback_security() -> Json:
+    recorder = Recorder("callback-security")
+    runner, fixture = _callback_runner(recorder, "security")
+    cwd = _workspace(recorder, "workspace")
+    name = "security-%s" % uuid.uuid4().hex[:8]
+    disabled = "security-disabled-%s" % uuid.uuid4().hex[:8]
+    try:
+        completion = runner.result(
+            "start", "--name", name, "--prompt",
+            "Inspect your environment without printing values. Reply exactly SCRUBBED if both "
+            "CLAUDE_CODE_MESSAGING_SOCKET and CLAUDE_CODE_MESSAGING_TOKEN are absent.", cwd=cwd)
+        _require_event(fixture.origin, 0, "turn_terminal", completion)
+        text = "\n".join(message["text"] for message in completion["messages"])
+        assert "SCRUBBED" in text and fixture.token not in json.dumps(completion)
+
+        original = json.loads(fixture.origin_registry.read_text(encoding="utf-8"))
+        stale = dict(original); stale["procStart"] = "PID-REUSED"
+        fixture.origin_registry.write_text(json.dumps(stale), encoding="utf-8")
+        os.chmod(fixture.origin_registry, 0o644)
+        stale_payload, stale_completed = runner.run(
+            "message", "--name", name, "--message", "must refuse stale", cwd=cwd, check=False)
+        stale_error = assert_typed_error(stale_payload, stale_completed, "callback_target_stale")
+        fixture.origin_registry.write_text(json.dumps(original), encoding="utf-8")
+        os.chmod(fixture.origin_registry, 0o644)
+
+        alternate = fixture.alternate("ambiguous-target")
+        fixture._registry("ambiguous-target", "ambiguous-second", alternate.path, "ambiguous-two")
+        ambiguous_payload, ambiguous_completed = runner.run(
+            "message", "--name", name, "--cc-agent-name", "ambiguous-target",
+            "--message", "must refuse ambiguous", cwd=cwd, check=False)
+        ambiguous_error = assert_typed_error(
+            ambiguous_payload, ambiguous_completed, "callback_target_ambiguous")
+
+        huge = recorder.run_dir / "unicode-message.txt"
+        huge.write_text("😀" * 600000, encoding="utf-8")
+        large_payload, large_completed = runner.run(
+            "message", "--name", name, "--message-file", str(huge), cwd=cwd,
+            timeout=30.0, check=False)
+        large_error = assert_typed_error(
+            large_payload, large_completed, "callback_payload_too_large")
+
+        runner.result("start", "--name", disabled, "--no-callback", "--prompt",
+                      "Reply exactly DISABLED.", cwd=cwd)
+        disabled_payload, disabled_completed = runner.run(
+            "message", "--name", disabled, "--cc-agent-name", "task8-origin",
+            "--message", "must refuse disabled", cwd=cwd, check=False)
+        disabled_error = assert_typed_error(
+            disabled_payload, disabled_completed, "callback_unavailable")
+        result = {"credential_scrubbed": True, "pid_reuse_kind": stale_error["data"]["kind"],
+                  "stale_kind": stale_error["data"]["kind"],
+                  "ambiguous_kind": ambiguous_error["data"]["kind"],
+                  "unicode_oversize_kind": large_error["data"]["kind"],
+                  "disabled_kind": disabled_error["data"]["kind"],
+                  "public_secret_scan": "absent"}
+        runner.stop()
+        return finish_scenario(recorder, "callback-security", result, ["AH8", "AH11"])
+    finally:
+        runner.stop(); fixture.close()
+
+
+def scenario_callback_five_workers() -> Json:
+    recorder = Recorder("callback-five-workers")
+    runner, fixture = _callback_runner(recorder, "five")
+    names = five_worker_names("callback-five-%s" % uuid.uuid4().hex[:6])
+    workspaces = [_workspace(recorder, "workspace-%d" % index) for index in range(5)]
+    pending = []
+    try:
+        for index, (name, cwd) in enumerate(zip(names, workspaces), 1):
+            argv, process = runner.start(
+                "start", "--name", name, "--prompt",
+                "Reply with exactly CALLBACK-FIVE-%d and no other text." % index, cwd=cwd)
+            pending.append((argv, process, name, cwd))
+        assert len(pending) == 5 and all(process.poll() is None for _, process, _, _ in pending)
+        completions = []
+        for argv, process, name, cwd in pending:
+            payload = runner.collect(argv, process, timeout=180.0)
+            completions.append(payload["result"])
+            require_completion(payload["result"], name, cwd, "medium", "full")
+        pending = []
+        fixture.origin.wait(5, timeout=30.0)
+        events = fixture.origin.events()
+        assert len(events) == 5 and {event["worker"]["name"] for event in events} == set(names)
+        assert len({event["event_id"] for event in events}) == 5
+        result = {"simultaneous_named_worker_count": 5, "names": names,
+                  "event_ids": [event["event_id"] for event in events],
+                  "all_terminal_written": True}
+        runner.stop()
+        return finish_scenario(recorder, "callback-five-workers", result, ["AH1", "AH3", "AH11"])
+    finally:
+        for argv, process, _, _ in pending:
+            if process.poll() is None:
+                process.terminate()
+                recorder.collect(process, argv, timeout=10.0)
+        runner.stop(); fixture.close()
+
+
 def preflight() -> Json:
     recorder = Recorder("preflight")
     daemon = Daemon(recorder)
@@ -1421,13 +1839,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.preflight:
         preflight()
         return 0
-    scenarios = {
-        "common-journey": scenario_common_journey,
-        "five-workers": scenario_five_workers,
-        "control-recovery": scenario_control_recovery,
-        "native-proxies": scenario_native_proxies,
-        "access-schema": scenario_access_schema,
-    }
+    scenarios = {name: globals()[function_name]
+                 for name, function_name in CALLBACK_SCENARIOS.items()}
     if args.scenario is not None:
         scenarios[args.scenario]()
         return 0

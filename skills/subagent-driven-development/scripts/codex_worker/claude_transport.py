@@ -21,6 +21,7 @@ from .instance import _unsafe_ancestor
 MAX_USER_LINE_UTF16_UNITS = 1_048_576
 CALLBACK_UUID_NAMESPACE = uuid.UUID("5b290fd0-2df0-5c73-980f-04f284476f55")
 _HEX32 = frozenset("0123456789abcdef")
+_PROCESS_START_FORMAT = "%a %b %d %H:%M:%S %Y"
 
 
 def _utc_now() -> str:
@@ -38,6 +39,24 @@ def _process_start(pid: int) -> Optional[str]:
         return None
     value = completed.stdout.strip()
     return value if completed.returncode == 0 and value else None
+
+
+def _same_process_start(registry_value: str, ps_value: Optional[str],
+                        localize=None) -> bool:
+    if registry_value == ps_value:
+        return True
+    if not isinstance(registry_value, str) or not isinstance(ps_value, str):
+        return False
+    try:
+        registry_utc = datetime.datetime.strptime(
+            registry_value.strip(), _PROCESS_START_FORMAT)
+        process_local = datetime.datetime.strptime(ps_value.strip(), _PROCESS_START_FORMAT)
+        if localize is None:
+            localize = lambda value: value.replace(
+                tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
+        return localize(registry_utc) == process_local
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -73,7 +92,8 @@ class ClaudeTransport:
         records = self._records(Path(root))
         matches = [record for record in records if self._matches_capture(record, capture)]
         if (len(matches) != 1
-                or self.deps.process_start(capture.claude_pid) != capture.claude_proc_start):
+                or not _same_process_start(capture.claude_proc_start,
+                                           self.deps.process_start(capture.claude_pid))):
             raise _fault(FacadeFaultCode.CALLBACK_TARGET_STALE,
                          "Captured Claude callback target no longer matches its live identity")
         self._safe_live_socket(capture.target_socket)
@@ -213,6 +233,14 @@ class ClaudeTransport:
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise _fault(FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
                              "Claude callback registry contains malformed JSON") from exc
+            if (isinstance(record, dict)
+                    and record.get("messagingSocketPath") is None
+                    and record.get("kind") == "interactive"
+                    and record.get("status") == "idle"
+                    and type(record.get("pid")) is int and record["pid"] > 0
+                    and all(isinstance(record.get(key), str) and record[key]
+                            for key in ("sessionId", "procStart"))):
+                continue
             required = {"pid", "sessionId", "messagingSocketPath", "procStart"}
             if (not isinstance(record, dict) or not required <= set(record)
                     or type(record["pid"]) is not int or record["pid"] <= 0
@@ -279,7 +307,8 @@ class ClaudeTransport:
         named = [record for record in self._records(root) if record.get("name") == name]
         live = []  # type: List[Dict[str, Any]]
         for record in named:
-            if self.deps.process_start(record["pid"]) != record["procStart"]:
+            if not _same_process_start(record["procStart"],
+                                       self.deps.process_start(record["pid"])):
                 continue
             try:
                 self._safe_live_socket(record["messagingSocketPath"])

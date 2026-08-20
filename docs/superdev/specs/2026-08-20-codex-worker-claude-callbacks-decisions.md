@@ -599,3 +599,38 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Task 6 worktree/report paths only; source ownership and commit boundaries
   are unchanged.
 - **Revisit-when:** the repository adopts a tracked project-level `.worktrees` policy.
+
+## D32 — Ignore Claude idle registry records with no messaging endpoint
+**When:** 2026-08-20T14:20:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during Task 8 real-Claude acceptance
+
+- **Trigger:** Claude Code 2.1.237 retained a live `interactive` registry record with
+  `status: idle` and no `messagingSocketPath`. Treating that non-addressable record as
+  malformed blocked capture for an unrelated valid live caller.
+- **Options weighed:** fail the entire registry scan; mutate Claude-owned state; or ignore
+  only a structurally valid idle record whose endpoint field is absent/null.
+- **Decided:** Ignore only records with positive `pid`, non-empty `sessionId` and
+  `procStart`, `kind: interactive`, `status: idle`, and absent/null
+  `messagingSocketPath`. Continue rejecting malformed JSON, unsafe files, and all other
+  incomplete records. The ignored record can never be selected or sent to.
+- **Rests on:** MEASURED Claude Code 2.1.237 registry shape and R6/R9 fail-closed routing.
+- **Affects:** registry scanning only; target validation, exact-match capture, and named
+  override ambiguity remain unchanged.
+- **Revisit-when:** Claude removes idle records or documents a different non-addressable shape.
+
+## D33 — Normalize Claude UTC process-start records against local `ps`
+**When:** 2026-08-20T14:24:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during Task 8 real-Claude acceptance
+
+- **Trigger:** MEASURED Claude Code 2.1.237 registry `procStart` is UTC while macOS
+  `ps -o lstart=` renders local time. In Europe/Vilnius the same PID differed by exactly
+  three hours and every real capture falsely refused as PID reuse.
+- **Options weighed:** remove the process-start check; compare the strings literally; or
+  parse the fixed timestamp shape and convert the registry UTC value to local time.
+- **Decided:** Preserve exact-match support, otherwise parse both fixed English timestamp
+  shapes and compare Claude's UTC instant rendered in the current local zone. Parse
+  failures remain mismatches. PID, session, endpoint, and socket-inode checks remain.
+- **Rests on:** MEASURED live registry/`ps` pairs and R6/R9 PID-reuse defense.
+- **Affects:** capture revalidation and named-target liveness only.
+- **Revisit-when:** Claude includes an explicit timezone/epoch or macOS exposes a stable
+  process birth epoch through the supported stdlib boundary.
