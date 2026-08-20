@@ -696,6 +696,10 @@ class RpcServerTests(unittest.TestCase):
             -32026: "model_unavailable", -32027: "effort_unsupported",
             -32028: "limits_unavailable", -32029: "incomplete_completion",
             -32030: "daemon_stop_failed",
+            -32031: "callback_unavailable", -32032: "callback_target_stale",
+            -32033: "callback_target_not_found", -32034: "callback_target_ambiguous",
+            -32035: "callback_target_unsafe", -32036: "callback_send_failed",
+            -32037: "callback_payload_too_large",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)

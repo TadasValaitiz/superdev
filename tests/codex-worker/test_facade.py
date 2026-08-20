@@ -389,6 +389,8 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(result.value.to_dict(), {
             "worker": self._worker_dict(record), "daemon_status": "ready", "attached": True,
             "active_turn_id": "active", "latest_turn": None,
+            "callback": {"state": "unavailable", "pending_terminal_count": 0,
+                         "last_terminal_attempt": None},
         })
 
     def test_messages_asserts_every_field_and_two_reads_do_not_consume(self):

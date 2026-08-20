@@ -42,6 +42,24 @@ class MetricAvailability(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
+class CallbackState(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    UNAVAILABLE = "unavailable"
+
+
+class CallbackAttemptState(str, Enum):
+    PENDING = "pending"
+    WRITTEN = "written"
+    FAILED = "failed"
+
+
+class MessagePriority(str, Enum):
+    NOW = "now"
+    NEXT = "next"
+    LATER = "later"
+
+
 class FacadeFaultCode(int, Enum):
     INVALID_PARAMS = -32602
     TURN_ACTIVE = -32004
@@ -59,6 +77,13 @@ class FacadeFaultCode(int, Enum):
     LIMITS_UNAVAILABLE = -32028
     INCOMPLETE_COMPLETION = -32029
     DAEMON_STOP_FAILED = -32030
+    CALLBACK_UNAVAILABLE = -32031
+    CALLBACK_TARGET_STALE = -32032
+    CALLBACK_TARGET_NOT_FOUND = -32033
+    CALLBACK_TARGET_AMBIGUOUS = -32034
+    CALLBACK_TARGET_UNSAFE = -32035
+    CALLBACK_SEND_FAILED = -32036
+    CALLBACK_PAYLOAD_TOO_LARGE = -32037
 
 
 FACADE_FAULT_KINDS = {
@@ -78,6 +103,13 @@ FACADE_FAULT_KINDS = {
     FacadeFaultCode.LIMITS_UNAVAILABLE: "limits_unavailable",
     FacadeFaultCode.INCOMPLETE_COMPLETION: "incomplete_completion",
     FacadeFaultCode.DAEMON_STOP_FAILED: "daemon_stop_failed",
+    FacadeFaultCode.CALLBACK_UNAVAILABLE: "callback_unavailable",
+    FacadeFaultCode.CALLBACK_TARGET_STALE: "callback_target_stale",
+    FacadeFaultCode.CALLBACK_TARGET_NOT_FOUND: "callback_target_not_found",
+    FacadeFaultCode.CALLBACK_TARGET_AMBIGUOUS: "callback_target_ambiguous",
+    FacadeFaultCode.CALLBACK_TARGET_UNSAFE: "callback_target_unsafe",
+    FacadeFaultCode.CALLBACK_SEND_FAILED: "callback_send_failed",
+    FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE: "callback_payload_too_large",
 }
 
 
@@ -235,6 +267,42 @@ def _check_contract(value: Any) -> None:
         if type(value.worker_count) is not int or value.worker_count < 0: raise ValueError("worker_count must be non-negative")
         for pid in (value.daemon_pid, value.codex_pid):
             if pid is not None and (type(pid) is not int or pid <= 0): raise ValueError("pid must be positive")
+    if name == "CallbackCapture":
+        if not Path(value.claude_config_dir).is_absolute():
+            raise ValueError("claude_config_dir must be absolute")
+        route = (value.target_socket, value.child_token, value.claude_session_id,
+                 value.claude_pid, value.claude_proc_start)
+        if any(item is None for item in route) and not all(item is None for item in route):
+            raise ValueError("callback capture identity must be fully populated or fully absent")
+        if all(item is not None for item in route):
+            if not Path(value.target_socket).is_absolute():
+                raise ValueError("target_socket must be absolute")
+            if not re.fullmatch(r"[0-9a-f]{32}", value.child_token):
+                raise ValueError("child_token must be 32 lowercase hexadecimal characters")
+            if not value.claude_session_id or not value.claude_proc_start:
+                raise ValueError("callback capture identity strings must be non-empty")
+            if type(value.claude_pid) is not int or value.claude_pid <= 0:
+                raise ValueError("claude_pid must be positive")
+    if name == "StartWorkerRequest" and value.no_callback and value.callback_capture is not None:
+        raise ValueError("no_callback requires callback_capture to be null")
+    if name == "MessageWorkerRequest":
+        if not value.message:
+            raise ValueError("message must be a non-empty string")
+        if value.cc_agent_name is not None and not value.cc_agent_name:
+            raise ValueError("cc_agent_name must be a non-empty string")
+    if name == "CallbackAttemptView":
+        if not value.event_id:
+            raise ValueError("event_id must be a non-empty string")
+        if value.reason is not None and not value.reason:
+            raise ValueError("reason must be a non-empty string")
+        if value.attempted_at is not None and not value.attempted_at:
+            raise ValueError("attempted_at must be a non-empty string")
+        if type(value.attempt_count) is not int or value.attempt_count < 0:
+            raise ValueError("attempt_count must be non-negative")
+    if name == "CallbackStatusView" and (type(value.pending_terminal_count) is not int or value.pending_terminal_count < 0):
+        raise ValueError("pending_terminal_count must be non-negative")
+    if name == "CallbackSendResponse" and not value.event_id:
+        raise ValueError("event_id must be a non-empty string")
 
 
 def _dump(value: Any) -> Any:
@@ -262,6 +330,8 @@ class StartWorkerRequest(StrictModel):
     token_budget: Optional[int] = None
     output_schema: Optional[JsonObject] = None
     timeout: Optional[float] = None
+    no_callback: bool = False
+    callback_capture: Optional["CallbackCapture"] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -278,12 +348,17 @@ class StartWorkerRequest(StrictModel):
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        if not isinstance(value, dict) or set(value) != {item.name for item in fields(cls)}:
+        existing_fields = {item.name for item in fields(cls)} - {"no_callback", "callback_capture"}
+        if not isinstance(value, dict) or set(value) not in (existing_fields, {item.name for item in fields(cls)}):
             raise ValueError("invalid StartWorkerRequest fields")
         copied = dict(value)
+        copied.setdefault("no_callback", False)
+        copied.setdefault("callback_capture", None)
         if copied["tier"] is not None:
             copied["tier"] = Tier(copied["tier"])
         copied["access"] = AccessMode(copied["access"])
+        if copied["callback_capture"] is not None:
+            copied["callback_capture"] = CallbackCapture.from_dict(copied["callback_capture"])
         return cls(**copied)
 
 
@@ -297,6 +372,28 @@ class RunWorkerRequest(StrictModel):
 class WorkerStatusRequest(StrictModel):
     name: str
     def __post_init__(self) -> None: super().__post_init__(); validate_worker_name(self.name)
+
+
+@dataclass(frozen=True, repr=False)
+class CallbackCapture(StrictModel):
+    target_socket: Optional[str]
+    child_token: Optional[str]
+    claude_session_id: Optional[str]
+    claude_pid: Optional[int]
+    claude_proc_start: Optional[str]
+    claude_config_dir: str
+
+
+@dataclass(frozen=True)
+class MessageWorkerRequest(StrictModel):
+    name: str
+    message: str
+    priority: MessagePriority = MessagePriority.NEXT
+    cc_agent_name: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_worker_name(self.name)
 
 
 @dataclass(frozen=True)
@@ -375,7 +472,24 @@ class RecoveryView(StrictModel): status: str; messages: str; interrupt: str; raw
 @dataclass(frozen=True)
 class CompletionResponse(StrictModel): worker: WorkerView; turn: TurnView; messages: List[AgentMessageView]; structured_output: JsonValue; metrics: Dict[str, MetricEvidence]; recovery: RecoveryView
 @dataclass(frozen=True)
-class WorkerStatusResponse(StrictModel): worker: WorkerView; daemon_status: str; attached: bool; active_turn_id: Optional[str]; latest_turn: Optional[TurnView]
+class CallbackAttemptView(StrictModel): event_id: str; state: CallbackAttemptState; reason: Optional[str]; attempted_at: Optional[str]; attempt_count: int
+@dataclass(frozen=True)
+class CallbackStatusView(StrictModel): state: CallbackState; pending_terminal_count: int; last_terminal_attempt: Optional[CallbackAttemptView]
+@dataclass(frozen=True)
+class CallbackSendResponse(StrictModel): worker: WorkerView; event_id: str; attempt: CallbackAttemptView
+@dataclass(frozen=True)
+class WorkerStatusResponse(StrictModel):
+    worker: WorkerView; daemon_status: str; attached: bool; active_turn_id: Optional[str]; latest_turn: Optional[TurnView]
+    callback: CallbackStatusView = CallbackStatusView(CallbackState.UNAVAILABLE, 0, None)
+
+    @classmethod
+    def from_dict(cls, value: JsonObject):
+        existing_fields = {item.name for item in fields(cls)} - {"callback"}
+        if not isinstance(value, dict) or set(value) not in (existing_fields, {item.name for item in fields(cls)}):
+            raise ValueError("invalid WorkerStatusResponse fields")
+        copied = dict(value)
+        copied.setdefault("callback", CallbackStatusView(CallbackState.UNAVAILABLE, 0, None).to_dict())
+        return super().from_dict(copied)
 @dataclass(frozen=True)
 class WorkerMessagesResponse(StrictModel): worker: WorkerView; messages: List[AgentMessageView]; requested_tail: int; returned: int; truncated: bool; latest_cursor: Optional[int]
 @dataclass(frozen=True)

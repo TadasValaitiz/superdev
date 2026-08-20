@@ -7,8 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "subagen
 
 from codex_worker.commands import (
     AccessMode, AgentMessageView, CompletionResponse, CompletionSelection, FacadeFault, FacadeFaultCode,
+    CallbackAttemptState, CallbackAttemptView, CallbackCapture, CallbackSendResponse,
+    CallbackState, CallbackStatusView, MessagePriority, MessageWorkerRequest,
     MetricAvailability, MetricEvidence, RecoveryView, StartWorkerRequest, Tier, TurnView,
-    WorkerMessagesResponse, WorkerView,
+    WorkerMessagesResponse, WorkerStatusResponse, WorkerView,
 )
 
 
@@ -67,6 +69,72 @@ class CommandModelTests(unittest.TestCase):
         invalid_wire["model"] = "raw-model"
         with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
             StartWorkerRequest.from_dict(invalid_wire)
+
+    def test_callback_contracts_are_strict_and_keep_capture_secret(self):
+        capture = CallbackCapture(
+            target_socket="/tmp/cc-socks/123.sock", child_token="a" * 32,
+            claude_session_id="session-1", claude_pid=123,
+            claude_proc_start="measured-start", claude_config_dir="/tmp/claude-config",
+        )
+        root_only = CallbackCapture(None, None, None, None, None, "/tmp/claude-config")
+        for model in (capture, root_only):
+            self.assertEqual(type(model).from_dict(model.to_dict()).to_dict(), model.to_dict())
+            wire = model.to_dict()
+            wire["extra"] = "forbidden"
+            with self.assertRaises(ValueError):
+                type(model).from_dict(wire)
+        for partial in (
+            ("/tmp/cc-socks/123.sock", None, None, None, None, "/tmp/claude-config"),
+            (None, "a" * 32, None, None, None, "/tmp/claude-config"),
+        ):
+            with self.assertRaises(ValueError):
+                CallbackCapture(*partial)
+        for token in ("A" * 32, "a" * 31, "a" * 33):
+            with self.assertRaises(ValueError):
+                CallbackCapture("/tmp/cc-socks/123.sock", token, "session-1", 123,
+                                "measured-start", "/tmp/claude-config")
+
+        start = StartWorkerRequest("review-a31", "x", self.cwd, callback_capture=capture)
+        self.assertEqual(StartWorkerRequest.from_dict(start.to_dict()).to_dict(), start.to_dict())
+        with self.assertRaises(ValueError):
+            StartWorkerRequest("review-a31", "x", self.cwd, no_callback=True, callback_capture=capture)
+
+        request = MessageWorkerRequest("review-a31", "notify", MessagePriority.NEXT, None)
+        self.assertEqual(MessageWorkerRequest.from_dict(request.to_dict()).to_dict(), request.to_dict())
+        with self.assertRaises(ValueError):
+            MessageWorkerRequest("review-a31", "", MessagePriority.NEXT, None)
+        with self.assertRaises(ValueError):
+            MessageWorkerRequest.from_dict({"name": "review-a31", "message": "notify", "priority": "urgent", "cc_agent_name": None})
+
+        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+                            Tier.MEDIUM, "model", "medium", AccessMode.FULL)
+        attempt = CallbackAttemptView("event-1", CallbackAttemptState.WRITTEN, None, "2026-08-20T00:00:00Z", 1)
+        status = CallbackStatusView(CallbackState.ENABLED, 0, attempt)
+        response = CallbackSendResponse(worker, "event-1", attempt)
+        worker_status = WorkerStatusResponse(worker, "ready", True, None, None, status)
+        for model in (start, request, attempt, status, response, worker_status):
+            self.assertEqual(type(model).from_dict(model.to_dict()).to_dict(), model.to_dict())
+            wire = model.to_dict()
+            wire["extra"] = "forbidden"
+            with self.assertRaises(ValueError):
+                type(model).from_dict(wire)
+        public_wire = worker_status.to_dict()
+        forbidden = {"target_socket", "child_token", "claude_session_id", "claude_pid", "claude_proc_start", "claude_config_dir"}
+        self.assertFalse(forbidden.intersection(public_wire["callback"]))
+        self.assertFalse(forbidden.intersection(response.to_dict()))
+
+        expected_faults = {
+            FacadeFaultCode.CALLBACK_UNAVAILABLE: (-32031, "callback_unavailable"),
+            FacadeFaultCode.CALLBACK_TARGET_STALE: (-32032, "callback_target_stale"),
+            FacadeFaultCode.CALLBACK_TARGET_NOT_FOUND: (-32033, "callback_target_not_found"),
+            FacadeFaultCode.CALLBACK_TARGET_AMBIGUOUS: (-32034, "callback_target_ambiguous"),
+            FacadeFaultCode.CALLBACK_TARGET_UNSAFE: (-32035, "callback_target_unsafe"),
+            FacadeFaultCode.CALLBACK_SEND_FAILED: (-32036, "callback_send_failed"),
+            FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE: (-32037, "callback_payload_too_large"),
+        }
+        for code, (number, kind) in expected_faults.items():
+            self.assertEqual(code.value, number)
+            self.assertEqual(FacadeFault(code, "message", kind).to_dict()["data"]["kind"], kind)
 
     def test_response_models_recursively_reject_bad_shapes_and_round_trip(self):
         worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
