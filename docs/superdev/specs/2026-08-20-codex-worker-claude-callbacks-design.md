@@ -322,6 +322,11 @@ R10; governed by D2, D5, D6, D10, D11, D15, D20, D21, D23; realizes UC2, UC3, UC
   matches. `disabled` forbids this override; `unavailable` permits it because no default
   capability was retained. The sender writes auth then user NDJSON lines, includes
   `from_mode: bypass`, uses the selected priority, sends no `session_id`, and half-closes.
+  Its `msg_id` is the callback event ID and its `uuid` is UUIDv5 of that event ID under
+  literal namespace `5b290fd0-2df0-5c73-980f-04f284476f55`. When the binding captured
+  an origin socket, `from` is that preserved `uds:<origin-socket>` even for an override;
+  a root-only unavailable binding has no origin to claim, so its permitted named override
+  omits `from` rather than impersonating the selected target or inventing an address.
   Immediately before connect, the daemon serializes the final envelope and rejects a
   proactive event exceeding 1,048,576 JavaScript UTF-16 code units, counted as
   `len(line.encode("utf-16-le")) / 2` excluding the newline.
@@ -330,7 +335,7 @@ R10; governed by D2, D5, D6, D10, D11, D15, D20, D21, D23; realizes UC2, UC3, UC
   typed daemon fault `callback_payload_too_large` and therefore exits 1.
 - **Depends on:** measured Claude 2.1.237 protocol, callback store, safe-path utilities.
 - **Serves:** R5, R6, R9, R10 · **Governed by:** D2, D5, D6, D10, D11, D15, D20,
-  D21 · **Realizes:** UC2, UC3, UC7.
+  D21, D27, D28 · **Realizes:** UC2, UC3, UC7.
 
 ### 5.4 Automatic terminal callback
 

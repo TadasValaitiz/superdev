@@ -441,3 +441,107 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** the operator-approved full/read-only access behavior and D11/D15.
 - **Affects:** R6, security narrative, tests, documentation, and threat-model claims.
 - **Revisit-when:** Codex workers gain a real per-process filesystem sandbox.
+
+## D24 — Validate skill guidance with focused structure plus semantic reviewers
+**When:** 2026-08-20T09:52:00Z · **Phase:** plan · **Status:** locked
+**Decided by:** Tadas (earlier documentation-testing direction), recorded by Codex
+
+- **Trigger:** Product integration updates the existing SDD skill/reference, while the
+  operator explicitly rejected a large test-driven documentation campaign and preferred
+  small reviewer agents at documentation checkpoints.
+- **Options weighed:**
+  - A: run the writing-skills multi-scenario RED/GREEN pressure campaign — strongest
+    behavioral evidence / spends many agent calls on a narrow reference addition.
+  - B: make unreviewed prose edits — cheapest / risks teaching an ambiguous or incorrect
+    callback command.
+  - C: retain focused structural integration checks and dispatch fresh semantic reviewer
+    agents after the guidance checkpoint — checks exact command/behavior comprehension /
+    does not claim a full behavior-shaping eval.
+- **Decided:** Take option C. Code remains strict TDD. Skill/reference documentation gets
+  structural tests plus independent semantic reviewers, not the large pressure campaign.
+- **Rests on:** the operator's explicit documentation-testing direction and the fact this
+  work extends an existing reference rather than creating a new discipline skill.
+- **Affects:** documentation task, evidence labels, release gate.
+- **Revisit-when:** callback guidance changes SDD control flow rather than documenting the
+  new worker capability.
+
+## D25 — Release the callback CLI as Superdev 7.3.0
+**When:** 2026-08-20T09:52:00Z · **Phase:** plan · **Status:** locked
+**Decided by:** Codex under autonomous implementation authority
+
+- **Trigger:** The feature adds a top-level `message` command, `start --no-callback`, new
+  RPC models/faults, and status fields, so installed users need a versioned plugin refresh.
+- **Options weighed:**
+  - A: no bump — avoids release files / leaves installed 7.2.0 indistinguishable and stale.
+  - B: patch 7.2.1 — small bump / understates a backward-compatible public feature.
+  - C: minor 7.3.0 — accurately signals additive CLI/API capability / requires the normal
+    manifest, package, reinstall, and audit gates.
+- **Decided:** Take option C and use existing release tooling rather than hand-editing
+  generated copies.
+- **Rests on:** semantic versioning and the established 7.2.0 release workflow.
+- **Affects:** release notes, manifests, package tests, installed-plugin evidence.
+- **Revisit-when:** implementation removes all public surface changes before release.
+
+## D26 — Isolate product and probe commits in their owning repositories
+**When:** 2026-08-20T09:52:00Z · **Phase:** plan · **Status:** locked
+**Decided by:** Codex under autonomous implementation authority
+
+- **Trigger:** D14 assigns product code to Superdev and measured probe scripts to the
+  trading repository, whose active checkout already contains unrelated human work.
+- **Options weighed:**
+  - A: edit both active checkouts — simplest paths / risks mixing unrelated dirty state.
+  - B: copy probes into Superdev — one branch / violates the source-of-truth boundary.
+  - C: use one isolated branch/worktree per repository and commit only owned paths —
+    preserves ownership and dirty work / requires a two-commit handoff.
+- **Decided:** Take option C. The Superdev feature branch consumes the probe commit as a
+  recorded evidence SHA/path rather than copying its scripts.
+- **Rests on:** D14 and the operator's established worktree preference.
+- **Affects:** task working directories, reports, finishing handoff, cleanup.
+- **Revisit-when:** the transport probes move into a supported shared package.
+
+## D27 — Make Claude's outer message identity stable and origin-addressed
+**When:** 2026-08-20T09:58:00Z · **Phase:** plan · **Status:** locked
+**Decided by:** Codex under autonomous implementation authority
+
+- **Trigger:** D16 stabilizes the callback event ID but the measured Claude envelope also
+  has `uuid`, `msg_id`, and optional `from`; leaving them regenerated or ambiguous would
+  weaken duplicate correlation and alternate-room provenance.
+- **Options weighed:**
+  - A: regenerate every outer field per attempt and omit `from` — simplest sender /
+    duplicate attempts look unrelated and an override loses origin provenance.
+  - B: persist opaque full wire bytes — exact replay / couples durable state to Claude's
+    current private envelope schema.
+  - C: rebuild the measured envelope deterministically from the durable event — stable
+    correlation without persisting auth frames / requires a fixed UUID derivation.
+- **Decided:** Take option C. Set Claude `msg_id` to the callback `event_id`, derive its
+  `uuid` deterministically with UUIDv5 from that event ID, set `from` to the captured
+  origin socket as `uds:<path>` even for a one-send override, attest
+  `from_mode:"bypass"`, and omit `session_id`. The callback JSON also carries event ID.
+- **Rests on:** D16, D19 and the MEASURED 2.1.237 user envelope.
+- **Affects:** transport encoder, duplicate tests, probe parity, alternate-target ride.
+- **Revisit-when:** Claude documents first-class idempotency or sender identity fields.
+
+## D28 — Pin callback UUID identity and omit nonexistent origins
+**When:** 2026-08-20T10:21:00Z · **Phase:** plan · **Status:** locked
+**Decided by:** Codex after independent plan review
+
+- **Trigger:** D27 did not name its UUIDv5 namespace and assumed every permitted override
+  had a captured origin socket, but D21 explicitly permits a root-only unavailable
+  binding to send to one named target.
+- **Options weighed:**
+  - A: let each repository choose a namespace and use the target as `from` when origin is
+    absent — locally deterministic / breaks cross-repository parity and misstates sender.
+  - B: reject root-only overrides — keeps D27 literal / violates D21 and the public CLI.
+  - C: pin one literal namespace and omit only the impossible origin field — gives stable
+    cross-repository IDs and honest provenance / root-only sends have no reply address.
+- **Decided:** Take option C. The namespace is
+  `5b290fd0-2df0-5c73-980f-04f284476f55`, itself UUIDv5(NAMESPACE_URL,
+  `codex-worker.claude-callback/v1`). Event `event-fixture-1` must map to
+  `740cb30c-652d-5f4f-bc30-36c14a48d007`. Enabled bindings always preserve their captured
+  origin in `from`, including overrides. Root-only unavailable overrides omit `from`,
+  retain `from_mode:"bypass"`, and never substitute the destination socket. All sends
+  omit `session_id`.
+- **Rests on:** D21, D27 and the measured optional `from` field.
+- **Affects:** transport encoder, unavailable override, probe parity, tests, checkride.
+- **Revisit-when:** Claude makes sender/reply identity mandatory or provides a supported
+  daemon identity.

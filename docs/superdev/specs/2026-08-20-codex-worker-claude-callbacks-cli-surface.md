@@ -216,6 +216,14 @@ priority. The daemon constructs and sizes the final serialized user line. It cou
 JavaScript UTF-16 code units as `len(line.encode("utf-16-le")) / 2`, excluding the
 newline. This is deliberately not a client-side estimate.
 
+The surrounding Claude user envelope uses `msg_id = event_id` and UUIDv5 of `event_id`
+under literal namespace `5b290fd0-2df0-5c73-980f-04f284476f55`; for example,
+`event-fixture-1` maps to `740cb30c-652d-5f4f-bc30-36c14a48d007`. It always uses
+`from_mode: "bypass"` and omits `session_id`. When an enabled binding has a captured
+origin, `from` remains `uds:<captured-origin-socket>` even for a named override. A
+root-only unavailable binding has no origin, so its permitted named override omits
+`from`; it never substitutes the destination socket as sender identity.
+
 ## 5. Probe scripts — executable research evidence
 
 These scripts live in
