@@ -5,7 +5,8 @@ from typing import Callable, Optional, Protocol, runtime_checkable
 
 from .broker import (AnnotationPolicy, ModelSelectionError, NativeCodexProxy,
                      SessionStartSpec, TurnStartSpec)
-from .commands import (AccessMode, CompletionResponse, ControlResponse, FacadeFault,
+from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatusView,
+                       CompletionResponse, ControlResponse, FacadeFault,
                        FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
                        GoalView, InterruptWorkerRequest, LimitsRequest, LimitsResponse,
                        Ok, Err, RecoveryView, Result, RunWorkerRequest, StartWorkerRequest,
@@ -17,6 +18,8 @@ from .instance import InstanceIdentity
 from .models import IdentifierSelector, RpcFault, SessionRecord
 from .registry import RegistryError
 from .runtime import SessionDetached, UnknownSession, WaitTimeout
+from .callback_store import CallbackBinding
+from .callback_dispatcher import TerminalProjectionContext
 
 
 _TIER_MODELS = {Tier.MEDIUM: "gpt-5.6-terra", Tier.VERY_SMART: "gpt-5.6-sol"}
@@ -51,6 +54,22 @@ class ProjectorPort(Protocol):
     def chronological_history_pages(self, pages): ...
     def select_completion_messages(self, items, terminal: bool): ...
 
+@runtime_checkable
+class CallbackStorePort(Protocol):
+    def bind(self, binding: CallbackBinding) -> CallbackBinding: ...
+    def binding(self, session_id: str) -> Optional[CallbackBinding]: ...
+    def status_view(self, session_id: str) -> CallbackStatusView: ...
+
+@runtime_checkable
+class CallbackDispatcherPort(Protocol):
+    def now(self) -> str: ...
+    def observe_turn(self, session_id: str, turn_id: str,
+                     context: TerminalProjectionContext) -> None: ...
+
+@runtime_checkable
+class CallbackTransportPort(Protocol):
+    def validate_capture(self, capture: CallbackCapture) -> CallbackCapture: ...
+
 
 @dataclass(frozen=True)
 class FacadeDeps:
@@ -60,6 +79,9 @@ class FacadeDeps:
     runtime: RuntimePort
     projector: ProjectorPort
     clock: Callable[[], float]
+    callback_store: Optional[CallbackStorePort] = None
+    callback_dispatcher: Optional[CallbackDispatcherPort] = None
+    callback_transport: Optional[CallbackTransportPort] = None
 
 
 class WorkerFacade:
@@ -67,6 +89,7 @@ class WorkerFacade:
         self.deps = deps
 
     def start(self, request: StartWorkerRequest) -> Result[CompletionResponse, FacadeFault]:
+        record = None
         try:
             try:
                 existing = self.deps.registry.resolve_name(request.name)
@@ -77,12 +100,16 @@ class WorkerFacade:
             if existing is not None:
                 return Err(self._exists_fault(existing))
             model = self._select_model(request)
+            capture = request.callback_capture
+            if not request.no_callback and capture is not None and self.deps.callback_transport is not None:
+                capture = self.deps.callback_transport.validate_capture(capture)
             self.deps.broker.start_session(SessionStartSpec(
                 request.cwd, request.name, model, request.access,
                 request.tier.value if request.tier else None, request.effort,
                 AnnotationPolicy.PRESERVE_WORKER_POLICY))
             record = self.deps.registry.resolve_name(request.name)
             worker = self._worker(record)
+            self._bind_callback(record, request.no_callback, capture)
             if request.goal is not None:
                 try:
                     NativeCodexProxy(self.deps.broker.codex).goal_set(
@@ -92,7 +119,7 @@ class WorkerFacade:
             return self._start_and_wait(record, worker, request.prompt, request.output_schema,
                                         request.timeout)
         except BaseException as exc:
-            return Err(self._effect_fault(exc, None, request.name))
+            return Err(self._effect_fault(exc, record, request.name))
 
     def run(self, request: RunWorkerRequest) -> Result[CompletionResponse, FacadeFault]:
         record = None
@@ -118,8 +145,17 @@ class WorkerFacade:
             status = self.deps.runtime.status(record.session_id)
             if not status.attached:
                 return Err(self._stopped_fault(request.name, record))
-            return Ok(WorkerStatusResponse(self._worker(record), "ready", status.attached,
-                                           status.active_turn_id, self._turn_view(status.latest_turn)))
+            callback = None
+            if (self.deps.callback_store is not None
+                    and self.deps.callback_store.binding(record.session_id) is not None):
+                callback = self.deps.callback_store.status_view(record.session_id)
+            response = WorkerStatusResponse(self._worker(record), "ready", status.attached,
+                                            status.active_turn_id, self._turn_view(status.latest_turn))
+            if callback is not None:
+                response = WorkerStatusResponse(response.worker, response.daemon_status,
+                                                response.attached, response.active_turn_id,
+                                                response.latest_turn, callback)
+            return Ok(response)
         except (UnknownSession, SessionDetached):
             return Err(self._stopped_fault(request.name, None))
         except BaseException as exc:
@@ -205,8 +241,16 @@ class WorkerFacade:
 
     def _start_and_wait(self, record, worker, prompt, schema, timeout):
         started = self.deps.clock()
-        self.deps.broker.start_turn(TurnStartSpec(record.session_id, prompt, record.model,
-                                                  record.effort, AccessMode(record.access), schema))
+        result = self.deps.broker.start_turn(TurnStartSpec(record.session_id, prompt, record.model,
+                                                           record.effort, AccessMode(record.access), schema))
+        turn_id = result["turn_id"]
+        if self.deps.callback_dispatcher is not None:
+            context = TerminalProjectionContext(worker, schema, started, self._recovery(record))
+            try:
+                self.deps.callback_dispatcher.observe_turn(record.session_id, turn_id, context)
+            except Exception:
+                # Automatic callbacks are a durable side channel, never terminal truth.
+                pass
         try:
             turn = self._wait(record.session_id, timeout)
         except WaitTimeout as exc:
@@ -214,6 +258,26 @@ class WorkerFacade:
         return Ok(self.deps.projector.project_completion(worker, turn, schema,
                                                           self.deps.clock() - started,
                                                           self._recovery(record)))
+
+    def _bind_callback(self, record, disabled, capture) -> None:
+        if self.deps.callback_store is None:
+            return
+        if disabled:
+            state = CallbackState.DISABLED
+            route = (None, None, None, None, None, None)
+        elif capture is None:
+            state = CallbackState.UNAVAILABLE
+            route = (None, None, None, None, None, None)
+        elif capture.target_socket is None:
+            state = CallbackState.UNAVAILABLE
+            route = (None, None, None, None, None, capture.claude_config_dir)
+        else:
+            state = CallbackState.ENABLED
+            route = (capture.target_socket, capture.child_token, capture.claude_session_id,
+                     capture.claude_pid, capture.claude_proc_start, capture.claude_config_dir)
+        now = (self.deps.callback_dispatcher.now()
+               if self.deps.callback_dispatcher is not None else "1970-01-01T00:00:00Z")
+        self.deps.callback_store.bind(CallbackBinding(record.session_id, state, *route, now))
 
     def _wait(self, session_id, timeout):
         return self.deps.runtime.wait(session_id, timeout)
@@ -370,9 +434,9 @@ class WorkerFacade:
                            details={"policy_state": "incomplete_legacy"}, known_ids=self._known(record),
                            next_actions=self._legacy_actions(record))
 
-    def _registry_fault(self, exc, name):
+    def _registry_fault(self, exc, name, record=None):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Could not read worker registry", "registry_error",
-                           details={"reason": str(exc)}, known_ids=self._known(name=name))
+                           details={"reason": str(exc)}, known_ids=self._known(record, name=name))
 
     def _timeout_fault(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TIMEOUT_ACTIVE, "Timed out while worker turn remains active", "timeout_active",
@@ -451,7 +515,7 @@ class WorkerFacade:
                 next_actions.append(self._raw_resume_action(known["thread_id"]))
             return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
                                known_ids=known, next_actions=next_actions)
-        if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name)
+        if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name, record)
         code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
         details = {"reason": str(exc)}
         if limits:

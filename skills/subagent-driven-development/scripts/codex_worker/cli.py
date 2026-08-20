@@ -386,6 +386,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 def _serve(args: argparse.Namespace) -> int:
     codex = None
     server = None
+    callback_dispatcher = None
     try:
         runtime = RuntimeStore(args.event_limit)
         registry = SessionRegistry(args.state)
@@ -396,8 +397,11 @@ def _serve(args: argparse.Namespace) -> int:
         )
         socket_path = args.socket or default_socket_path()
         broker = WorkerBroker(registry, codex, runtime, socket_path, args.state)
-        facade = _managed_facade(broker, runtime, registry, Path(args.state))
+        facade, callback_dispatcher = _managed_components(
+            broker, runtime, registry, Path(args.state))
         server = RpcServer(socket_path, broker, facade)
+        if callback_dispatcher is not None:
+            callback_dispatcher.start()
         previous_int = signal.getsignal(signal.SIGINT)
         previous_term = signal.getsignal(signal.SIGTERM)
 
@@ -417,6 +421,8 @@ def _serve(args: argparse.Namespace) -> int:
         print("codex-worker daemon failed: %s" % exc, file=sys.stderr)
         return 1
     finally:
+        if callback_dispatcher is not None:
+            callback_dispatcher.shutdown()
         if server is not None:
             server.server_close()
         if codex is not None:
@@ -568,13 +574,29 @@ def _instance_manager(explicit_instance):
     return InstanceManager(InstanceDeps(paths, launcher, "codex", _spawn_daemon, rpc_call, time.monotonic), identity)
 
 
-def _managed_facade(broker, runtime, registry, state_path):
+def _managed_components(broker, runtime, registry, state_path):
     from .facade import FacadeDeps, WorkerFacade
     from .instance import load_managed_identity
+    from .callback_dispatcher import TerminalCallbackDispatcher
+    from .callback_store import CallbackStore
+    from .claude_transport import ClaudeTransport
     from . import projection
     identity = load_managed_identity(state_path)
-    if identity is None: return None
-    return WorkerFacade(FacadeDeps(identity, registry, broker, runtime, projection, time.monotonic))
+    if identity is None: return None, None
+    paths = derive_instance_paths(identity, sys.platform, _managed_state_home(),
+                                  Path(tempfile.gettempdir()), os.getuid())
+    store = CallbackStore(paths.callback_path, paths.callback_artifact_dir)
+    transport = ClaudeTransport()
+    dispatcher = TerminalCallbackDispatcher(store, transport, runtime, projection,
+                                            time.monotonic, transport.deps.now)
+    facade = WorkerFacade(FacadeDeps(identity, registry, broker, runtime, projection,
+                                     time.monotonic, store, dispatcher, transport))
+    return facade, dispatcher
+
+
+def _managed_facade(broker, runtime, registry, state_path):
+    """Compatibility seam for tests and embedders that only need the façade."""
+    return _managed_components(broker, runtime, registry, state_path)[0]
 
 
 def _print_json(payload: JsonObject, pretty: bool) -> None:

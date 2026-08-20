@@ -1,0 +1,195 @@
+import tempfile
+import time
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
+
+from codex_worker.callback_dispatcher import (TerminalCallbackDispatcher,
+                                              TerminalProjectionContext, build_terminal_event)
+from codex_worker.callback_store import CallbackBinding, CallbackStore
+from codex_worker.commands import (AccessMode, CallbackAttemptState,
+                                   CallbackState, CompletionResponse,
+                                   MetricAvailability, MetricEvidence, RecoveryView, Tier,
+                                   TurnView, WorkerView)
+from codex_worker.models import SessionRecord, TurnSnapshot
+from codex_worker.runtime import RuntimeStore
+
+
+class _Projector:
+    def project_completion(self, worker, turn, schema, duration, recovery):
+        return CompletionResponse(worker, TurnView(turn.turn_id, turn.status, None), [], None,
+                                  {"wall_duration_seconds": MetricEvidence(
+                                      duration, "codex-worker", MetricAvailability.MEASURED)}, recovery)
+
+
+class _Transport:
+    def __init__(self, fail=False, oversized=False, on_send=None):
+        self.fail = fail
+        self.oversized = oversized
+        self.sent = []
+        self.concurrent = 0
+        self.maximum = 0
+        self.on_send = on_send
+
+    def encode_user_line(self, binding, event):
+        if self.oversized and event.event == "turn_terminal":
+            from codex_worker.commands import FacadeFault, FacadeFaultCode
+            raise FacadeFault(FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE, "large",
+                              "callback_payload_too_large")
+        return "{}"
+
+    def send(self, binding, event, cc_agent_name):
+        from codex_worker.commands import CallbackAttemptView, FacadeFault, FacadeFaultCode
+        self.concurrent += 1
+        self.maximum = max(self.maximum, self.concurrent)
+        try:
+            if self.on_send is not None:
+                self.on_send(event)
+            self.sent.append(event)
+            if self.fail:
+                raise FacadeFault(FacadeFaultCode.CALLBACK_SEND_FAILED, "safe failure",
+                                  "callback_send_failed", retryable=True)
+            return CallbackAttemptView(event.event_id, CallbackAttemptState.WRITTEN, None,
+                                       "2026-08-20T00:00:01Z", 1)
+        finally:
+            self.concurrent -= 1
+
+
+class DispatcherTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        self.store = CallbackStore(root / "callbacks.json", root / "artifacts")
+        self.runtime = RuntimeStore(10)
+        self.worker = WorkerView("default", "worker-a", "12345678-1234-5678-1234-567812345678",
+                                 "thread-a", str(root.resolve()), Tier.MEDIUM,
+                                 "gpt-5.6-terra", "medium", AccessMode.FULL)
+        self.binding = CallbackBinding(self.worker.session_id, CallbackState.ENABLED,
+                                       "/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                       "start", "/tmp", "2026-08-20T00:00:00Z")
+        self.store.bind(self.binding)
+        self.runtime.attach(SessionRecord(
+            self.worker.session_id, self.worker.thread_id, self.worker.cwd,
+            "2026-08-20T00:00:00Z", "2026-08-20T00:00:00Z", self.worker.name,
+            self.worker.model, self.worker.effort, self.worker.tier.value,
+            self.worker.access.value))
+        self.context = TerminalProjectionContext(
+            self.worker, None, 10.0,
+            RecoveryView("status", "messages", "interrupt", "resume"))
+
+    def _dispatcher(self, transport=None, backoff=0.01):
+        return TerminalCallbackDispatcher(self.store, transport or _Transport(), self.runtime,
+                                          _Projector(), lambda: 12.0,
+                                          lambda: "2026-08-20T00:00:01Z", backoff)
+
+    def _wait(self, predicate):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if predicate(): return
+            time.sleep(0.01)
+        self.fail("condition was not reached")
+
+    def test_builder_preserves_exact_public_completion_for_all_terminal_statuses(self):
+        for status in ("completed", "failed", "interrupted"):
+            completion = _Projector().project_completion(
+                self.worker, TurnSnapshot("turn-" + status, status, None, []), None, 2.0,
+                self.context.recovery)
+            event = build_terminal_event(completion, "2026-08-20T00:00:01Z")
+            self.assertEqual(event.payload, {"completion": completion.to_dict()})
+            self.assertEqual(event.priority, "next")
+            self.assertEqual(event.event, "turn_terminal")
+
+    def test_observe_closes_completion_before_registration(self):
+        transport = _Transport()
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start()
+        self.addCleanup(dispatcher.shutdown)
+        self.runtime.reserve_start(self.worker.session_id)
+        self.runtime.reconcile_start(self.worker.session_id, "turn-1")
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.worker.thread_id,
+            "turn": {"id": "turn-1", "status": "completed"},
+        }})
+        self.assertEqual(transport.sent, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-1", self.context)
+        self._wait(lambda: len(transport.sent) == 1)
+        self.assertEqual(len(transport.sent), 1)
+        self.assertEqual(self.store.pending(), [])
+
+    def test_observer_delivers_after_nonterminal_wait_and_overlap_is_idempotent(self):
+        transport = _Transport()
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        self.runtime.reserve_start(self.worker.session_id)
+        self.runtime.reconcile_start(self.worker.session_id, "turn-later")
+        dispatcher.observe_turn(self.worker.session_id, "turn-later", self.context)
+        self.assertEqual(transport.sent, [])
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.worker.thread_id,
+            "turn": {"id": "turn-later", "status": "interrupted"},
+        }})
+        dispatcher.queue(self.context, self.runtime.terminal_snapshot(
+            self.worker.session_id, "turn-later"))
+        self._wait(lambda: len(transport.sent) == 1)
+        self.assertEqual(len(transport.sent), 1)
+
+    def test_event_is_durable_before_transport_connect(self):
+        observed = []
+        def on_send(event):
+            observed.append([entry.event_id for entry in self.store.pending()])
+        transport = _Transport(on_send=on_send)
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        dispatcher.queue(self.context, TurnSnapshot("turn-durable", "completed", None, []))
+        self._wait(lambda: len(transport.sent) == 1)
+        self.assertEqual(observed, [[transport.sent[0].event_id]])
+
+    def test_oversized_inline_publishes_verified_reference(self):
+        transport = _Transport(oversized=True)
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        dispatcher.queue(self.context, TurnSnapshot("turn-big", "completed", None, []))
+        self._wait(lambda: len(transport.sent) == 1)
+        event = transport.sent[0]
+        self.assertEqual(event.event, "turn_terminal_reference")
+        artifact = event.payload["artifact"]
+        self.assertTrue(Path(artifact["path"]).is_file())
+        self.assertEqual(artifact["size_bytes"], Path(artifact["path"]).stat().st_size)
+
+    def test_recovery_retries_same_id_increases_attempt_and_written_is_not_replayed(self):
+        failing = _Transport(fail=True)
+        first = self._dispatcher(failing, backoff=0.05)
+        first.start()
+        first.queue(self.context, TurnSnapshot("turn-retry", "completed", None, []))
+        self._wait(lambda: self.store.pending()[0].attempt_count >= 1)
+        event_id = self.store.pending()[0].event_id
+        first.shutdown(0.2)
+        succeeding = _Transport()
+        second = self._dispatcher(succeeding)
+        second.start(); self.addCleanup(second.shutdown)
+        self._wait(lambda: not self.store.pending())
+        self.assertEqual(succeeding.sent[0].event_id, event_id)
+        self.assertGreaterEqual(self.store.binding(self.worker.session_id).last_terminal_attempt.attempt_count, 2)
+        second.shutdown()
+        third_transport = _Transport()
+        third = self._dispatcher(third_transport); third.start(); third.shutdown()
+        self.assertEqual(third_transport.sent, [])
+
+    def test_single_consumer_handles_multiple_pending_and_shutdown_is_bounded(self):
+        transport = _Transport()
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start()
+        for number in range(3):
+            dispatcher.queue(self.context, TurnSnapshot("turn-%s" % number, "completed", None, []))
+        self._wait(lambda: len(transport.sent) == 3)
+        started = time.monotonic(); dispatcher.shutdown(0.2)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(transport.maximum, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

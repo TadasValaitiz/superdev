@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
-from codex_worker.commands import (AccessMode, Err, FacadeFaultCode, GoalSetRequest,
+from codex_worker.commands import (AccessMode, CallbackCapture, CallbackState, Err, FacadeFaultCode, GoalSetRequest,
                                    GoalShowRequest, InterruptWorkerRequest, LimitsRequest,
                                    Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
                                    WorkerHistoryRequest, WorkerMessagesRequest,
@@ -20,6 +20,28 @@ from codex_worker.commands import InstanceSource
 from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
+from codex_worker.callback_store import CallbackStore
+
+
+class _CallbackDispatcher:
+    def __init__(self, calls):
+        self.calls = calls
+        self.observed = []
+        self.now = lambda: "2026-08-20T00:00:00Z"
+        self.failure = None
+
+    def observe_turn(self, session_id, turn_id, context):
+        self.calls.append("callback_observe")
+        self.observed.append((session_id, turn_id, context))
+        if self.failure is not None:
+            raise self.failure
+
+
+class _CallbackTransport:
+    def __init__(self, calls): self.calls = calls
+    def validate_capture(self, capture):
+        self.calls.append("callback_validate")
+        return capture
 
 
 class _Broker:
@@ -115,6 +137,10 @@ class FacadeTests(unittest.TestCase):
         self.broker = _Broker(self.registry, self.runtime)
         self.native = _Native(self.broker.calls)
         self.broker.codex = self.native
+        self.callback_store = CallbackStore(Path(self.cwd) / "callbacks.json",
+                                            Path(self.cwd) / "callback-artifacts")
+        self.callback_dispatcher = _CallbackDispatcher(self.broker.calls)
+        self.callback_transport = _CallbackTransport(self.broker.calls)
 
     def tearDown(self):
         self.tempdir.cleanup()
@@ -150,6 +176,45 @@ class FacadeTests(unittest.TestCase):
         self.assertTrue(record.common_policy_complete)
         self.assertIsNone(record.tier)
         self.assertEqual((record.model, record.effort), ("raw-model", "high"))
+
+    def test_start_validates_and_persists_binding_before_exact_turn_observation(self):
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                  "process-start", "/tmp")
+
+        result = self._facade().start(StartWorkerRequest(
+            "callback-order", "begin", self.cwd, callback_capture=capture))
+
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(self.broker.calls[:4], ["callback_validate", "session_start",
+                                                 "turn_start", "callback_observe"])
+        binding = self.callback_store.binding(result.value.worker.session_id)
+        self.assertEqual(binding.state, CallbackState.ENABLED)
+        self.assertEqual(self.callback_dispatcher.observed[0][1], "turn-1")
+
+    def test_callback_observation_failure_does_not_change_completion_response(self):
+        self.callback_dispatcher.failure = OSError("callback persistence unavailable")
+
+        actual = self._facade().start(StartWorkerRequest(
+            "callback-failure", "begin", self.cwd, no_callback=True))
+
+        self.assertIsInstance(actual, Ok)
+        record = self.registry.resolve_name("callback-failure")
+        self.assertEqual(actual.value.to_dict(), self._completion_dict(record))
+
+    def test_binding_storage_failure_refuses_before_first_turn_with_recovery_ids(self):
+        class BrokenStore:
+            def bind(self, binding): raise OSError("disk unavailable")
+        facade = self._facade()
+        object.__setattr__(facade.deps, "callback_store", BrokenStore())
+
+        result = facade.start(StartWorkerRequest(
+            "binding-failure", "begin", self.cwd, no_callback=True))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.code, FacadeFaultCode.REGISTRY_ERROR)
+        self.assertNotIn("turn_start", self.broker.calls)
+        self.assertIsNotNone(result.error.known_ids["session_id"])
+        self.assertEqual(result.error.known_ids["thread_id"], "thread-1")
 
     def test_unsupported_effort_offers_shell_safe_corrected_raw_model_start(self):
         self.broker.model_list = lambda: {"models": [{
@@ -227,7 +292,9 @@ class FacadeTests(unittest.TestCase):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         return WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"),
                                        self.registry, self.broker, self.runtime,
-                                       __import__("codex_worker.projection", fromlist=["x"]), lambda: 1.0))
+                                       __import__("codex_worker.projection", fromlist=["x"]), lambda: 1.0,
+                                       self.callback_store, self.callback_dispatcher,
+                                       self.callback_transport))
 
     def _record(self, name="worker", tier="medium", access="full"):
         record = self.registry.create_worker("thread-" + name, self.cwd, name, tier,

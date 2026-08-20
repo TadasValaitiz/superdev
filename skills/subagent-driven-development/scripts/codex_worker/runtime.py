@@ -3,7 +3,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Optional
+from typing import Callable, Deque, Dict, List, Optional
 
 from .models import (
     ErrorDetail,
@@ -71,6 +71,30 @@ class RuntimeStore:
         self._lock = threading.RLock()
         self._sessions = {}  # type: Dict[str, _SessionRuntime]
         self._thread_sessions = {}  # type: Dict[str, str]
+        self._terminal_observers = []  # type: List[Callable[[str, TurnSnapshot], None]]
+
+    def add_terminal_observer(self, observer: Callable[[str, TurnSnapshot], None]) -> None:
+        if not callable(observer):
+            raise ValueError("terminal observer must be callable")
+        with self._lock:
+            if observer not in self._terminal_observers:
+                self._terminal_observers.append(observer)
+
+    def terminal_snapshot(self, session_id: str, turn_id: str) -> Optional[TurnSnapshot]:
+        runtime = self._get(session_id)
+        with runtime.condition:
+            snapshot = runtime.latest_turn
+            return snapshot if snapshot is not None and snapshot.turn_id == turn_id else None
+
+    def _publish_terminal(self, session_id: str, snapshot: TurnSnapshot) -> None:
+        with self._lock:
+            observers = list(self._terminal_observers)
+        for observer in observers:
+            try:
+                observer(session_id, snapshot)
+            except Exception:
+                # Observation is advisory to runtime truth and must never mutate it.
+                continue
 
     def attach(self, record: SessionRecord) -> None:
         with self._lock:
@@ -125,6 +149,7 @@ class RuntimeStore:
         with self._lock:
             runtimes = list(self._sessions.values())
         for runtime in runtimes:
+            terminal = None
             with runtime.condition:
                 runtime.attached = False
                 lost_turn_id = runtime.active_turn_id
@@ -137,9 +162,12 @@ class RuntimeStore:
                     runtime.latest_turn = TurnSnapshot(
                         lost_turn_id, "failed", reason, items
                     )
+                    terminal = runtime.latest_turn
                 runtime.items.clear()
                 self._append_event(runtime, "transport_error", lost_turn_id, error=reason)
                 runtime.condition.notify_all()
+            if terminal is not None:
+                self._publish_terminal(runtime.record.session_id, terminal)
 
     @staticmethod
     def _thread_id(message: JsonObject) -> Optional[str]:
@@ -182,6 +210,7 @@ class RuntimeStore:
         params = message.get("params")
         if not isinstance(params, dict):
             return
+        terminal = None
         with runtime.condition:
             if method == "turn/started":
                 turn = params.get("turn")
@@ -214,6 +243,7 @@ class RuntimeStore:
                 runtime.latest_turn = TurnSnapshot(
                     turn_id, status, error, items
                 )
+                terminal = runtime.latest_turn
                 self._append_event(runtime, "turn_completed", turn_id, error=error)
                 runtime.condition.notify_all()
             elif method == "item/completed":
@@ -249,6 +279,8 @@ class RuntimeStore:
                 )
                 turn_id = params.get("turnId") if isinstance(params.get("turnId"), str) else None
                 self._append_event(runtime, "approval_declined", turn_id, item_record)
+        if terminal is not None:
+            self._publish_terminal(runtime.record.session_id, terminal)
 
     def status(self, session_id: str) -> RuntimeStatus:
         runtime = self._get(session_id)
