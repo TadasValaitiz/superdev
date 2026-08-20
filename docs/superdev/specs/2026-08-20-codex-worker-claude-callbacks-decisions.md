@@ -584,3 +584,18 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   callback-store `record_terminal_fault`, lifecycle tests, and RPC fault pin.
 - **Revisit-when:** callback persistence moves to a separate process or gains a
   transactional acknowledgment with the Codex turn store.
+
+## D31 — Use the trading repository's ignored worktree root for probes
+**When:** 2026-08-20T13:54:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during Task 6 preflight
+
+- **Trigger:** The planned trading path `.worktrees/codex-worker-callback-probes` was not
+  ignored, while the active checkout already contained unrelated operator work.
+- **Options weighed:** create the unignored path; edit `.gitignore`; or use the repository's
+  established ignored `.claude/worktrees` root.
+- **Decided:** Use `.claude/worktrees/codex-worker-callback-probes` on the same planned
+  branch. This preserves isolation without adding an unrelated ignore-policy change.
+- **Rests on:** D26 and the verified `.git/info/exclude` worktree convention.
+- **Affects:** Task 6 worktree/report paths only; source ownership and commit boundaries
+  are unchanged.
+- **Revisit-when:** the repository adopts a tracked project-level `.worktrees` policy.
