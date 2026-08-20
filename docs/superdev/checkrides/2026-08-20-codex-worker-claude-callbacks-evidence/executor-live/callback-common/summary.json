@@ -1,0 +1,13 @@
+{
+  "result": {
+    "complete_inline_result": true,
+    "delivery_claimed": false,
+    "disabled": "disabled",
+    "standalone": "unavailable",
+    "terminal_event_id": "terminal-cb35cf96ca182c6b0a23bffa35a8566c8560b63653050ab954ff8dafa7b3e8f2",
+    "terminal_written": true
+  },
+  "scenario": "callback-common",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T142929.689217Z-50237-callback-common/transcript.jsonl"
+}

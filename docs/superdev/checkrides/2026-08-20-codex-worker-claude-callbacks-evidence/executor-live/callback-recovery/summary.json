@@ -1,0 +1,20 @@
+{
+  "result": {
+    "artifact_digest_contract": "deterministic immutable-artifact receipt",
+    "failed_terminal_contract": "deterministic dispatcher receipt",
+    "interrupted_event_id": "terminal-2a0a7152de61a6951ae532969fcf7d2eb8f4375a7ec8cefbceafbb206a0d2ab2",
+    "later_terminal_event_id": "terminal-63c0a5f98cb972203d1bda003cffb8685b37b1ab92f0701a2428fe88fa227e1c",
+    "pending_same_id_contract": "deterministic callback-store/dispatcher receipt",
+    "restart_turn_id": "01a01f94-b586-7093-84a7-cc8f06db347f",
+    "terminal_statuses": [
+      "completed",
+      "interrupted"
+    ],
+    "wait_timeout_kind": "timeout_active",
+    "written_event_id": "terminal-63c0a5f98cb972203d1bda003cffb8685b37b1ab92f0701a2428fe88fa227e1c",
+    "written_replayed_after_restart": false
+  },
+  "scenario": "callback-recovery",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T143026.846394Z-55775-callback-recovery/transcript.jsonl"
+}

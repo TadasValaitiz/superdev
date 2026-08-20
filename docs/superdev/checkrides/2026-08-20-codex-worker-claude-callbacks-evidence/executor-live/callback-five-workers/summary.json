@@ -1,0 +1,23 @@
+{
+  "result": {
+    "all_terminal_written": true,
+    "event_ids": [
+      "terminal-89bac53a9d9b1f5bbe17124bc398911b342572c3f455ced2bc05bcb3782f4b80",
+      "terminal-3fe3c8515fe2a98c6ceb94641766332410d83d7ac7fa33f35fda81102d997459",
+      "terminal-8a9ca6d15690706e7271563a30dee952a62f87386e837531b56b9c73a3d2a7fa",
+      "terminal-e73b3a2656fbb11acd50311dd4a051874cb580582654c31569128128a7e5282c",
+      "terminal-cda5f7fd7bec25e66a217c879a5124cf129f0021cc00c2d131655ca3836870ec"
+    ],
+    "names": [
+      "callback-five-86c3ed-one",
+      "callback-five-86c3ed-two",
+      "callback-five-86c3ed-three",
+      "callback-five-86c3ed-four",
+      "callback-five-86c3ed-five"
+    ],
+    "simultaneous_named_worker_count": 5
+  },
+  "scenario": "callback-five-workers",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T143112.522011Z-60620-callback-five-workers/transcript.jsonl"
+}

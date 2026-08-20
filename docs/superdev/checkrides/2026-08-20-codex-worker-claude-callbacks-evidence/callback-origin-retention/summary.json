@@ -1,0 +1,14 @@
+{
+  "result": {
+    "origin_event_ids": [
+      "terminal-53eba4587af0234ce59208a88897455157ba93021ea0474eb626058a65956856",
+      "terminal-9ff53232812c1856c17c130ba9c6ec7773b155e3098096fc2ce8bd69ee9604c1",
+      "terminal-152a89ce2e7418db62382728be5f1e164a1dee88223f7ac2831724b85197a970"
+    ],
+    "persisted_origin_only": true,
+    "replacement_frame_count": 0
+  },
+  "scenario": "callback-origin-retention",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T141313.706567Z-18257-callback-origin-retention/transcript.jsonl"
+}

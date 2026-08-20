@@ -1,0 +1,14 @@
+{
+  "result": {
+    "ambiguous_kind": "callback_target_ambiguous",
+    "credential_scrubbed": true,
+    "disabled_kind": "callback_unavailable",
+    "pid_reuse_kind": "callback_target_stale",
+    "public_secret_scan": "absent",
+    "stale_kind": "callback_target_stale",
+    "unicode_oversize_kind": "callback_payload_too_large"
+  },
+  "scenario": "callback-security",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T143046.042127Z-58379-callback-security/transcript.jsonl"
+}

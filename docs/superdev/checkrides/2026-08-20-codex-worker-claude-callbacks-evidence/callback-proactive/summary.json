@@ -1,0 +1,13 @@
+{
+  "result": {
+    "alternate_event_id": "49d258ff-5482-44d3-9b9a-7d4eb06a881d",
+    "follow_terminal_event_id": "terminal-2f4fd73cdad6b334e893eb11efa1a6dcc2e09b62230fccdb371630dbd66a44c7",
+    "origin_preserved": true,
+    "proactive_event_id": "edd45cb6-9bbe-47c2-b813-36043f74179f",
+    "steer_accepted": true,
+    "terminal_event_id": "terminal-cff7709cf772f245150baeb87a4903fd779891861ed264250c74a8aff38a0f9b"
+  },
+  "scenario": "callback-proactive",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T141247.315360Z-16824-callback-proactive/transcript.jsonl"
+}

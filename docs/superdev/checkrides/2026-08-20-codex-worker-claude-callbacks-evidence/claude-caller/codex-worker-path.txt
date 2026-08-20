@@ -1,0 +1,1 @@
+/Users/tadas/Projects/superdev/.worktrees/codex-worker-claude-callbacks/bin/codex-worker
