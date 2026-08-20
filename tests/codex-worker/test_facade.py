@@ -8,7 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
-from codex_worker.commands import (AccessMode, CallbackCapture, CallbackState, Err, FacadeFaultCode, GoalSetRequest,
+from codex_worker.commands import (AccessMode, CallbackAttemptState, CallbackAttemptView,
+                                   CallbackCapture, CallbackState, Err, FacadeFaultCode, GoalSetRequest,
                                    GoalShowRequest, InterruptWorkerRequest, LimitsRequest,
                                    Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
                                    WorkerHistoryRequest, WorkerMessagesRequest,
@@ -21,6 +22,7 @@ from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
 from codex_worker.callback_store import CallbackStore
+from codex_worker.callback_dispatcher import TerminalCallbackDispatcher
 
 
 class _CallbackDispatcher:
@@ -35,6 +37,15 @@ class _CallbackDispatcher:
         self.observed.append((session_id, turn_id, context))
         if self.failure is not None:
             raise self.failure
+
+    def completion_for(self, session_id, turn_id, snapshot):
+        context = next(item[2] for item in self.observed
+                       if item[0] == session_id and item[1] == turn_id)
+        projection = __import__("codex_worker.projection", fromlist=["x"])
+        return projection.project_completion(context.worker, snapshot, context.output_schema,
+                                             0.0, context.recovery)
+
+    def abandon_completion(self, session_id, turn_id): pass
 
 
 class _CallbackTransport:
@@ -190,6 +201,113 @@ class FacadeTests(unittest.TestCase):
         binding = self.callback_store.binding(result.value.worker.session_id)
         self.assertEqual(binding.state, CallbackState.ENABLED)
         self.assertEqual(self.callback_dispatcher.observed[0][1], "turn-1")
+
+    def test_real_dispatcher_reuses_byte_exact_completion_after_pre_registration_finish(self):
+        class Transport(_CallbackTransport):
+            def __init__(self, calls):
+                super().__init__(calls); self.sent = []
+                self.deps = type("Deps", (), {"now": staticmethod(
+                    lambda: "2026-08-20T00:00:01Z")})()
+            def encode_user_line(self, binding, event): return "{}"
+            def send(inner, binding, event, cc_agent_name):
+                inner.sent.append(event)
+                return CallbackAttemptView(event.event_id, CallbackAttemptState.WRITTEN,
+                                           None, "2026-08-20T00:00:02Z", 1)
+        transport = Transport(self.broker.calls)
+        projection = __import__("codex_worker.projection", fromlist=["x"])
+        dispatcher = TerminalCallbackDispatcher(
+            self.callback_store, transport, self.runtime, projection,
+            lambda: 7.0, transport.deps.now, 0.01)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, projection, lambda: 1.0,
+            self.callback_store, dispatcher, transport))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                  "process-start", "/tmp")
+
+        result = facade.start(StartWorkerRequest(
+            "shared-projection", "begin", self.cwd, callback_capture=capture))
+
+        self.assertIsInstance(result, Ok)
+        deadline = __import__("time").monotonic() + 2
+        while not transport.sent and __import__("time").monotonic() < deadline:
+            __import__("time").sleep(0.01)
+        self.assertEqual(len(transport.sent), 1)
+        self.assertEqual(transport.sent[0].payload["completion"], result.value.to_dict())
+        self.assertEqual(result.value.metrics["wall_duration_seconds"].value, 6.0)
+
+    def test_exact_wait_returns_first_turn_when_fast_successor_finishes_before_wait(self):
+        original = self.broker.start_turn
+        def start_with_successor(spec):
+            result = original(spec)
+            record = self.registry.resolve(IdentifierSelector(session_id=spec.session_id))
+            self.runtime.reserve_start(spec.session_id)
+            self.runtime.reconcile_start(spec.session_id, "turn-2")
+            self.runtime.on_notification({"method": "turn/completed", "params": {
+                "threadId": record.thread_id,
+                "turn": {"id": "turn-2", "status": "completed"},
+            }})
+            return result
+        self.broker.start_turn = start_with_successor
+
+        result = self._facade().start(StartWorkerRequest(
+            "fast-successor", "begin", self.cwd, no_callback=True))
+
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(result.value.turn.turn_id, "turn-1")
+
+    def test_real_wait_timeout_emits_nothing_then_later_same_turn_callback(self):
+        class Transport(_CallbackTransport):
+            def __init__(self, calls): super().__init__(calls); self.sent = []
+            def encode_user_line(self, binding, event): return "{}"
+            def send(inner, binding, event, cc_agent_name):
+                inner.sent.append(event)
+                return CallbackAttemptView(event.event_id, CallbackAttemptState.WRITTEN,
+                                           None, "2026-08-20T00:00:02Z", 1)
+        transport = Transport(self.broker.calls)
+        projection = __import__("codex_worker.projection", fromlist=["x"])
+        dispatcher = TerminalCallbackDispatcher(
+            self.callback_store, transport, self.runtime, projection,
+            lambda: 2.0, lambda: "2026-08-20T00:00:01Z", 0.01)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        def active_start(spec):
+            record = self.registry.resolve(IdentifierSelector(session_id=spec.session_id))
+            self.runtime.reserve_start(spec.session_id)
+            self.runtime.reconcile_start(spec.session_id, "turn-timeout")
+            return {"session_id": spec.session_id, "thread_id": record.thread_id,
+                    "turn_id": "turn-timeout", "status": "in_progress"}
+        self.broker.start_turn = active_start
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, projection, lambda: 1.0,
+            self.callback_store, dispatcher, transport))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                  "process-start", "/tmp")
+
+        result = facade.start(StartWorkerRequest(
+            "later-terminal", "begin", self.cwd, timeout=0.0, callback_capture=capture))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(transport.sent, [])
+        record = self.registry.resolve_name("later-terminal")
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": record.thread_id,
+            "turn": {"id": "turn-timeout", "status": "failed",
+                     "error": {"message": "failed later"}},
+        }})
+        deadline = __import__("time").monotonic() + 2
+        while not transport.sent and __import__("time").monotonic() < deadline:
+            __import__("time").sleep(0.01)
+        self.assertEqual(len(transport.sent), 1)
+        self.assertEqual(transport.sent[0].payload["completion"]["turn"]["turn_id"],
+                         "turn-timeout")
+        deadline = __import__("time").monotonic() + 2
+        while dispatcher.tracked_turn_count() and __import__("time").monotonic() < deadline:
+            __import__("time").sleep(0.01)
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
 
     def test_callback_observation_failure_does_not_change_completion_response(self):
         self.callback_dispatcher.failure = OSError("callback persistence unavailable")
@@ -396,24 +514,24 @@ class FacadeTests(unittest.TestCase):
     def test_no_timeout_uses_one_indefinite_runtime_wait(self):
         waits = []
         original = self.runtime.wait
-        def recording_wait(session_id, timeout):
-            waits.append((session_id, timeout))
-            return original(session_id, timeout)
+        def recording_wait(session_id, timeout, turn_id=None):
+            waits.append((session_id, timeout, turn_id))
+            return original(session_id, timeout, turn_id)
         self.runtime.wait = recording_wait
         result = self._facade().start(StartWorkerRequest("indefinite", "begin", self.cwd))
         self.assertIsInstance(result, Ok)
-        self.assertEqual(waits, [(result.value.worker.session_id, None)])
+        self.assertEqual(waits, [(result.value.worker.session_id, None, "turn-1")])
 
     def test_finite_timeout_preserves_active_ids_and_exact_recovery_actions(self):
         record = self._record("timed")
         waits = []
-        def timeout(session_id, seconds):
-            waits.append((session_id, seconds))
+        def timeout(session_id, seconds, turn_id=None):
+            waits.append((session_id, seconds, turn_id))
             raise __import__("codex_worker.runtime", fromlist=["WaitTimeout"]).WaitTimeout(session_id, "active-turn")
         self.runtime.wait = timeout
         result = self._facade().run(RunWorkerRequest("timed", "continue", timeout=2.5))
         self.assertIsInstance(result, Err)
-        self.assertEqual(waits, [(record.session_id, 2.5)])
+        self.assertEqual(waits, [(record.session_id, 2.5, "turn-1")])
         self.assertEqual(result.error.code, FacadeFaultCode.TIMEOUT_ACTIVE)
         self.assertEqual(result.error.known_ids, {
             "instance": "verified-instance", "name": "timed", "session_id": record.session_id,

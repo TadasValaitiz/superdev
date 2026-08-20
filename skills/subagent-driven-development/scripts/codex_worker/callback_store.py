@@ -207,6 +207,25 @@ class CallbackStore:
                               None, attempted_at, entry.attempt_count))
             self._write(state); return entry
 
+    def record_terminal_fault(self, session_id: str, event_id: str,
+                              error: str, attempted_at: str) -> CallbackAttemptView:
+        """Persist redacted evidence when no valid terminal event could be enqueued."""
+        _nonempty(session_id, "session_id"); _nonempty(event_id, "event_id")
+        _nonempty(error, "error"); _nonempty(attempted_at, "attempted_at")
+        with self._lock:
+            state = self._load()
+            binding = self._binding_from_dict(state["bindings"].get(session_id))
+            if binding is None:
+                raise ValueError("callback binding not found")
+            previous = binding.last_terminal_attempt
+            count = (previous.attempt_count + 1
+                     if previous is not None and previous.event_id == event_id else 1)
+            attempt = CallbackAttemptView(event_id, CallbackAttemptState.FAILED,
+                                          error, attempted_at, count)
+            self._set_attempt(state, session_id, attempt)
+            self._write(state)
+            return attempt
+
     def status_view(self, session_id: str) -> CallbackStatusView:
         with self._lock:
             state = self._load(); binding = self._binding_from_dict(state["bindings"].get(session_id))

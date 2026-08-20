@@ -44,7 +44,8 @@ class BrokerPort(Protocol):
 @runtime_checkable
 class RuntimePort(Protocol):
     def status(self, session_id: str): ...
-    def wait(self, session_id: str, timeout: Optional[float]): ...
+    def wait(self, session_id: str, timeout: Optional[float],
+             turn_id: Optional[str] = None): ...
     def agent_messages(self, session_id: str, tail: int): ...
 
 @runtime_checkable
@@ -65,6 +66,8 @@ class CallbackDispatcherPort(Protocol):
     def now(self) -> str: ...
     def observe_turn(self, session_id: str, turn_id: str,
                      context: TerminalProjectionContext) -> None: ...
+    def completion_for(self, session_id: str, turn_id: str, snapshot) -> CompletionResponse: ...
+    def abandon_completion(self, session_id: str, turn_id: str) -> None: ...
 
 @runtime_checkable
 class CallbackTransportPort(Protocol):
@@ -244,20 +247,26 @@ class WorkerFacade:
         result = self.deps.broker.start_turn(TurnStartSpec(record.session_id, prompt, record.model,
                                                            record.effort, AccessMode(record.access), schema))
         turn_id = result["turn_id"]
+        callback_projection = False
         if self.deps.callback_dispatcher is not None:
             context = TerminalProjectionContext(worker, schema, started, self._recovery(record))
             try:
                 self.deps.callback_dispatcher.observe_turn(record.session_id, turn_id, context)
+                callback_projection = True
             except Exception:
                 # Automatic callbacks are a durable side channel, never terminal truth.
                 pass
         try:
-            turn = self._wait(record.session_id, timeout)
+            turn = self._wait(record.session_id, timeout, turn_id)
         except WaitTimeout as exc:
+            if callback_projection:
+                self.deps.callback_dispatcher.abandon_completion(record.session_id, turn_id)
             return Err(self._timeout_fault(record, exc.turn_id))
-        return Ok(self.deps.projector.project_completion(worker, turn, schema,
-                                                          self.deps.clock() - started,
-                                                          self._recovery(record)))
+        if callback_projection:
+            return Ok(self.deps.callback_dispatcher.completion_for(
+                record.session_id, turn_id, turn))
+        return Ok(self.deps.projector.project_completion(
+            worker, turn, schema, self.deps.clock() - started, self._recovery(record)))
 
     def _bind_callback(self, record, disabled, capture) -> None:
         if self.deps.callback_store is None:
@@ -279,8 +288,8 @@ class WorkerFacade:
                if self.deps.callback_dispatcher is not None else "1970-01-01T00:00:00Z")
         self.deps.callback_store.bind(CallbackBinding(record.session_id, state, *route, now))
 
-    def _wait(self, session_id, timeout):
-        return self.deps.runtime.wait(session_id, timeout)
+    def _wait(self, session_id, timeout, turn_id):
+        return self.deps.runtime.wait(session_id, timeout, turn_id)
 
     def _select_model(self, request):
         model = request.model if request.model is not None else _TIER_MODELS[request.tier]

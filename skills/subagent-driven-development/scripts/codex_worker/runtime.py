@@ -1,7 +1,9 @@
 """Notification-owned, condition-based observable state for Codex sessions."""
 import threading
 import time
+import copy
 from collections import deque
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable, Deque, Dict, List, Optional
 
@@ -58,6 +60,8 @@ class _SessionRuntime:
     awaiting_start_response: bool = False
     observed_start_turn_id: Optional[str] = None
     latest_turn: Optional[TurnSnapshot] = None
+    terminal_turns: "OrderedDict[str, TurnSnapshot]" = field(default_factory=OrderedDict)
+    publishing_terminal_ids: set = field(default_factory=set)
     next_cursor: int = 1
     events: Deque[EventRecord] = field(default_factory=deque)
     items: Dict[str, List[ItemRecord]] = field(default_factory=dict)
@@ -83,15 +87,41 @@ class RuntimeStore:
     def terminal_snapshot(self, session_id: str, turn_id: str) -> Optional[TurnSnapshot]:
         runtime = self._get(session_id)
         with runtime.condition:
-            snapshot = runtime.latest_turn
-            return snapshot if snapshot is not None and snapshot.turn_id == turn_id else None
+            snapshot = runtime.terminal_turns.get(turn_id)
+            return None if snapshot is None else self._copy_snapshot(snapshot)
+
+    def release_terminal_snapshot(self, session_id: str, turn_id: str) -> None:
+        runtime = self._get(session_id)
+        with runtime.condition:
+            runtime.terminal_turns.pop(turn_id, None)
+
+    @staticmethod
+    def _copy_snapshot(snapshot: TurnSnapshot) -> TurnSnapshot:
+        error = (None if snapshot.error is None
+                 else ErrorDetail.from_dict(copy.deepcopy(snapshot.error.to_dict())))
+        items = [ItemRecord.from_dict(copy.deepcopy(item.to_dict())) for item in snapshot.items]
+        return TurnSnapshot(snapshot.turn_id, snapshot.status, error, items)
+
+    def _retain_terminal(self, runtime: _SessionRuntime, snapshot: TurnSnapshot) -> None:
+        runtime.terminal_turns[snapshot.turn_id] = self._copy_snapshot(snapshot)
+        runtime.terminal_turns.move_to_end(snapshot.turn_id)
+        runtime.publishing_terminal_ids.add(snapshot.turn_id)
+        self._trim_terminals(runtime)
+
+    def _trim_terminals(self, runtime: _SessionRuntime) -> None:
+        while len(runtime.terminal_turns) > self._event_limit:
+            removable = next((turn_id for turn_id in runtime.terminal_turns
+                              if turn_id not in runtime.publishing_terminal_ids), None)
+            if removable is None:
+                return
+            del runtime.terminal_turns[removable]
 
     def _publish_terminal(self, session_id: str, snapshot: TurnSnapshot) -> None:
         with self._lock:
             observers = list(self._terminal_observers)
         for observer in observers:
             try:
-                observer(session_id, snapshot)
+                observer(session_id, self._copy_snapshot(snapshot))
             except Exception:
                 # Observation is advisory to runtime truth and must never mutate it.
                 continue
@@ -163,11 +193,15 @@ class RuntimeStore:
                         lost_turn_id, "failed", reason, items
                     )
                     terminal = runtime.latest_turn
+                    self._retain_terminal(runtime, terminal)
                 runtime.items.clear()
                 self._append_event(runtime, "transport_error", lost_turn_id, error=reason)
                 runtime.condition.notify_all()
             if terminal is not None:
                 self._publish_terminal(runtime.record.session_id, terminal)
+                with runtime.condition:
+                    runtime.publishing_terminal_ids.discard(terminal.turn_id)
+                    self._trim_terminals(runtime)
 
     @staticmethod
     def _thread_id(message: JsonObject) -> Optional[str]:
@@ -244,6 +278,7 @@ class RuntimeStore:
                     turn_id, status, error, items
                 )
                 terminal = runtime.latest_turn
+                self._retain_terminal(runtime, terminal)
                 self._append_event(runtime, "turn_completed", turn_id, error=error)
                 runtime.condition.notify_all()
             elif method == "item/completed":
@@ -281,11 +316,16 @@ class RuntimeStore:
                 self._append_event(runtime, "approval_declined", turn_id, item_record)
         if terminal is not None:
             self._publish_terminal(runtime.record.session_id, terminal)
+            with runtime.condition:
+                runtime.publishing_terminal_ids.discard(terminal.turn_id)
+                self._trim_terminals(runtime)
 
     def status(self, session_id: str) -> RuntimeStatus:
         runtime = self._get(session_id)
         with runtime.condition:
-            return RuntimeStatus(runtime.attached, runtime.active_turn_id, runtime.latest_turn)
+            latest = (None if runtime.latest_turn is None
+                      else self._copy_snapshot(runtime.latest_turn))
+            return RuntimeStatus(runtime.attached, runtime.active_turn_id, latest)
 
     def _require_attached(self, runtime: _SessionRuntime) -> None:
         if not runtime.attached:
@@ -340,20 +380,25 @@ class RuntimeStore:
             if runtime.start_pending or runtime.awaiting_start_response or runtime.active_turn_id is not None:
                 raise TurnActive("session has an active or pending turn")
 
-    def wait(self, session_id: str, timeout: Optional[float]) -> TurnSnapshot:
+    def wait(self, session_id: str, timeout: Optional[float],
+             turn_id: Optional[str] = None) -> TurnSnapshot:
         runtime = self._get(session_id)
         if timeout is not None and timeout < 0:
             raise ValueError("timeout must be non-negative")
         deadline = None if timeout is None else time.monotonic() + timeout
         with runtime.condition:
-            while runtime.start_pending or runtime.active_turn_id is not None:
+            while (runtime.start_pending if turn_id is None else False) or (
+                    runtime.active_turn_id is not None and
+                    (turn_id is None or runtime.active_turn_id == turn_id)):
                 remaining = None if deadline is None else deadline - time.monotonic()
                 if remaining is not None and remaining <= 0:
                     raise WaitTimeout(session_id, runtime.active_turn_id)
                 runtime.condition.wait(remaining)
-            if runtime.latest_turn is None:
+            terminal = (runtime.latest_turn if turn_id is None
+                        else runtime.terminal_turns.get(turn_id))
+            if terminal is None:
                 raise NoTurn("session has no terminal turn: %s" % session_id)
-            return runtime.latest_turn
+            return self._copy_snapshot(terminal)
 
     def events(self, session_id: str, after: int, limit: int) -> EventPage:
         if type(after) is not int or after < 0:

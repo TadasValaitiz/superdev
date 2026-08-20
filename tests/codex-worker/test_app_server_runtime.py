@@ -228,7 +228,7 @@ class RuntimeStoreTests(unittest.TestCase):
             "item": {"id": "item-%s" % index, "type": "agentMessage", "text": str(index)},
         }}
 
-    def test_all_waiters_observe_same_completion_without_consuming_it(self):
+    def test_all_waiters_observe_equal_copy_isolated_completion_without_consuming_it(self):
         self.store.reserve_start(self.session.session_id)
         self.store.on_notification(self.started())
         self.store.reconcile_start(self.session.session_id, "turn-1")
@@ -238,8 +238,11 @@ class RuntimeStoreTests(unittest.TestCase):
             self.store.on_notification(self.completed())
         snapshots = [future.result() for future in waits]
         self.assertEqual([x.turn_id for x in snapshots], ["turn-1", "turn-1"])
-        self.assertIs(snapshots[0], snapshots[1])
-        self.assertIs(self.store.wait(self.session.session_id, 0), snapshots[0])
+        self.assertEqual(snapshots[0].to_dict(), snapshots[1].to_dict())
+        self.assertIsNot(snapshots[0], snapshots[1])
+        repeated = self.store.wait(self.session.session_id, 0)
+        self.assertEqual(repeated.to_dict(), snapshots[0].to_dict())
+        self.assertIsNot(repeated, snapshots[0])
         self.assertEqual(snapshots[0].items[0].data["text"], "1")
 
     def test_completion_copies_items_into_snapshot_and_releases_raw_bucket(self):

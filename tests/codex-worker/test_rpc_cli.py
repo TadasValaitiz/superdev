@@ -712,6 +712,16 @@ class RpcServerTests(unittest.TestCase):
                 "kind", "retryable", "source", "details", "known_ids", "next_actions",
             })
 
+    def test_registry_storage_fault_rpc_adapter_preserves_all_known_recovery_ids(self):
+        known = {"instance": "instance-a", "name": "worker-a",
+                 "session_id": "session-a", "thread_id": "thread-a", "turn_id": None}
+        fault = FacadeFault(FacadeFaultCode.REGISTRY_ERROR,
+                            "Could not persist callback binding", "registry_error",
+                            known_ids=known)
+        payload = rpc_module.FacadeRpcFault(fault).to_dict()
+        self.assertEqual(payload["code"], -32011)
+        self.assertEqual(payload["data"]["known_ids"], known)
+
 
 @dataclass(frozen=True)
 class CliCase:
