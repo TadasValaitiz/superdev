@@ -18,7 +18,7 @@ through the originating room's inherited Unix socket and child token, but the cu
 probe is not integrated with the worker daemon and would expose routing credentials if
 handed directly to Codex.
 
-This work makes the worker daemon the sole callback relay. A Claude-launched `start`
+This work makes the worker daemon the sole product-supported callback relay. A Claude-launched `start`
 captures its return address automatically; every terminal common-worker turn produces a
 complete callback without Claude polling; and Codex can send a non-blocking proactive
 message through a short named-worker command. Standalone worker use stays independent of
@@ -39,7 +39,7 @@ delivery claims remain honest: a successful socket write is `written`, not `deli
 | R3 | Each common-worker turn that becomes `completed`, `failed`, or `interrupted` emits one versioned terminal callback; the complete projected result is inline when it fits and otherwise available through a verified durable reference; observation timeouts do not notify. | stated | must | Claude receives a bounded terminal notification and can recover the entire result for success and non-success without polling. |
 | R4 | Codex can send a non-blocking proactive message by required worker name, with `next` default priority and explicit `now|later`; Claude may answer later using existing controls. | stated | must | Codex sends while its turn continues, and Claude can correlate and steer/run the worker. |
 | R5 | `cc-agent-name` overrides only one proactive send and never mutates the stored default binding. | stated | must | A redirected message reaches the override target and the terminal callback still reaches the origin. |
-| R6 | The daemon alone holds callback credentials; it removes Claude messaging credentials before spawning Codex, and public JSON, logs, prompts, and Codex execution never expose the socket token or peer-token store. | stated + measured security boundary | must | Child-environment inspection, secret scans, and public-response checks find no callback credential or raw target path. |
+| R6 | The daemon is the only product component that receives, persists, or uses captured callback credentials and the only supported relay; it removes Claude messaging credentials before spawning Codex, and public JSON, logs, prompts, and product-generated child inputs never expose the socket token or peer-token store. Independent same-UID filesystem discovery under the existing worker access policy is outside this boundary. | stated + measured security boundary | must | Child-environment inspection, product secret scans, and public-response checks find no product-propagated callback credential or raw target path. |
 | R7 | Callback attempts report only provable states, never alter the authoritative Codex turn result, and never silently fall back to another target. | stated + measured one-way transport | must | A send failure leaves the turn terminal status intact and exposes a typed callback state/fault. |
 | R8 | Callback binding and a complete bounded outbox entry survive daemon restart while the original Claude room remains live; non-written entries retry with the same event ID under an honest at-least-once write policy, so a crash-window duplicate is possible. | inferred from existing durable-resume goal | must | Restart can resume from persisted payload, never intentionally replays recorded `written`, and exposes stable duplicate identity. |
 | R9 | Default sends revalidate the captured Claude session ID, PID, process start, config root, endpoint, owner/type/mode/ancestors before every write; overrides require exactly one live named identity. | measured protocol + existing socket safety | must | PID reuse, adversarial endpoints, and ambiguous names produce typed refusals before a new write. |
@@ -91,7 +91,7 @@ cannot rewrite Codex's terminal truth.
 
 The domain model gives capture, events, outbox entries, artifacts, and command models
 one vocabulary so the persistence, terminal, proactive, and CLI paths cannot silently
-disagree (serves R1–R10; governed by D1–D22; realizes UC1–UC7).
+disagree (serves R1–R10; governed by D1–D23; realizes UC1–UC7).
 
 #### 5.1.1 The diagram
 
@@ -116,6 +116,15 @@ classDiagram
     claude_config_dir: AbsolutePath|null (secret)
     captured_at: RFC3339
     last_terminal_attempt: CallbackAttempt|null
+  }
+  class CallbackCapture {
+    <<new secret RPC value — no independent identity>>
+    target_socket: AbsolutePath|null
+    child_token: LowerHex32|null
+    claude_session_id: str|null
+    claude_pid: PositiveInt|null
+    claude_proc_start: str|null
+    claude_config_dir: CanonicalAbsolutePath
   }
   class CallbackAttempt {
     <<new value object — identity: event_id>>
@@ -181,6 +190,8 @@ classDiagram
   }
 
   SessionRecord "1" --> "0..1" CallbackBinding : keyed separately by session_id
+  StartWorkerRequest --> "0..1" CallbackCapture : internal managed RPC only
+  CallbackCapture --> CallbackBinding : verified full/root-only snapshot becomes binding
   CallbackBinding --> CallbackAttempt : retains last terminal attempt
   CallbackBinding --> CallbackOutboxEntry : owns pending terminal event
   CallbackOutboxEntry --> CallbackEvent : persists complete bounded event
@@ -221,7 +232,7 @@ never inherit the secret fields accidentally.
 | ADD | `CallbackEvent` v1 | no callback event contract | exact terminal, terminal-reference, and proactive payload kinds share identity/schema/priority | D2, D7, D10, D17, D19 |
 | ADD | `CallbackAttempt` + `CallbackOutboxEntry` | no send state | full bounded pending event, same-ID retries, attempt count, and written commit | D7, D11, D16 |
 | ADD | `CallbackArtifact` | no callback artifact | full oversized terminal result is atomically persisted and referenced by digest and size | D17 |
-| ADD | `StartWorkerRequest.no_callback` and secret `callback_capture` | start ignores Claude messaging env | explicit suppression plus verified ambient capture over owner-only RPC; child env is scrubbed | D8, D15 |
+| ADD | `StartWorkerRequest.no_callback` and strict secret `CallbackCapture` | start ignores Claude messaging env | explicit suppression plus fully typed verified ambient capture over owner-only RPC; child env is scrubbed | D8, D15 |
 | ADD | `MessageWorkerRequest` / `CallbackSendResponse` | no proactive surface | name-routed non-blocking message with one-send override | D4, D5, D9, D10 |
 | ADD | `WorkerStatusResponse.callback` | callback invisible | redacted state, pending terminal count, and last terminal attempt | D7, D16 |
 | INVARIANT-ADD | run preserves callback binding | no binding exists | ambient state cannot replace captured route | D1, D6 |
@@ -234,11 +245,15 @@ never inherit the secret fields accidentally.
 |---|---|
 | One callback binding is keyed by one logical worker session; worker name is resolved before access. | `CallbackStore` typed key API and registry-resolution tests. |
 | Secret fields never appear through `to_dict()` public views, repr, faults, logs, or event payloads. | separate secret/public types, `repr=False`, exhaustive serialization and secret-scan tests. |
+| `CallbackCapture` has exactly six fields and a required canonical safety-checked config root. Its other five fields are either all non-null or all null. In the full form, paths are absolute, token matches lowercase `[0-9a-f]{32}`, PID is positive, session/process-start strings are non-empty, and socket/session/PID/process-start match one live registry record below that root. | strict internal model, no-extra-fields validation, client preflight, and daemon revalidation before persistence. |
+| `no_callback=true` requires `callback_capture=null`; with `no_callback=false`, a full capture becomes enabled, a root-only or null capture becomes unavailable, and the root-only form preserves named-override resolution. Invalid/partial non-null capture is `invalid_params`, never silently downgraded. | `StartWorkerRequest` cross-field validator and exact RPC model tests. |
+| Enabled bindings require all six captured fields; disabled requires all six null; unavailable requires socket/token/session/PID/process-start null and permits only a safely resolved config root or null. | callback-binding constructor, load validator, and state/nullability matrix tests. |
 | `run` cannot mutate a binding and `cc_agent_name` cannot persist. | façade method signatures plus before/after store tests. |
 | Automatic events use `next`; proactive priority is exactly `now|next|later`. | closed `MessagePriority` enum and request validation. |
 | Terminal event IDs are stable for `(session_id, turn_id, event kind)`. | deterministic event-ID function and identity tests. |
 | A persisted `written` entry is never replayed; every non-written retry uses the same complete event and event ID. | callback-store transition validator, crash-window tests, and duplicate-ID assertions. |
 | Every non-written terminal event remains independently addressable until written; a later turn cannot overwrite it. | event-ID-keyed outbox, pending-count projection, and multi-turn failure/restart tests. |
+| A callback artifact is owner-only, immutable, digest-addressed, and published only after its bytes, SHA-256, size, file fsync, and parent fsync are verified; an existing path is accepted only when the same digest and size match. | artifact-store write-once API, atomic publish, tamper/collision tests, and reference read-back. |
 | The serialized user frame stays within the measured Claude line cap. | daemon counts JavaScript UTF-16 code units as `len(line.encode("utf-16-le")) / 2`, excluding the newline, before connect. |
 | Default sends target only the captured Claude identity; PID reuse or registry drift cannot retarget a worker. | registry identity revalidation on session ID, PID, process start, config root, endpoint, owner, type, mode, and ancestors before every write. |
 | Codex app-server children never inherit Claude messaging credentials. | explicit child environment construction removes socket/token variables; child-env regression and secret-scan tests. |
@@ -258,13 +273,20 @@ never inherit the secret fields accidentally.
 
 Capture establishes the stable zero-config route before the first turn, allowing all
 later operations to omit Claude metadata (serves R1, R2, R6, R8; governed by D1, D6,
-D8, D15, D21; realizes UC1, UC3, UC4, UC6).
+D8, D15, D21, D23; realizes UC1, UC3, UC4, UC6).
 
 - **Design:** The client process validates the presence and basic shape of
   `CLAUDE_CODE_MESSAGING_SOCKET`, `CLAUDE_CODE_MESSAGING_TOKEN`,
   `CLAUDE_CODE_SESSION_ID`, and `CLAUDE_PID`. It resolves the matching live registry
   record and captures its process-start value plus the canonical `CLAUDE_CONFIG_DIR`
-  root. Those secret fields travel only over the owner-only managed RPC socket.
+  root. It constructs the strict six-field secret `CallbackCapture` containing exactly
+  `target_socket`, `child_token`, `claude_session_id`, `claude_pid`,
+  `claude_proc_start`, and `claude_config_dir`. A complete live identity populates all
+  fields; if only a safe config root is available, the first five fields are null; if no
+  safe root exists, the capture itself is null. All field and cross-field rules are in
+  §5.1.4 and extra fields are rejected. Those secret fields travel only over the
+  owner-only managed RPC socket, and the daemon independently revalidates the complete
+  snapshot before persisting it.
   `--no-callback` writes a `disabled` binding with nullable secret fields; incomplete or
   absent ambient identity writes `unavailable` with nullable secret fields while still
   retaining the canonical, safety-checked Claude config root when one can be resolved at
@@ -280,14 +302,14 @@ D8, D15, D21; realizes UC1, UC3, UC4, UC6).
 - **Interface / contract:** public state is enabled/disabled/unavailable plus a redacted
   last attempt. Secrets are neither annotations nor recoverable from public RPC.
 - **Depends on:** instance paths, atomic persistence, session creation, CLI env capture.
-- **Serves:** R1, R2, R6, R8 · **Governed by:** D1, D6, D8, D15, D21 ·
+- **Serves:** R1, R2, R6, R8 · **Governed by:** D1, D6, D8, D15, D21, D23 ·
   **Realizes:** UC1, UC3, UC4, UC6.
 
 ### 5.3 Claude transport and override resolution
 
 The transport turns one validated callback event into the exact measured Claude peer
-frames without leaking the capability to Codex (serves R5, R6, R9, R10; governed by
-D2, D5, D6, D10, D11, D15, D20, D21; realizes UC2, UC3, UC7).
+frames without product-managed credential propagation to Codex (serves R5, R6, R9,
+R10; governed by D2, D5, D6, D10, D11, D15, D20, D21, D23; realizes UC2, UC3, UC7).
 
 - **Design:** A stdlib-only transport validates absolute socket paths with `lstat`, owner,
   socket type, exact restrictive mode, and safe ancestor rules before connecting. The
@@ -331,8 +353,8 @@ D11, D16, D17, D19, D20; realizes UC1, UC5, UC6).
   accepted the frame but before the written commit can therefore create a duplicate;
   the receiver can correlate it by event ID. A recorded `written` entry is never
   intentionally replayed. If the inline terminal envelope exceeds the cap, the daemon
-  atomically persists the full completion result in the callback artifact directory,
-  verifies its SHA-256 digest and byte size, and instead queues a bounded
+  publishes the full completion result once through the owner-only callback artifact
+  store, fsyncs and verifies its SHA-256 digest and byte size, and instead queues a bounded
   `turn_terminal_reference` event containing that path, digest, and size. It does not
   truncate or chunk the report. The callback operation is bounded and its outcome cannot
   replace or mutate the completion result.
@@ -395,7 +417,8 @@ realizes UC1–UC4).
 ### 5.7 Failure, security, and observability
 
 Honest failure semantics keep callback convenience from weakening worker truth or local
-security (serves R6, R7, R8, R9, R11; governed by D2, D7, D11, D15–D17, D20, D21;
+security (serves R6, R7, R8, R9, R11; governed by D2, D7, D11, D15–D17, D20, D21,
+D23;
 realizes UC4–UC6).
 
 - **Design:** Automatic send failure is persisted and projected through status but never
@@ -409,18 +432,18 @@ realizes UC4–UC6).
   worker's durable state and is never removed by daemon stop. Proactive attempts are
   returned to the caller and need no durable history. Transport logs carry event ID,
   worker name, attempt count, outcome, and redacted reason only. PID reuse, registry
-  identity drift, secret leakage, and Unicode boundary violations are distinct tested
-  refusals.
+  identity drift, product-managed secret propagation, and Unicode boundary violations
+  are distinct tested boundaries.
 - **Interface / contract:** no delivery claim, no wrong-target fallback, no turn-status
   mutation, no state deletion during stop.
 - **Depends on:** callback store, typed faults, status projection, non-destructive stop.
 - **Serves:** R6, R7, R8, R9, R11 · **Governed by:** D2, D7, D11, D15–D17, D20,
-  D21 · **Realizes:** UC4, UC5, UC6.
+  D21, D23 · **Realizes:** UC4, UC5, UC6.
 
 ### 5.8 Probe and checkride evidence
 
 The evidence lane separates transport discovery from product acceptance while proving
-both against a real responsive Claude room (serves R9–R12; governed by D11, D12, D14–D20;
+both against a real responsive Claude room (serves R9–R12; governed by D11, D12, D14–D23;
 realizes UC7 and closes UC1–UC6 at the product gate).
 
 - **Design:** The trading-platform source repository adds two stdlib-only probes that
@@ -430,15 +453,16 @@ realizes UC7 and closes UC1–UC6 at the product gate).
   in an append-only JSONL mailbox correlated by event ID. Product integration receives
   deterministic fast coverage plus a real CLI checkride: Claude launches Codex, Codex
   proactively messages and continues, terminal completion arrives without polling, and
-  failed/interrupted/no-callback/override journeys are exercised. Deterministic probes
-  also cover environment scrubbing, captured-process identity and PID reuse, durable
-  same-ID replay after a non-written attempt, artifact-backed oversized terminal
-  reports, and ASCII/non-BMP UTF-16 cap boundaries. Existing native Claude and raw
-  compatibility are rerun.
+  failed/interrupted/no-callback/override journeys are exercised. The two source-repo
+  transport probes cover only measured envelope construction, target resolution, wire
+  write, and pong correlation. Product fast tests separately cover environment
+  scrubbing, captured-process identity and PID reuse, durable same-ID replay after a
+  non-written attempt, artifact immutability/read-back, and ASCII/non-BMP UTF-16 cap
+  boundaries. Existing native Claude and raw compatibility are rerun.
 - **Interface / contract:** probe evidence is MEASURED and version-labelled; candidate
   transport claims remain labelled until driven.
 - **Depends on:** source research repository, `orchestrator-original`, CLI checkride.
-- **Serves:** R9, R10, R11, R12 · **Governed by:** D11, D12, D14–D20 · **Realizes:**
+- **Serves:** R9, R10, R11, R12 · **Governed by:** D11, D12, D14–D23 · **Realizes:**
   UC7 and validates UC1–UC6.
 
 ## 6. Decisions
@@ -504,8 +528,9 @@ realizes UC7 and closes UC1–UC6 at the product gate).
 - **Why:** safe normal behavior plus deliberate urgency.
 - **Revisit-when:** Claude priority semantics change.
 
-### D11 — Make the daemon the sole callback relay (status: locked)
-- **Decision:** choose daemon relay; probes mirror its boundary.
+### D11 — Make the daemon the sole supported callback relay (status: refined by D23)
+- **Decision:** choose the daemon as the only product-supported relay; probes mirror its
+  boundary. D23 clarifies this is not a same-UID filesystem sandbox.
 - **Alternatives:** direct scripts duplicate policy; sidecar overbuilds lifecycle.
 - **Why:** best composition with existing named-worker RPC.
 - **Revisit-when:** several non-worker tools need a shared relay.
@@ -529,13 +554,14 @@ realizes UC7 and closes UC1–UC6 at the product gate).
 - **Why:** one authoritative home per artifact, connected by explicit evidence links.
 - **Revisit-when:** the transport becomes a supported reusable Superdev library.
 
-### D15 — Bind process identity and scrub the Codex child environment (status: locked)
+### D15 — Bind process identity and scrub the Codex child environment (status: refined by D23)
 - **Decision:** capture Claude session ID, PID, process start, config root, and endpoint;
   remove the messaging socket/token from every Codex app-server child.
 - **Alternatives:** endpoint-only binding permits PID/socket reuse; inherited credentials
   let Codex bypass the relay.
-- **Why:** the daemon must retain both target integrity and sole possession of the send
-  capability.
+- **Why:** the product must retain target integrity and avoid handing the send capability
+  to Codex through managed environment, prompts, JSON, or logs; D23 scopes the claim
+  against independent same-UID filesystem access.
 - **Revisit-when:** Claude publishes a stable, delegated callback capability.
 
 ### D16 — Durable at-least-once writes with stable duplicate identity (status: locked)
@@ -600,6 +626,17 @@ realizes UC7 and closes UC1–UC6 at the product gate).
   a closed kind/code vocabulary.
 - **Revisit-when:** the JSON-RPC public error registry is versioned.
 
+### D23 — Scope credential isolation to product-managed propagation (status: locked)
+- **Decision:** the product never injects, serializes, logs, or documents raw callback
+  credentials for Codex and exposes only the daemon relay. It does not claim to prevent a
+  same-UID worker with filesystem-read access from independently inspecting Claude's
+  own registry/key files.
+- **Alternatives:** claiming a hard sandbox contradicts the approved full/read-only
+  access modes; adding a new OS sandbox changes worker semantics and scope.
+- **Why:** this is an accidental-exposure and supported-interface boundary, not a hostile
+  local-process security boundary.
+- **Revisit-when:** worker execution gains an enforceable per-process filesystem sandbox.
+
 ## 7. Assumptions & open questions
 
 | ID | Assumption / question | Affects | Status |
@@ -622,8 +659,11 @@ execution.
 - MCP, cloud bridge, PTY injection, or remote callbacks — this is same-machine Claude
   peer-inbox integration only.
 - Delivery claims the wire cannot prove — `written` is the strongest normal result.
-- Arbitrary Codex access to Claude session registries, peer-token stores, sockets, or
-  callback credentials — only the daemon relay gets those capabilities.
+- Product-managed Codex access to Claude session registries, peer-token stores, sockets,
+  or callback credentials — only the daemon relay is supported and receives injected
+  secrets. This feature does not add a same-UID filesystem sandbox: a worker whose
+  existing full/read access permits `~/.claude` could independently inspect those files,
+  which is outside this callback boundary.
 - A production-grade generic messaging CLI in the trading repository — its two scripts
   are technical probes; production surface lives in Superdev.
 - Automatic retry of recorded `written` events — non-written events retry with the same
@@ -641,7 +681,7 @@ execution.
 | AH5 | Completed, failed, and interrupted turns notify; a wait timeout does not masquerade as completion. | UC5 / R3, R7 | fast + live | |
 | AH6 | Standalone and explicitly callback-disabled workers retain the ordinary worker experience with honest callback state. | UC4 / R1, R11 | fast + live | |
 | AH7 | A daemon restart retains the complete non-written callback, retries it with the same event ID, exposes the possible crash-window duplicate, and never intentionally replays a recorded `written` event. | UC6 / R8 | fast process scenario | |
-| AH8 | Callback transport scrubs Codex child credentials and rejects unsafe, PID-reused, identity-drifted, Unicode-oversized, missing, and ambiguous targets without leaking secrets or changing turn truth. | UC3–UC6 / R6, R7, R9, R10 | fast + refusal checkride | |
+| AH8 | Callback transport scrubs product-provided Codex child credentials and rejects unsafe, PID-reused, identity-drifted, Unicode-oversized, missing, and ambiguous targets without product-propagating secrets or changing turn truth. | UC3–UC6 / R6, R7, R9, R10 | fast + refusal checkride | |
 | AH9 | Both stdlib probes send versioned events to `orchestrator-original`, whose append-only pongs correlate by event ID. | UC7 / R12 | live probe | |
 | AH10 | Existing native Claude, raw worker methods, model/access policy, recovery, and non-destructive stop still work without MCP or cloud messaging. | UC1–UC6 / R11 | fast + live compatibility | |
 | AH11 | Every callback client outcome is exactly one JSON object and distinguishes written from delivered. | UC2, UC3, UC7 / R7, R10 | fast + live | |

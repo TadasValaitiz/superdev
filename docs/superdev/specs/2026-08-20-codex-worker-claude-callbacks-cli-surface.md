@@ -24,6 +24,25 @@ Before the daemon launches Codex, it removes `CLAUDE_CODE_MESSAGING_SOCKET` and
 `CLAUDE_CODE_MESSAGING_TOKEN` from the child environment. Disabled/unavailable bindings
 carry nullable secret fields; they never synthesize empty paths or tokens.
 
+The internal `CallbackCapture` JSON object has exactly these six fields and accepts no
+extras:
+
+| Field | Type / validation |
+|---|---|
+| `target_socket` | null, or an absolute non-symlink Unix-socket path equal to the selected live registry record |
+| `child_token` | null, or exactly 32 lowercase hexadecimal characters |
+| `claude_session_id` | null, or a non-empty string equal to the selected registry `sessionId` |
+| `claude_pid` | null, or a positive integer equal to ambient `CLAUDE_PID`, the selected registry PID, and the measured numeric socket-basename convention |
+| `claude_proc_start` | null, or a non-empty string equal to the selected registry `procStart` |
+| `claude_config_dir` | canonical absolute, owner/safe-ancestor-validated Claude config root used for every later registry lookup |
+
+The first five fields are either all non-null (a full enabled capture) or all null (a
+root-only unavailable capture); partial identity is invalid. `no_callback=true` requires
+`callback_capture=null`. With `no_callback=false`, a full capture means enabled, while a
+root-only or null capture means unavailable. A malformed non-null object is
+`invalid_params`, not a silent downgrade. The client preflights the object and the daemon
+revalidates it before persistence.
+
 ### 1b. Composition rationale
 
 Capture stays part of `start` because there is no operator decision between worker
@@ -151,13 +170,16 @@ status family. It is additive to the current runtime fields (D1, D7).
 
 | Method | Purpose | Params | Request/response | Status |
 |---|---|---|---|---|
-| `worker/start` | Existing common start plus internal capture. | Exact `StartWorkerRequest` fields, including `no_callback` and nullable secret `callback_capture`. | `StartWorkerRequest` → existing `CompletionResponse` | EXISTS-REWORK |
+| `worker/start` | Existing common start plus internal capture. | Exact `StartWorkerRequest` fields, including `no_callback` and nullable strict six-field secret `callback_capture` defined in §1. | `StartWorkerRequest` → existing `CompletionResponse` | EXISTS-REWORK |
 | `worker/message` | Relay one proactive event. | Exact `MessageWorkerRequest`: `name`, `message`, `priority`, `cc_agent_name`. | `MessageWorkerRequest` → `CallbackSendResponse` | NEW |
 | `worker/status` | Existing status plus redacted callback view. | Exact `WorkerStatusRequest`: `name`. | `WorkerStatusRequest` → reworked `WorkerStatusResponse` | EXISTS-REWORK |
 
 The owner-only managed Unix socket is the only RPC path for callback capture. Secret
 capture data must not be accepted on raw explicit-socket methods, included in request
 logging, or echoed in faults.
+This is a product-propagation boundary, not a new filesystem sandbox: the callback
+feature does not prevent an existing same-UID full/read-capable worker from independently
+inspecting user-readable Claude files.
 
 ### 4b. Claude callback event envelopes
 

@@ -417,3 +417,27 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** the existing closed `FacadeFaultCode`/`FACADE_FAULT_KINDS` contract.
 - **Affects:** command models, RPC errors, CLI exits, docs, and exhaustive enum tests.
 - **Revisit-when:** the façade introduces a versioned error namespace.
+
+## D23 — Scope credential isolation to product-managed propagation
+**When:** 2026-08-20T09:26:00Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec re-review
+
+- **Trigger:** R6 and earlier D11/D15 prose implied the daemon could exclusively hold
+  Claude credentials even when the approved worker access mode permits the same UID to
+  read `~/.claude/sessions` and peer-token files independently.
+- **Options weighed:**
+  - A: keep the absolute security claim — sounds stronger / is unenforceable and gives a
+    future implementer a false acceptance target.
+  - B: add an OS/filesystem sandbox around Codex — could enforce exclusivity / breaks the
+    approved full-computer and read-only access semantics and greatly expands scope.
+  - C: scope the guarantee to product-managed propagation and the supported relay —
+    truthfully prevents accidental injection/logging / does not defend against a hostile
+    same-UID worker independently reading user files.
+- **Decided:** Take option C. The daemon is the only product component that receives,
+  persists, and uses captured credentials, and Codex children have socket/token variables
+  scrubbed. No product JSON, prompt, log, recovery action, or initialization text exposes
+  those values. Independent same-UID filesystem discovery remains governed by the
+  existing worker access mode and is outside this feature's threat boundary.
+- **Rests on:** the operator-approved full/read-only access behavior and D11/D15.
+- **Affects:** R6, security narrative, tests, documentation, and threat-model claims.
+- **Revisit-when:** Codex workers gain a real per-process filesystem sandbox.
