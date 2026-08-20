@@ -1,7 +1,8 @@
 """Python 3.9-compatible wire and domain models."""
+import copy
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
-import re
 
 JsonObject = Dict[str, Any]
 _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -74,6 +75,17 @@ class TurnSnapshot:
         return {"turn_id": self.turn_id, "status": self.status,
                 "error": self.error.to_dict() if self.error else None,
                 "items": [item.to_dict() for item in self.items]}
+
+
+def copy_turn_snapshot(snapshot: TurnSnapshot) -> TurnSnapshot:
+    """Return a recursively isolated snapshot at an in-process boundary."""
+    if not isinstance(snapshot, TurnSnapshot):
+        raise ValueError("invalid turn snapshot")
+    error = (None if snapshot.error is None
+             else ErrorDetail.from_dict(copy.deepcopy(snapshot.error.to_dict())))
+    items = [ItemRecord.from_dict(copy.deepcopy(item.to_dict()))
+             for item in snapshot.items]
+    return TurnSnapshot(snapshot.turn_id, snapshot.status, error, items)
 
 
 @dataclass(frozen=True)

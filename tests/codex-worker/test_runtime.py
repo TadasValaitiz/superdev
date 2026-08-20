@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "script
 
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
+from codex_worker.models import copy_turn_snapshot
 
 
 class RuntimeTerminalObserverTests(unittest.TestCase):
@@ -114,6 +115,14 @@ class RuntimeTerminalObserverTests(unittest.TestCase):
             self.record.session_id, "turn-copy").items[0].data["text"], "original")
         self.assertEqual(self.runtime.status(
             self.record.session_id).latest_turn.items[0].data["nested"]["value"], "original")
+
+    def test_shared_snapshot_copy_kernel_deeply_isolates_nested_values(self):
+        from codex_worker.models import ItemRecord, TurnSnapshot
+        original = TurnSnapshot("copy-kernel", "completed", None, [
+            ItemRecord("item", "agentMessage", {"nested": {"value": "original"}})])
+        copied = copy_turn_snapshot(original)
+        copied.items[0].data["nested"]["value"] = "changed"
+        self.assertEqual(original.items[0].data["nested"]["value"], "original")
 
 
 if __name__ == "__main__":

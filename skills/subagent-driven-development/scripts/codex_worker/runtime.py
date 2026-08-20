@@ -1,7 +1,6 @@
 """Notification-owned, condition-based observable state for Codex sessions."""
 import threading
 import time
-import copy
 from collections import deque
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -16,6 +15,7 @@ from .models import (
     RuntimeStatus,
     SessionRecord,
     TurnSnapshot,
+    copy_turn_snapshot,
 )
 
 
@@ -88,22 +88,15 @@ class RuntimeStore:
         runtime = self._get(session_id)
         with runtime.condition:
             snapshot = runtime.terminal_turns.get(turn_id)
-            return None if snapshot is None else self._copy_snapshot(snapshot)
+            return None if snapshot is None else copy_turn_snapshot(snapshot)
 
     def release_terminal_snapshot(self, session_id: str, turn_id: str) -> None:
         runtime = self._get(session_id)
         with runtime.condition:
             runtime.terminal_turns.pop(turn_id, None)
 
-    @staticmethod
-    def _copy_snapshot(snapshot: TurnSnapshot) -> TurnSnapshot:
-        error = (None if snapshot.error is None
-                 else ErrorDetail.from_dict(copy.deepcopy(snapshot.error.to_dict())))
-        items = [ItemRecord.from_dict(copy.deepcopy(item.to_dict())) for item in snapshot.items]
-        return TurnSnapshot(snapshot.turn_id, snapshot.status, error, items)
-
     def _retain_terminal(self, runtime: _SessionRuntime, snapshot: TurnSnapshot) -> None:
-        runtime.terminal_turns[snapshot.turn_id] = self._copy_snapshot(snapshot)
+        runtime.terminal_turns[snapshot.turn_id] = copy_turn_snapshot(snapshot)
         runtime.terminal_turns.move_to_end(snapshot.turn_id)
         runtime.publishing_terminal_ids.add(snapshot.turn_id)
         self._trim_terminals(runtime)
@@ -121,7 +114,7 @@ class RuntimeStore:
             observers = list(self._terminal_observers)
         for observer in observers:
             try:
-                observer(session_id, self._copy_snapshot(snapshot))
+                observer(session_id, copy_turn_snapshot(snapshot))
             except Exception:
                 # Observation is advisory to runtime truth and must never mutate it.
                 continue
@@ -324,7 +317,7 @@ class RuntimeStore:
         runtime = self._get(session_id)
         with runtime.condition:
             latest = (None if runtime.latest_turn is None
-                      else self._copy_snapshot(runtime.latest_turn))
+                      else copy_turn_snapshot(runtime.latest_turn))
             return RuntimeStatus(runtime.attached, runtime.active_turn_id, latest)
 
     def _require_attached(self, runtime: _SessionRuntime) -> None:
@@ -398,7 +391,7 @@ class RuntimeStore:
                         else runtime.terminal_turns.get(turn_id))
             if terminal is None:
                 raise NoTurn("session has no terminal turn: %s" % session_id)
-            return self._copy_snapshot(terminal)
+            return copy_turn_snapshot(terminal)
 
     def events(self, session_id: str, after: int, limit: int) -> EventPage:
         if type(after) is not int or after < 0:

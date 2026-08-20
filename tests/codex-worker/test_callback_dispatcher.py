@@ -182,6 +182,60 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(dispatcher.test_projector.calls, 1)
         self._wait(lambda: dispatcher.tracked_turn_count() == 0)
 
+    def test_stopped_dispatcher_cannot_strand_synchronous_projection(self):
+        dispatcher = self._dispatcher()
+        snapshot = TurnSnapshot("turn-stopped", "completed", None, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-stopped", self.context)
+        completion = dispatcher.completion_for(
+            self.worker.session_id, "turn-stopped", snapshot)
+        self.assertEqual(completion.turn.turn_id, "turn-stopped")
+        self.assertEqual(dispatcher.test_projector.calls, 1)
+
+    def test_failed_dispatcher_thread_cannot_strand_synchronous_projection(self):
+        dispatcher = self._dispatcher()
+        dispatcher._run = lambda: None
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        snapshot = TurnSnapshot("turn-thread-failed", "completed", None, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-thread-failed", self.context)
+        completion = dispatcher.completion_for(
+            self.worker.session_id, "turn-thread-failed", snapshot)
+        self.assertEqual(completion.turn.turn_id, "turn-thread-failed")
+        self.assertEqual(dispatcher.test_projector.calls, 1)
+
+    def test_shutdown_race_wakes_and_allows_synchronous_projection(self):
+        dispatcher = self._dispatcher()
+        worker_entered = threading.Event(); release_worker = threading.Event()
+        def stalled_worker():
+            worker_entered.set(); release_worker.wait(1)
+        dispatcher._run = stalled_worker
+        dispatcher.start(); self.assertTrue(worker_entered.wait(1))
+        snapshot = TurnSnapshot("turn-shutdown", "completed", None, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-shutdown", self.context)
+        completed = []
+        caller = threading.Thread(target=lambda: completed.append(dispatcher.completion_for(
+            self.worker.session_id, "turn-shutdown", snapshot)))
+        caller.start(); caller.join(0.2)
+        self.assertFalse(caller.is_alive())
+        shutdown = threading.Thread(target=dispatcher.shutdown)
+        shutdown.start(); release_worker.set(); shutdown.join(1)
+        self.assertFalse(shutdown.is_alive())
+        completion = completed[0]
+        self.assertEqual(completion.turn.turn_id, "turn-shutdown")
+        self.assertEqual(dispatcher.test_projector.calls, 1)
+
+    def test_contextless_raw_terminal_does_not_enter_dispatcher_cache(self):
+        dispatcher = self._dispatcher()
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        self.runtime.reserve_start(self.worker.session_id)
+        self.runtime.reconcile_start(self.worker.session_id, "raw-turn")
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.worker.thread_id,
+            "turn": {"id": "raw-turn", "status": "completed"},
+        }})
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+        self.assertIsNotNone(self.runtime.terminal_snapshot(
+            self.worker.session_id, "raw-turn"))
+
     def test_slow_store_does_not_block_runtime_notification_thread(self):
         entered = threading.Event(); release = threading.Event()
         original = self.store.enqueue_terminal

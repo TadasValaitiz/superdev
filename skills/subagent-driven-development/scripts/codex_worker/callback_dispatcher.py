@@ -8,7 +8,7 @@ from typing import Callable, Dict, Optional, Tuple
 from .callback_store import CallbackEvent, CallbackOutboxEntry, CallbackStore
 from .commands import (CallbackState, CompletionResponse, FacadeFault,
                        FacadeFaultCode, RecoveryView, WorkerView)
-from .models import ErrorDetail, ItemRecord, TurnSnapshot
+from .models import TurnSnapshot, copy_turn_snapshot
 
 
 SCHEMA = "codex-worker.claude-callback/v1"
@@ -50,14 +50,6 @@ class TerminalProjectionContext:
             self.started_at, RecoveryView.from_dict(self.recovery.to_dict()))
 
 
-def _copy_snapshot(snapshot: TurnSnapshot) -> TurnSnapshot:
-    error = (None if snapshot.error is None
-             else ErrorDetail.from_dict(copy.deepcopy(snapshot.error.to_dict())))
-    return TurnSnapshot(snapshot.turn_id, snapshot.status, error,
-                        [ItemRecord.from_dict(copy.deepcopy(item.to_dict()))
-                         for item in snapshot.items])
-
-
 class TerminalCallbackDispatcher:
     """Own terminal projection, durable queueing, and the only automatic sender."""
 
@@ -78,6 +70,7 @@ class TerminalCallbackDispatcher:
         self._snapshots = {}  # type: Dict[Tuple[str, str], TurnSnapshot]
         self._completions = {}  # type: Dict[Tuple[str, str], CompletionResponse]
         self._projection_errors = {}  # type: Dict[Tuple[str, str], BaseException]
+        self._projection_owners = set()
         self._processing = set()
         self._callback_done = set()
         self._client_done = set()
@@ -124,16 +117,23 @@ class TerminalCallbackDispatcher:
         self._handoff(session_id, snapshot)
         self.runtime.release_terminal_snapshot(session_id, turn_id)
         with self._condition:
-            while key not in self._completions and key not in self._projection_errors:
-                self._condition.wait()
-            self._client_done.add(key)
-            if key in self._projection_errors:
-                error = self._projection_errors[key]
+            context = self._contexts[key]
+            isolated = self._snapshots[key]
+        try:
+            completion = self._project_once(key, context, isolated)
+        except BaseException:
+            with self._condition:
+                self._client_done.add(key)
+                if not self._worker_available():
+                    self._callback_done.add(key)
                 self._cleanup(key)
-                raise error
-            completion = CompletionResponse.from_dict(self._completions[key].to_dict())
+            raise
+        with self._condition:
+            self._client_done.add(key)
+            if not self._worker_available():
+                self._callback_done.add(key)
             self._cleanup(key)
-            return completion
+        return CompletionResponse.from_dict(completion.to_dict())
 
     def abandon_completion(self, session_id: str, turn_id: str) -> None:
         key = (session_id, turn_id)
@@ -144,7 +144,8 @@ class TerminalCallbackDispatcher:
     def tracked_turn_count(self) -> int:
         with self._condition:
             return len(set(self._contexts) | set(self._snapshots) | set(self._completions)
-                       | set(self._projection_errors) | set(self._processing))
+                       | set(self._projection_errors) | set(self._projection_owners)
+                       | set(self._processing))
 
     def shutdown(self, timeout: float = 6.0) -> None:
         with self._condition:
@@ -160,10 +161,12 @@ class TerminalCallbackDispatcher:
                 self._started = False
 
     def _on_terminal(self, session_id: str, snapshot: TurnSnapshot) -> None:
-        self._handoff(session_id, snapshot)
         key = (session_id, snapshot.turn_id)
         with self._condition:
+            if key not in self._contexts:
+                return
             abandoned = key in self._client_done
+        self._handoff(session_id, snapshot)
         if abandoned:
             self.runtime.release_terminal_snapshot(session_id, snapshot.turn_id)
 
@@ -171,7 +174,7 @@ class TerminalCallbackDispatcher:
         if snapshot.status not in _TERMINAL_STATUSES:
             return
         key = (session_id, snapshot.turn_id)
-        isolated = _copy_snapshot(snapshot)
+        isolated = copy_turn_snapshot(snapshot)
         with self._condition:
             existing = self._snapshots.get(key)
             if existing is None:
@@ -221,23 +224,12 @@ class TerminalCallbackDispatcher:
 
     def _process_terminal(self, key, context, snapshot) -> None:
         event_id = terminal_event_id(key[0], key[1], "turn_terminal")
-        with self._condition:
-            completion = self._completions.get(key)
-        if completion is None:
-            try:
-                duration = max(0.0, self.monotonic() - context.started_at)
-                completion = self.projector.project_completion(
-                    context.worker, snapshot, context.output_schema, duration, context.recovery)
-            except Exception as exc:
-                with self._condition:
-                    self._projection_errors[key] = exc
-                    self._condition.notify_all()
-                self._record_fault_until_stopping(key[0], event_id, type(exc).__name__)
-                self._mark_callback_done(key)
-                return
-            with self._condition:
-                self._completions[key] = CompletionResponse.from_dict(completion.to_dict())
-                self._condition.notify_all()
+        try:
+            completion = self._project_once(key, context, snapshot)
+        except BaseException as exc:
+            self._record_fault_until_stopping(key[0], event_id, type(exc).__name__)
+            self._mark_callback_done(key)
+            return
         try:
             self._persist_completion(context, completion)
         except Exception as exc:
@@ -249,6 +241,40 @@ class TerminalCallbackDispatcher:
                 self._condition.wait(self.retry_backoff)
             return
         self._mark_callback_done(key)
+
+    def _project_once(self, key, context, snapshot) -> CompletionResponse:
+        with self._condition:
+            while True:
+                completion = self._completions.get(key)
+                if completion is not None:
+                    return CompletionResponse.from_dict(completion.to_dict())
+                error = self._projection_errors.get(key)
+                if error is not None:
+                    raise error
+                if key not in self._projection_owners:
+                    self._projection_owners.add(key)
+                    break
+                self._condition.wait()
+        try:
+            duration = max(0.0, self.monotonic() - context.started_at)
+            projected = self.projector.project_completion(
+                context.worker, snapshot, context.output_schema, duration, context.recovery)
+            completion = CompletionResponse.from_dict(projected.to_dict())
+        except BaseException as exc:
+            with self._condition:
+                self._projection_owners.discard(key)
+                self._projection_errors[key] = exc
+                self._condition.notify_all()
+            raise
+        with self._condition:
+            self._projection_owners.discard(key)
+            self._completions[key] = completion
+            self._condition.notify_all()
+            return CompletionResponse.from_dict(completion.to_dict())
+
+    def _worker_available(self) -> bool:
+        return (self._started and not self._stopping and self._thread is not None
+                and self._thread.is_alive())
 
     def _persist_completion(self, context, completion) -> None:
         binding = self.store.binding(context.worker.session_id)
@@ -301,6 +327,7 @@ class TerminalCallbackDispatcher:
         self._snapshots.pop(key, None)
         self._completions.pop(key, None)
         self._projection_errors.pop(key, None)
+        self._projection_owners.discard(key)
         self._processing.discard(key)
         self._callback_done.discard(key)
         self._client_done.discard(key)
