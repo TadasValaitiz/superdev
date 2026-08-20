@@ -1,12 +1,21 @@
 """Thread-safe stdio adapter for one shared Codex app-server subprocess."""
 import itertools
 import json
+import os
 import queue
 import subprocess
 import threading
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from .models import JsonObject
+
+
+def _codex_child_env():
+    """Copy the ambient environment without product-managed Claude inbox secrets."""
+    child_env = dict(os.environ)
+    child_env.pop("CLAUDE_CODE_MESSAGING_SOCKET", None)
+    child_env.pop("CLAUDE_CODE_MESSAGING_TOKEN", None)
+    return child_env
 
 
 class CodexCallError(RuntimeError):
@@ -68,6 +77,7 @@ class CodexAppServer:
             text=True,
             bufsize=1,
             cwd=cwd,
+            env=_codex_child_env(),
         )
         self._reader = threading.Thread(target=self._read_loop, name="codex-app-server-reader", daemon=True)
         self._stderr_reader = threading.Thread(
