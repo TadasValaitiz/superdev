@@ -472,7 +472,16 @@ class RecoveryView(StrictModel): status: str; messages: str; interrupt: str; raw
 @dataclass(frozen=True)
 class CompletionResponse(StrictModel): worker: WorkerView; turn: TurnView; messages: List[AgentMessageView]; structured_output: JsonValue; metrics: Dict[str, MetricEvidence]; recovery: RecoveryView
 @dataclass(frozen=True)
-class CallbackAttemptView(StrictModel): event_id: str; state: CallbackAttemptState; reason: Optional[str]; attempted_at: Optional[str]; attempt_count: int
+class CallbackAttemptView(StrictModel):
+    event_id: str; state: CallbackAttemptState; reason: Optional[str]; attempted_at: Optional[str]; attempt_count: int
+    turn_id: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, value: JsonObject):
+        if isinstance(value, dict) and set(value) == {
+                "event_id", "state", "reason", "attempted_at", "attempt_count"}:
+            value = dict(value, turn_id=None)
+        return super().from_dict(value)
 @dataclass(frozen=True)
 class CallbackStatusView(StrictModel): state: CallbackState; pending_terminal_count: int; last_terminal_attempt: Optional[CallbackAttemptView]
 @dataclass(frozen=True)

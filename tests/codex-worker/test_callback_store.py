@@ -39,7 +39,8 @@ class CallbackStoreTests(unittest.TestCase):
 
     def event(self, event_id="event-1"):
         return CallbackEvent("codex-worker.claude-callback/v1", "turn_terminal", event_id,
-                             "2026-08-20T00:00:00Z", "next", self.worker, {"result": "done"})
+                             "2026-08-20T00:00:00Z", "next", self.worker,
+                             {"completion": {"turn": {"turn_id": "turn"}}})
 
     def completion(self):
         return CompletionResponse(self.worker, TurnView("turn", "completed", None), [], None,
@@ -86,7 +87,11 @@ class CallbackStoreTests(unittest.TestCase):
         failed = self.store.record_failed("event-1", "socket refused", "2026-08-20T00:01:00Z")
         self.assertEqual((failed.state, failed.attempt_count, failed.event.event_id),
                          (CallbackOutboxState.PENDING, 1, "event-1"))
+        self.assertEqual(self.store.status_view(self.worker.session_id).last_terminal_attempt.turn_id,
+                         "turn")
         self.store.record_written("event-1", "2026-08-20T00:02:00Z")
+        self.assertEqual(self.store.status_view(self.worker.session_id).last_terminal_attempt.turn_id,
+                         "turn")
         self.assertEqual(self.store.pending(self.worker.session_id), [])
         self.assertEqual(self.store.enqueue_terminal(self.worker.session_id, self.event()), None)
 

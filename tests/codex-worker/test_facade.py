@@ -203,6 +203,37 @@ class FacadeTests(unittest.TestCase):
         facade.run(RunWorkerRequest("message-a", "follow-up"))
         self.assertEqual(self.broker.turn_specs[1].prompt, "follow-up")
 
+    def test_root_only_callback_capture_injects_shell_safe_proactive_guidance(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        instance = "verified instance; $(unsafe)"
+        name = "root-only"
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, instance), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
+        ))
+        root_only = CallbackCapture(None, None, None, None, None, self.cwd)
+        self.assertIsInstance(facade.start(StartWorkerRequest(name, "caller prose", self.cwd,
+                                                               callback_capture=root_only)), Ok)
+        prompt = self.broker.turn_specs[0].prompt
+        self.assertIn("codex-worker --instance 'verified instance; $(unsafe)' message --name root-only", prompt)
+        self.assertIn("Optional one-send override: --cc-agent-name <name>.", prompt)
+        unsafe_record = type("Record", (), {"name": "root only; $(unsafe)"})()
+        self.assertIn("--name 'root only; $(unsafe)'", facade._initial_prompt("x", unsafe_record))
+
+    def test_null_and_disabled_callback_starts_do_not_inject_proactive_guidance(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
+        ))
+        self.assertIsInstance(facade.start(StartWorkerRequest("null-capture", "null prompt", self.cwd)), Ok)
+        self.assertNotIn("codex-worker --instance", self.broker.turn_specs[0].prompt)
+        self.assertIsInstance(facade.start(StartWorkerRequest("disabled-capture", "disabled prompt", self.cwd,
+                                                               no_callback=True)), Ok)
+        self.assertNotIn("codex-worker --instance", self.broker.turn_specs[1].prompt)
+
     def test_message_callback_fault_matrix_is_typed_redacted_and_instance_qualified(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         facade = WorkerFacade(FacadeDeps(

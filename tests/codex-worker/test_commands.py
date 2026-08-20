@@ -108,7 +108,8 @@ class CommandModelTests(unittest.TestCase):
 
         worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
-        attempt = CallbackAttemptView("event-1", CallbackAttemptState.WRITTEN, None, "2026-08-20T00:00:00Z", 1)
+        attempt = CallbackAttemptView("event-1", CallbackAttemptState.WRITTEN, None,
+                                      "2026-08-20T00:00:00Z", 1, "turn-1")
         status = CallbackStatusView(CallbackState.ENABLED, 0, attempt)
         response = CallbackSendResponse(worker, "event-1", attempt)
         worker_status = WorkerStatusResponse(worker, "ready", True, None, None, status)
@@ -118,6 +119,10 @@ class CommandModelTests(unittest.TestCase):
             wire["extra"] = "forbidden"
             with self.assertRaises(ValueError):
                 type(model).from_dict(wire)
+        self.assertEqual(attempt.to_dict()["turn_id"], "turn-1")
+        legacy_attempt = attempt.to_dict()
+        legacy_attempt.pop("turn_id")
+        self.assertIsNone(CallbackAttemptView.from_dict(legacy_attempt).turn_id)
         public_wire = worker_status.to_dict()
         forbidden = {"target_socket", "child_token", "claude_session_id", "claude_pid", "claude_proc_start", "claude_config_dir"}
         self.assertFalse(forbidden.intersection(public_wire["callback"]))

@@ -240,7 +240,7 @@ class DispatcherTests(unittest.TestCase):
         dispatcher = self._dispatcher(diagnostic=evidence.append)
         def fail_enqueue(session_id, event):
             raise RuntimeError("secret enqueue route")
-        def fail_fault(session_id, event_id, reason, attempted_at):
+        def fail_fault(session_id, event_id, reason, attempted_at, turn_id=None):
             raise OSError("secret fault path")
         self.store.enqueue_terminal = fail_enqueue
         self.store.record_terminal_fault = fail_fault
@@ -472,6 +472,7 @@ class DispatcherTests(unittest.TestCase):
         event = transport.sent[0]
         self.assertEqual(event.event, "turn_terminal_reference")
         artifact = event.payload["artifact"]
+        self.assertEqual(event.payload["turn_id"], "turn-big")
         self.assertTrue(Path(artifact["path"]).is_file())
         self.assertEqual(artifact["size_bytes"], Path(artifact["path"]).stat().st_size)
 

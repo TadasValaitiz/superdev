@@ -11,6 +11,13 @@ from codex_worker.projection import chronological_history_pages, derive_metrics,
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_projection_does_not_import_callback_persistence(self):
+        source = (ROOT / "skills" / "subagent-driven-development" / "scripts" /
+                  "codex_worker" / "projection.py").read_text(encoding="utf-8")
+        self.assertNotIn("callback_store import", source)
+        from codex_worker.callback_domain import CallbackEvent
+        self.assertEqual(CallbackEvent.__module__, "codex_worker.callback_domain")
+
     def setUp(self):
         self.worker = WorkerView("default", "worker", "00000000-0000-0000-0000-000000000001",
                                  "thread", str(ROOT), Tier.MEDIUM, "model", "medium", AccessMode.FULL)

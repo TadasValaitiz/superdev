@@ -125,8 +125,7 @@ class WorkerFacade:
                 except BaseException as exc:
                     return Err(self._effect_fault(exc, record, request.name))
             prompt = (self._initial_prompt(request.prompt, record)
-                      if request.callback_capture is not None
-                      and request.callback_capture.target_socket is not None else request.prompt)
+                      if capture is not None and capture.claude_config_dir is not None else request.prompt)
             return self._start_and_wait(record, worker, prompt, request.output_schema,
                                         request.timeout)
         except BaseException as exc:
@@ -448,7 +447,7 @@ class WorkerFacade:
             "codex-worker --instance %s message --name %s --message \"<prose>\"\n"
             "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
             "This command does not wait for a reply; Claude may later use steer or run."
-        ) % (self.deps.instance.value, record.name)
+        ) % (shlex.quote(self.deps.instance.value), shlex.quote(record.name))
         return prompt + "\n\n" + block
 
     def _command(self, suffix):

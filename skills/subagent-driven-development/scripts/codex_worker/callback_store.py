@@ -10,6 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .callback_domain import CallbackEvent
 from .commands import (CallbackAttemptState, CallbackAttemptView, CallbackState,
                        CallbackStatusView, CompletionResponse, WorkerView)
 
@@ -26,6 +27,18 @@ class UnsafeCallbackStoreError(RuntimeError):
 def _nonempty(value: Any, name: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError("%s must be a non-empty string" % name)
+
+
+def _terminal_turn_id(event: Optional[CallbackEvent]) -> Optional[str]:
+    if event is None or event.event not in ("turn_terminal", "turn_terminal_reference"):
+        return None
+    if event.event == "turn_terminal_reference":
+        turn_id = event.payload.get("turn_id")
+    else:
+        completion = event.payload.get("completion")
+        turn = completion.get("turn") if isinstance(completion, dict) else None
+        turn_id = turn.get("turn_id") if isinstance(turn, dict) else None
+    return turn_id if isinstance(turn_id, str) and turn_id else None
 
 
 @dataclass(frozen=True)
@@ -65,32 +78,6 @@ class CallbackBinding:
             raise ValueError("child_token must be lowercase hexadecimal")
         if self.claude_pid is not None and (type(self.claude_pid) is not int or self.claude_pid <= 0):
             raise ValueError("claude_pid must be positive")
-
-
-@dataclass(frozen=True)
-class CallbackEvent:
-    schema: str
-    event: str
-    event_id: str
-    emitted_at: str
-    priority: str
-    worker: WorkerView
-    payload: Dict[str, Any]
-
-    def __post_init__(self) -> None:
-        if self.schema != "codex-worker.claude-callback/v1":
-            raise ValueError("unsupported callback schema")
-        if self.event not in {"turn_terminal", "turn_terminal_reference", "worker_message"}:
-            raise ValueError("unsupported callback event")
-        _nonempty(self.event_id, "event_id"); _nonempty(self.emitted_at, "emitted_at")
-        if self.priority not in {"now", "next", "later"}:
-            raise ValueError("unsupported callback priority")
-        if not isinstance(self.worker, WorkerView) or not isinstance(self.payload, dict):
-            raise ValueError("invalid callback event")
-        try:
-            json.dumps(self.payload, allow_nan=False)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("payload must be JSON-compatible") from exc
 
 
 @dataclass(frozen=True)
@@ -190,8 +177,9 @@ class CallbackStore:
             entry = CallbackOutboxEntry(entry.event_id, entry.session_id, entry.event,
                                         entry.state, entry.attempt_count + 1, error)
             state["outbox"][event_id] = self._entry_dict(entry)
-            self._set_attempt(state, entry.session_id, CallbackAttemptView(event_id, CallbackAttemptState.FAILED,
-                              error, attempted_at, entry.attempt_count))
+            self._set_attempt(state, entry.session_id, CallbackAttemptView(
+                event_id, CallbackAttemptState.FAILED, error, attempted_at,
+                entry.attempt_count, _terminal_turn_id(entry.event)))
             self._write(state); return entry
 
     def record_written(self, event_id: str, attempted_at: str) -> CallbackOutboxEntry:
@@ -200,15 +188,18 @@ class CallbackStore:
             state = self._load(); entry = self._entry_from_dict(state["outbox"].get(event_id))
             if entry.state == CallbackOutboxState.WRITTEN:
                 return entry
+            turn_id = _terminal_turn_id(entry.event)
             entry = CallbackOutboxEntry(entry.event_id, entry.session_id, None,
                                         CallbackOutboxState.WRITTEN, entry.attempt_count + 1, None)
             state["outbox"][event_id] = self._entry_dict(entry)
-            self._set_attempt(state, entry.session_id, CallbackAttemptView(event_id, CallbackAttemptState.WRITTEN,
-                              None, attempted_at, entry.attempt_count))
+            self._set_attempt(state, entry.session_id, CallbackAttemptView(
+                event_id, CallbackAttemptState.WRITTEN, None, attempted_at,
+                entry.attempt_count, turn_id))
             self._write(state); return entry
 
     def record_terminal_fault(self, session_id: str, event_id: str,
-                              error: str, attempted_at: str) -> CallbackAttemptView:
+                              error: str, attempted_at: str,
+                              turn_id: Optional[str] = None) -> CallbackAttemptView:
         """Persist redacted evidence when no valid terminal event could be enqueued."""
         _nonempty(session_id, "session_id"); _nonempty(event_id, "event_id")
         _nonempty(error, "error"); _nonempty(attempted_at, "attempted_at")
@@ -221,7 +212,7 @@ class CallbackStore:
             count = (previous.attempt_count + 1
                      if previous is not None and previous.event_id == event_id else 1)
             attempt = CallbackAttemptView(event_id, CallbackAttemptState.FAILED,
-                                          error, attempted_at, count)
+                                          error, attempted_at, count, turn_id)
             self._set_attempt(state, session_id, attempt)
             self._write(state)
             return attempt

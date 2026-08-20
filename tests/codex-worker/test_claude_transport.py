@@ -186,6 +186,20 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(capture_from_env(wrong),
                          CallbackCapture(None, None, None, None, None, str(self.config)))
 
+    def test_capture_and_daemon_reject_pid_mismatched_socket_basename(self):
+        """MEASURED convention: default registry sockets are <claude_pid>.sock."""
+        wrong_socket = self.sockets / (str(self.pid + 1) + ".sock")
+        self.inbox.close(); self.inboxes.remove(self.inbox); self.sock.unlink()
+        self.inbox = self._inbox(wrong_socket)
+        self.sock = wrong_socket
+        self._registry("origin", self.session_id, self.pid, self.proc_start, wrong_socket)
+        self.assertEqual(self._fault_kind(lambda: capture_from_env(self._env())),
+                         "callback_target_unsafe")
+        forged = CallbackCapture(str(wrong_socket), self.child_token, self.session_id,
+                                 self.pid, self.proc_start, str(self.config))
+        self.assertEqual(self._fault_kind(lambda: ClaudeTransport().validate_capture(forged)),
+                         "callback_target_stale")
+
     def test_capture_ignores_claude_idle_records_without_a_messaging_socket(self):
         idle = self.sessions / "idle-without-socket.json"
         idle.write_text(json.dumps({
@@ -280,8 +294,8 @@ class ClaudeTransportTests(unittest.TestCase):
 
     def test_override_requires_one_live_name_and_safe_peer_key(self):
         transport = ClaudeTransport()
-        target = self.sockets / "target.sock"
-        target_inbox = self._inbox(target)
+        target = self.sock
+        target_inbox = self.inbox
         self._registry("target", "target-session", self.pid, self.proc_start, target,
                        suffix="target")
         self.assertEqual(self._fault_kind(lambda: transport.send(self._binding(), self._event(), "missing")),
@@ -289,13 +303,9 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(self._fault_kind(lambda: transport.send(self._binding(), self._event(), "target")),
                          "callback_target_unsafe")
         key = self._peer_key(target, proc_start=self.proc_start, prefix=self.pid)
-        stale_socket = self.sockets / "stale.sock"
-        self._registry("target", "stale-session", self.pid, self.proc_start, stale_socket,
-                       suffix="target-stale")
         attempt = transport.send(self._binding(), self._event(), "target")
         self.assertEqual(attempt.state, CallbackAttemptState.WRITTEN)
         self.assertTrue(target_inbox.half_closed.wait(1))
-        (self.sessions / "target-stale.json").unlink()
         self._registry("target", "other-session", self.pid, self.proc_start, target,
                        suffix="target-two")
         self.assertEqual(self._fault_kind(lambda: transport.send(self._binding(), self._event(), "target")),

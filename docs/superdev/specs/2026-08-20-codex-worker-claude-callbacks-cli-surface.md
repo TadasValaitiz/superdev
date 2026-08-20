@@ -32,7 +32,7 @@ extras:
 | `target_socket` | null, or an absolute non-symlink Unix-socket path equal to the selected live registry record |
 | `child_token` | null, or exactly 32 lowercase hexadecimal characters |
 | `claude_session_id` | null, or a non-empty string equal to the selected registry `sessionId` |
-| `claude_pid` | null, or a positive integer equal to ambient `CLAUDE_PID`, the selected registry PID, and the measured numeric socket-basename convention |
+| `claude_pid` | null, or a positive integer equal to ambient `CLAUDE_PID`, the selected registry PID, and a `messagingSocketPath` basename exactly `<pid>.sock` |
 | `claude_proc_start` | null, or a non-empty string equal to the selected registry `procStart` |
 | `claude_config_dir` | canonical absolute, owner/safe-ancestor-validated Claude config root used for every later registry lookup |
 
@@ -319,7 +319,7 @@ successful/failed/interrupted `CompletionResponse` returned by `start` or `run`.
 |---|---|
 | `skills/subagent-driven-development/codex-worker.md` | Callback lifecycle, proactive command, event semantics, recovery, and no-poll guidance. |
 | `skills/subagent-driven-development/SKILL.md` | Teach worker initialization to expose the proactive command and teach Claude to rely on callbacks without deleting diagnostic status/wait guidance. |
-| `skills/subagent-driven-development/references/codex-model-selection.md` | No model-routing change; add only a cross-reference if invocation examples enumerate common worker flags. |
+| `skills/subagent-driven-development/codex-model-selection.md` | No model-routing change; add only a cross-reference if invocation examples enumerate common worker flags. |
 | `bin/codex-worker --help` / parser help | New `message`, `start --no-callback`, message flags, and callback status meaning. |
 | `docs/reference/claude-code-messaging-protocol.md` in the source research repo | Link the two new probes and record their measured end-to-end results; do not recast them as production CLI. |
 | `docs/README.md` in the source research repo | Extend the existing protocol row with both probe names. |

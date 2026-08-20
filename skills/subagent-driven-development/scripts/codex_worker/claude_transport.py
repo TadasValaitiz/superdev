@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
-from .callback_store import CallbackBinding, CallbackEvent
+from .callback_domain import CallbackEvent
+from .callback_store import CallbackBinding
 from .commands import (CallbackAttemptState, CallbackAttemptView, CallbackCapture,
                        CallbackState, FACADE_FAULT_KINDS, FacadeFault,
                        FacadeFaultCode)
@@ -91,6 +92,9 @@ class ClaudeTransport:
                          "Claude callback config root is not canonical")
         if capture.target_socket is None:
             return capture
+        if not _pid_socket_basename_matches(capture.target_socket, capture.claude_pid):
+            raise _fault(FacadeFaultCode.CALLBACK_TARGET_STALE,
+                         "Captured Claude callback socket does not match its PID")
         records = self._records(Path(root))
         matches = [record for record in records if self._matches_capture(record, capture)]
         if (len(matches) != 1
@@ -249,6 +253,7 @@ class ClaudeTransport:
                     or not all(isinstance(record[key], str) and record[key]
                                for key in ("sessionId", "messagingSocketPath", "procStart"))
                     or not Path(record["messagingSocketPath"]).is_absolute()
+                    or not _pid_socket_basename_matches(record["messagingSocketPath"], record["pid"])
                     or ("name" in record and record["name"] is not None
                         and (not isinstance(record["name"], str) or not record["name"]))):
                 raise _fault(FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
@@ -340,6 +345,11 @@ class ClaudeTransport:
             raise _fault(FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
                          "Claude callback peer key does not match the target")
         return target, key["peerToken"]
+
+
+def _pid_socket_basename_matches(socket_path: str, pid: int) -> bool:
+    return (isinstance(socket_path, str) and type(pid) is int and pid > 0
+            and Path(socket_path).name == "%s.sock" % pid)
 
 
 def capture_from_env(env: Mapping[str, str]) -> Optional[CallbackCapture]:

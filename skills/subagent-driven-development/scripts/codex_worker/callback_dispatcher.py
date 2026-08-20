@@ -7,7 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Tuple
 
-from .callback_store import CallbackEvent, CallbackOutboxEntry, CallbackStore
+from .callback_domain import CallbackEvent
+from .callback_store import CallbackOutboxEntry, CallbackStore
 from .commands import (CallbackState, CompletionResponse, FacadeFault,
                        FacadeFaultCode, RecoveryView, WorkerView)
 from .models import TurnSnapshot, copy_turn_snapshot
@@ -34,7 +35,7 @@ def build_terminal_event(completion: CompletionResponse, emitted_at: str,
     event_id = terminal_event_id(completion.worker.session_id,
                                  completion.turn.turn_id, event_kind)
     payload = ({"completion": completion.to_dict()} if event_kind == "turn_terminal"
-               else {"artifact": artifact})
+               else {"artifact": artifact, "turn_id": completion.turn.turn_id})
     return CallbackEvent(SCHEMA, event_kind, event_id, emitted_at, "next",
                          completion.worker, payload)
 
@@ -277,7 +278,7 @@ class TerminalCallbackDispatcher:
         except BaseException as exc:
             reason = exc.kind if isinstance(exc, FacadeFault) else type(exc).__name__
             event_id = terminal_event_id(key[0], key[1], "turn_terminal")
-            recorded, fault_error = self._record_fault_once(key[0], event_id, reason)
+            recorded, fault_error = self._record_fault_once(key[0], event_id, reason, key[1])
             lost = False
             with self._condition:
                 self._persistence_owners.discard(key)
@@ -312,7 +313,7 @@ class TerminalCallbackDispatcher:
             self._persist_completion(context, completion)
         except BaseException as exc:
             reason = exc.kind if isinstance(exc, FacadeFault) else type(exc).__name__
-            recorded, fault_error = self._record_fault_once(key[0], event_id, reason)
+            recorded, fault_error = self._record_fault_once(key[0], event_id, reason, key[1])
             with self._condition:
                 self._persistence_owners.discard(key)
                 if recorded:
@@ -340,7 +341,7 @@ class TerminalCallbackDispatcher:
                     self._persistence_owners.add(key)
                     break
                 self._condition.wait()
-        recorded, fault_error = self._record_fault_once(session_id, event_id, reason)
+        recorded, fault_error = self._record_fault_once(session_id, event_id, reason, key[1])
         lost = False
         with self._condition:
             self._persistence_owners.discard(key)
@@ -428,9 +429,9 @@ class TerminalCallbackDispatcher:
                 self._condition.notify_all()
 
     def _record_fault_once(self, session_id: str, event_id: str,
-                           reason: str) -> Tuple[bool, Optional[str]]:
+                           reason: str, turn_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         try:
-            self.store.record_terminal_fault(session_id, event_id, reason, self.now())
+            self.store.record_terminal_fault(session_id, event_id, reason, self.now(), turn_id)
             return True, None
         except BaseException as exc:
             return False, type(exc).__name__

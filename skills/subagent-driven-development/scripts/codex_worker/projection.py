@@ -9,7 +9,7 @@ from .commands import (
     TurnView, WorkerView,
 )
 from .models import ItemRecord, TurnSnapshot
-from .callback_store import CallbackEvent
+from .callback_domain import CallbackEvent
 
 
 def build_worker_message_event(worker: WorkerView, message: str, priority, event_id: str,

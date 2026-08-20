@@ -283,14 +283,19 @@ D8, D15, D21, D23; realizes UC1, UC3, UC4, UC6).
   `target_socket`, `child_token`, `claude_session_id`, `claude_pid`,
   `claude_proc_start`, and `claude_config_dir`. A complete live identity populates all
   fields; if only a safe config root is available, the first five fields are null; if no
-  safe root exists, the capture itself is null. All field and cross-field rules are in
+  safe root exists, the capture itself is null. The registry endpoint basename must be
+  exactly `<pid>.sock` for ambient capture, daemon revalidation, and override resolution.
+  All field and cross-field rules are in
   §5.1.4 and extra fields are rejected. Those secret fields travel only over the
   owner-only managed RPC socket, and the daemon independently revalidates the complete
   snapshot before persisting it.
   `--no-callback` writes a `disabled` binding with nullable secret fields; incomplete or
   absent ambient identity writes `unavailable` with nullable secret fields while still
   retaining the canonical, safety-checked Claude config root when one can be resolved at
-  start. No later daemon environment is consulted. After the
+  start. Registry scanning ignores only the D32-compatible idle interactive record with
+  an absent/null endpoint; every other incomplete record remains a refusal. Process-start
+  comparison uses `ps` under `LC_ALL=C` and normalizes Claude's UTC registry timestamp
+  against local `ps` time (D33). No later daemon environment is consulted. After the
   broker creates the logical session and before the first turn starts, the façade
   atomically writes the binding to `callbacks.json` using the same owner, mode, fsync,
   replace, and parent-fsync discipline as the session registry. A callback persistence
@@ -329,7 +334,10 @@ R10; governed by D2, D5, D6, D10, D11, D15, D20, D21, D23; realizes UC2, UC3, UC
   omits `from` rather than impersonating the selected target or inventing an address.
   Immediately before connect, the daemon serializes the final envelope and rejects a
   proactive event exceeding 1,048,576 JavaScript UTF-16 code units, counted as
-  `len(line.encode("utf-16-le")) / 2` excluding the newline.
+  `len(line.encode("utf-16-le")) / 2` excluding the newline. The initial worker prompt
+  carries exact instance-qualified `message --name` guidance whenever a retained root
+  permits a named override (enabled or root-only unavailable); null and explicitly
+  disabled capture do not receive it. Dynamic command arguments are shell-quoted.
 - **Interface / contract:** transport returns pending/written/failed evidence; it never
   returns delivered. No fallback target exists. An oversized proactive envelope is the
   typed daemon fault `callback_payload_too_large` and therefore exits 1.
@@ -343,9 +351,13 @@ The terminal hook converts the same authoritative result returned by `start` or 
 into Claude's no-poll notification (serves R3, R7, R8; governed by D1, D2, D7, D10,
 D11, D16, D17, D19, D20; realizes UC1, UC5, UC6).
 
-- **Design:** The hook sits after `_start_and_wait` has produced a terminal
-  `CompletionResponse`, not on raw `turn/completed` notification arrival. It therefore
-  has ordered final messages, structured output, honest metrics, and recovery commands.
+- **Design:** Runtime commits an exact terminal snapshot and publishes a copy-isolated
+  notification outside its locks. Request and dispatcher may claim one shared projection
+  from that snapshot, so the returned `CompletionResponse` and callback event use the
+  same ordered final messages, structured output, honest metrics, and recovery commands;
+  raw notification arrival itself is never the public callback payload. The healthy
+  dispatcher owns normal persistence/retry, while stopped/exited shutdown fallback makes
+  one enqueue plus one redacted-fault attempt without changing the completion.
   It emits for completed/failed/interrupted only, always at priority `next`. The stable
   event ID and complete bounded event are atomically recorded in the event-ID-keyed
   outbox before any connection. A single daemon-owned terminal dispatcher is the only
@@ -365,7 +377,8 @@ D11, D16, D17, D19, D20; realizes UC1, UC5, UC6).
   replace or mutate the completion result.
 - **Interface / contract:** event schema is `codex-worker.claude-callback/v1`, event
   `turn_terminal` when inline or `turn_terminal_reference` when artifact-backed, with
-  worker identity and either completion fields or the verified artifact descriptor.
+  worker identity and either completion fields or the verified artifact descriptor plus
+  its non-secret `turn_id`.
 - **Depends on:** completion projection, callback store, transport.
 - **Serves:** R3, R7, R8 · **Governed by:** D1, D2, D7, D10, D11, D16, D17, D19,
   D20 · **Realizes:** UC1, UC5, UC6.

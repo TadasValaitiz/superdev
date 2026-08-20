@@ -657,3 +657,35 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** CLI parser/managed lifecycle, stopped-daemon next actions, Unicode ride,
   CLI companion, and checkride recovery evidence.
 - **Revisit-when:** the callback relay becomes a process independent of the Codex daemon.
+
+## D35 — Retain callback turn identity and enforce the specified registry address shape
+**When:** 2026-08-20T16:30:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during final-review remediation
+
+- **Trigger:** Final review found the specified nullable `CallbackAttempt.turn_id` absent
+  from durable/public attempt evidence and the CLI's numeric PID-derived socket-basename
+  invariant unenforced at capture and daemon boundaries.
+- **Decided:** Carry `turn_id` for terminal attempts end-to-end from the durable event or
+  terminal fault context; proactive attempts retain null. Require registry endpoints to
+  have basename `<pid>.sock` during ambient capture, daemon revalidation, and named
+  override resolution. Move `CallbackEvent` alone to an inward dependency-free domain
+  module, retaining the callback-store re-export for compatibility.
+- **Rests on:** design §5.1, CLI §1, R7/R9, and Python-patterns §§1/8.
+- **Affects:** callback status shape, durable reader/writer, capture/override validation,
+  projection import direction, and focused regressions.
+- **Revisit-when:** Claude documents a different production registry identity contract.
+
+## D36 — Correct Task 6 fast-gate disposition without rewriting historical evidence
+**When:** 2026-08-20T16:30:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during final-review remediation
+
+- **Trigger:** Task 6's historical report retained a BLOCKED clean-fast-gate paragraph
+  after controller reproduction on the untouched base produced a 5119-pass result and
+  later focused probe review was clean.
+- **Decided:** Preserve the historical non-pristine 5132-pass receipts as historical;
+  record the controller's untouched-base reproduction separately, retain the scope limit
+  that only the 13-test probe surface was clean, and state the final Task 6 disposition
+  as accepted scoped evidence rather than a fabricated clean full-gate claim.
+- **Rests on:** the captured Task 6 receipts and verification-before-completion policy.
+- **Affects:** Task 6 report and SDD progress only.
+- **Revisit-when:** a fresh, independently captured full trading fast gate is requested.
