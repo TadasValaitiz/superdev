@@ -98,3 +98,39 @@ None.
 Ready to merge: **No**.
 
 Four of the five prior findings are closed, including the production locale defect and portable provenance. I2 is materially improved and the checked-in real-Claude transcript is credible, but the acceptance validator still overstates message-text recovery as recovery of both complete results. Because AH1 and the release evidence explicitly gate on complete result recovery, that semantic gap remains an Important merge blocker.
+
+---
+
+# Final focused re-review — 2026-08-20 — candidate `8e724e6`
+
+## I2 closure
+
+**Closed.** In the stream-no-frame branch, each ordered receiver attestation must now contain a parseable `CALLBACK_COMPLETION_N` JSON object with no trailing text (`tests/codex-worker/live_claude_evidence.py:163`). The validator requires those objects to equal the complete corresponding `start_result` and `run_result`, rather than comparing only message text (`tests/codex-worker/live_claude_evidence.py:194`). The live prompt explicitly requires copying `event.payload.completion` before the next command and prohibits reconstruction from synchronous output (`tests/codex-worker/live_claude_check.sh:50`).
+
+The regression covers the exact-object positive, an ordered attestation with the payload removed, and the successful-command-summary/no-callback case (`tests/codex-worker/test_live_claude_evidence.py:111`, `tests/codex-worker/test_live_claude_evidence.py:132`, `tests/codex-worker/test_live_claude_evidence.py:142`). Fresh tracked evidence contains both full `CALLBACK_COMPLETION_1/2` objects, and the validator independently confirms exact recovery for both (`docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/reviewer-fix-wave/claude-caller-exact/claude.stream.jsonl:11`). Design §9 now cites this exact-payload receipt (`docs/superdev/specs/2026-08-20-codex-worker-claude-callbacks-design.md:682`).
+
+## Remaining issues
+
+### Critical
+
+None.
+
+### Important
+
+None.
+
+### Minor
+
+None.
+
+## Verification
+
+- Focused warning-strict `test_live_claude_evidence.py`: **PASS**, 1 test.
+- Independent validation of the tracked `claude-caller-exact` transcript: **PASS**, `full_result_recovered=true` with two distinct terminal callback IDs.
+- `git diff --check 76ee44b..8e724e6`: **PASS**.
+
+## Assessment
+
+Ready to merge: **Yes**.
+
+The remaining I2 acceptance-gate defect is closed: the fallback now proves exact complete-result equality for both ordered receiver attestations, both negative controls reject weaker evidence, and a fresh real-Claude run satisfies the strengthened contract. No Critical, Important, or Minor findings remain in the requested focused scope.

@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 Base: `cf073be`
-Status: final exact-completion fix complete; focused re-review pending
+Status: PASS; evaluator PASS and final reviewer Ready to merge Yes
 
 ## TDD and deterministic gate
 
@@ -59,6 +59,8 @@ Fresh tracked common/security/real-Claude evidence is under
 The final exact-completion rerun is the `claude-caller-exact/` child: both ordered
 receiver attestations contain parseable full completion objects equal to their
 corresponding complete command results, closing the reviewer's remaining I2 concern.
+The final focused re-review at candidate `8e724e6` is Ready to merge Yes with no
+remaining Critical, Important, or Minor findings.
 
 ## UC/AH and independent probe receipts
 
@@ -89,6 +91,10 @@ receipt: `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evid
 - `07ff933` — selected-instance daemon-stop recovery
 - `1918fba` — checkride acceptance evidence
 - `4911b68` — 7.3.0 release metadata
+- `ec42d98` — release and initial installed-product receipts
+- `79d6ec2` — final review locale/validator/provenance fixes
+- `76ee44b` — post-review localized installed-product proof
+- `8e724e6` — exact received-completion contract and live receipt
 
 ## Deviations and concerns
 
