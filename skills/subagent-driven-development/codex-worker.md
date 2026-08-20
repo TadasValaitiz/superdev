@@ -44,7 +44,8 @@ task; do not pause or wait for a reply. If a callback is absent or unsuccessful,
 the authoritative worker result with `status/messages/history` by name.
 
 The worker may send one proactive update while continuing its turn. Initialization gives
-it the exact instance-qualified command and its collision-resistant worker name:
+it the exact instance-qualified command and its collision-resistant readable worker
+name; a random or numbered suffix avoids same-session clashes:
 
 ```sh
 codex-worker --instance <instance> message --name <name> \
@@ -56,8 +57,8 @@ and priority options. This command does not pause, steer, interrupt, and does no
 for Codex.
 Its result `written` proves only a local write, never `delivered`. `--cc-agent-name`
 redirects one-send proactive message only; it never changes the stored terminal route.
-Use no credentials or transport details in task prompts; diagnostic recovery stays on
-the named common commands above.
+Never pass or expose callback credentials in task prompts. Keep transport details out;
+diagnostic recovery stays on the named common commands above.
 
 ## Coordinate active work
 

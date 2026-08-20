@@ -177,6 +177,7 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         _, marker, remainder = reference.partition("## Callback guidance")
         self.assertEqual(marker, "## Callback guidance")
         callback, _, _ = remainder.partition("## Coordinate active work")
+        callback_normalized = " ".join(callback.split())
         for fragment in (
             "codex-worker --instance <instance> message --name <name>",
             "--message-file",
@@ -187,9 +188,12 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             "one-send",
             "written",
             "delivered",
+            "collision-resistant readable worker name",
+            "random or numbered suffix avoids same-session clashes",
+            "never pass or expose callback credentials",
         ):
             with self.subTest(fragment=fragment):
-                self.assertIn(fragment, callback)
+                self.assertIn(fragment, callback_normalized.lower())
         for fragment in ("continue", "does not pause", "does not wait"):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, callback.lower())
