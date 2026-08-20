@@ -229,6 +229,32 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["reason"], "socket_changed")
         self.assertTrue(self.paths.socket_path.exists())
 
+    def test_stop_timeout_recovery_commands_keep_selected_instance(self):
+        self._leave_stale_socket()
+
+        def rpc(socket_path, method, params, timeout):
+            if method == "daemon/status":
+                return {"result": {"ready": True, "daemon_pid": 11, "codex_pid": 12,
+                                   "session_count": 2}}
+            if method == "daemon/shutdown":
+                return {"result": {"accepted": True}}
+            raise AssertionError(method)
+
+        clock = iter((0.0, 3.0))
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", lambda a, b: Process(), rpc,
+            lambda: next(clock)), self.identity)
+        with mock.patch.object(instance_module, "_pid_alive", return_value=True):
+            with self.assertRaises(instance_module.FacadeFault) as caught:
+                manager.stop()
+        self.assertEqual(caught.exception.kind, "daemon_stop_failed")
+        self.assertEqual(caught.exception.known_ids["instance"], "session-alpha")
+        self.assertEqual(
+            [action["command"] for action in caught.exception.next_actions],
+            ["codex-worker --instance session-alpha daemon status",
+             "codex-worker --instance session-alpha daemon stop"],
+        )
+
     def test_stale_pid_metadata_does_not_block_safe_socket_repair(self):
         self._leave_stale_socket()
         ready = [False]

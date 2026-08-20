@@ -1842,9 +1842,11 @@ def scenario_callback_recovery() -> Json:
                 "digest_verified": True, "completion_equal": True,
             })
         finally:
-            fake_runner.stop()
-            fake_process.wait(timeout=15.0)
-            recorder.collect(fake_process, fake_argv, timeout=1.0)
+            shutdown = recorder.run(
+                [sys.executable, str(RAW_CLI), "--socket", fake_argv[3],
+                 "daemon", "shutdown"], cwd=ROOT, timeout=15.0)
+            assert shutdown.returncode == 0, shutdown.stdout
+            recorder.collect(fake_process, fake_argv, timeout=15.0)
         result = {"wait_timeout_kind": timeout_error["data"]["kind"],
                   "later_terminal_event_id": later_event["event_id"],
                   "interrupted_event_id": interrupted_event["event_id"],

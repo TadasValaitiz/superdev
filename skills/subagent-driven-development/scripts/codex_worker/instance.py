@@ -464,13 +464,22 @@ class InstanceManager:
         deadline = self.deps.monotonic() + 2.0
         while any(_pid_alive(pid) for pid in (before.get("daemon_pid"), before.get("codex_pid"))):
             if self.deps.monotonic() >= deadline:
+                selected = shlex.quote(self.identity.value)
                 raise FacadeFault(FacadeFaultCode.DAEMON_STOP_FAILED, "Codex worker daemon did not stop",
                                   "daemon_stop_failed", True, details={"reason": "stop_timeout",
                                   "deadline_seconds": 2.0, "daemon_pid": before.get("daemon_pid"),
                                   "codex_pid": before.get("codex_pid"), "durable_state": "preserved",
                                   "socket_path": str(self.deps.paths.socket_path)},
-                                  next_actions=[{"command": "codex-worker daemon status", "reason": "Inspect the remaining daemon state"},
-                                                {"command": "codex-worker daemon stop", "reason": "Retry graceful shutdown"}])
+                                  known_ids={"instance": self.identity.value, "name": None,
+                                             "session_id": None, "thread_id": None,
+                                             "turn_id": None},
+                                  next_actions=[{
+                                      "command": "codex-worker --instance %s daemon status" % selected,
+                                      "reason": "Inspect the remaining daemon state",
+                                  }, {
+                                      "command": "codex-worker --instance %s daemon stop" % selected,
+                                      "reason": "Retry graceful shutdown",
+                                  }])
             self.deps.wait(0.01)
         if observed_socket is not None:
             _unlink_verified_socket(self.deps.paths.socket_path, observed_socket,
