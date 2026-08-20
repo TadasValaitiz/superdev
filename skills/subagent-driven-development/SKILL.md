@@ -13,7 +13,7 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 ## Codex workers from Claude Code
 
-Claude Code remains a complete native SDD route. Use a local Codex worker only when the
+Native Claude Code remains the default complete SDD route. Use a local Codex worker only when the
 operator or plan explicitly selects it; Codex is opt-in, never a replacement for native
 Claude dispatch or main-session design. Read [Codex worker broker](codex-worker.md),
 give every worker a collision-resistant readable name (role plus random or numbered

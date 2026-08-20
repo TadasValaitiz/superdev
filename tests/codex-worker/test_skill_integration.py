@@ -171,6 +171,33 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
+    def test_callback_guidance_keeps_instance_qualified_nonblocking_semantics(self):
+        reference = self._reference()
+        skill = " ".join(SDD.read_text(encoding="utf-8").split())
+        _, marker, remainder = reference.partition("## Callback guidance")
+        self.assertEqual(marker, "## Callback guidance")
+        callback, _, _ = remainder.partition("## Coordinate active work")
+        for fragment in (
+            "codex-worker --instance <instance> message --name <name>",
+            "--message-file",
+            "automatic terminal callback",
+            "no-poll",
+            "status/messages/history",
+            "cc-agent-name",
+            "one-send",
+            "written",
+            "delivered",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, callback)
+        for fragment in ("continue", "does not pause", "does not wait"):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, callback.lower())
+        self.assertIn("native claude code remains the default", skill.lower())
+        self.assertNotIn("callback token", callback.lower())
+        self.assertNotIn("raw socket", callback.lower())
+        self.assertNotIn("mcp", callback.lower())
+
 
 class SddModelSelectionTests(unittest.TestCase):
     def test_core_skill_links_two_tier_codex_appendix_and_preserves_claude(self):

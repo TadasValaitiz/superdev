@@ -35,6 +35,30 @@ per-turn `--output-schema`/`--timeout`: it cannot change cwd, access, tier, mode
 effort, or goal. Terminal worker evidence maps to the normal SDD report statuses:
 `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT`, or `BLOCKED`.
 
+## Callback guidance
+
+When Claude starts a worker in its messaging environment, its origin route is captured
+once. The automatic terminal callback is the normal no-poll completion path: Claude
+receives the terminal result after `start` or `run` completes. Continue with the next
+task; do not pause or wait for a reply. If a callback is absent or unsuccessful, recover
+the authoritative worker result with `status/messages/history` by name.
+
+The worker may send one proactive update while continuing its turn. Initialization gives
+it the exact instance-qualified command and its collision-resistant worker name:
+
+```sh
+codex-worker --instance <instance> message --name <name> \
+  --message-file update.md
+```
+
+`--message` is the short-text alternative; see `codex-worker message --help` for input
+and priority options. This command does not pause, steer, interrupt, and does not wait
+for Codex.
+Its result `written` proves only a local write, never `delivered`. `--cc-agent-name`
+redirects one-send proactive message only; it never changes the stored terminal route.
+Use no credentials or transport details in task prompts; diagnostic recovery stays on
+the named common commands above.
+
 ## Coordinate active work
 
 Use names, not session/thread/socket paths, for the ordinary surface:
