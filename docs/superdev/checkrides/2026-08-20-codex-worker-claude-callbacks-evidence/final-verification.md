@@ -81,3 +81,21 @@ Final focused reviewer verdict at candidate `8e724e6`: **Ready to merge Yes**, w
 remaining Critical, Important, or Minor findings. The final warning-strict full gate
 after that candidate ran 362 tests in 33.816 seconds and passed; `py_compile`, shell
 syntax, range diff-check, and clean-tree checks also passed.
+
+## Timeout negative-proof review closure
+
+A later root review required mechanical proof that observation timeout itself emits no
+terminal callback. RED: the new structural harness contract failed because the recovery
+scenario lacked `matching_timeout_events == []` and its receipt record. GREEN: the
+scenario now starts a deliberately delayed five-second command, receives `timeout_active`,
+snapshots the origin inbox immediately with zero terminal events matching that turn ID,
+and only then waits for exactly one later completed callback with the same turn ID,
+worker name, and exact `TIMEOUT-LATER` message.
+
+- Focused warning-strict contract: 15 tests PASS.
+- Full warning-strict gate: 363 tests PASS in 34.012 seconds.
+- Separate `python3 tests/codex-worker/live_broker_check.py --scenario callback-recovery`:
+  PASS; tracked sanitized 41-record transcript has six callback frames, summary counts
+  `timeout_preterminal_count: 0` / `later_matching_terminal_count: 1`, and sequence 2
+  `timeout_no_terminal_snapshot` with `matching_terminal_count: 0`.
+- Receipt: `reviewer-timeout-negative/callback-recovery/{summary.json,transcript.jsonl}`.

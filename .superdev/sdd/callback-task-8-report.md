@@ -9,7 +9,7 @@ Status: PASS; evaluator PASS and final reviewer Ready to merge Yes
 The first change was a RED contract expansion for the six separately runnable callback
 scenarios and the real-Claude evidence validator. Focused RED failed on the absent
 scenario/receipt contracts. GREEN added the live scenarios and fixed the product seams
-they exposed. The final warning-strict gate is `361 tests` PASS in 32.150 seconds;
+they exposed. The final warning-strict gate is `363 tests` PASS in 34.012 seconds;
 `py_compile`, `bash -n`, and `git diff --check` also pass. Expected argparse stderr from
 the concurrent-worktrees fixture is captured, so the final fast gate is pristine. The
 Task 1 representative enum minor is closed by the exhaustive exact code/kind guard.
@@ -36,6 +36,13 @@ and an 801482-byte artifact with exact SHA/readback. Product/CLI attempt stateme
 local `written` receipts, never delivery claims; the real Claude transcript separately
 contains MEASURED receiver-observed callback attestations. Sanitized raw copies are tracked
 under `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/`.
+
+The final timeout-specific review wave is tracked at
+`docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/reviewer-timeout-negative/callback-recovery/`.
+Its sequence 1 returns `timeout_active` for turn
+`01a01fea-502d-70b1-8a91-d6d9916aa21a`; sequence 2 snapshots the origin inbox with
+`matching_terminal_count: 0`; sequence 3 is the sole later terminal callback for that
+same turn and contains the exact `TIMEOUT-LATER` completed result.
 
 ## CLI checkride
 

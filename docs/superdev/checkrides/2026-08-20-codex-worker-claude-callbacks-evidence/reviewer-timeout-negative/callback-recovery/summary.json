@@ -1,0 +1,31 @@
+{
+  "result": {
+    "artifact_event_id": "terminal-621ca16b699df3f562439177495a2a227c96f95ec1e4379c2ffd1242f489b31f",
+    "artifact_readback_verified": true,
+    "artifact_sha256": "3fe33daafc698ce633b5334a9bd1cec68f103e4995bc6d4421c0a4df3d278a0c",
+    "artifact_size_bytes": 801481,
+    "failed_terminal_event_id": "terminal-91a0bd43138959df39eb2edc30eb5f93135ea69b3f2c241f58ab678c2cec3265",
+    "failed_terminal_status": "failed",
+    "interrupted_event_id": "terminal-6572cf522a00538064465b9f4ada7d6550a11538c85f4685eac95293bb60056c",
+    "later_matching_terminal_count": 1,
+    "later_terminal_event_id": "terminal-4e40e31e5720cfedae24ae4f821a163d2be41dd34bf32901e14ac8ab60063123",
+    "pending_attempt_count": 4,
+    "pending_same_id_event_id": "terminal-bc47af3bdb745e47e40f8f69d1e2ee259c408f24bb8d3628b1541220e3229462",
+    "pending_same_id_replayed": true,
+    "raw_session_id": "d2c63f57-d633-4d30-b50c-375f71354766",
+    "raw_turn_status": "completed",
+    "restart_turn_id": "01a01fea-8d83-79e2-8061-9da046ad02ac",
+    "terminal_statuses": [
+      "completed",
+      "interrupted"
+    ],
+    "timeout_preterminal_count": 0,
+    "timeout_turn_id": "01a01fea-502d-70b1-8a91-d6d9916aa21a",
+    "wait_timeout_kind": "timeout_active",
+    "written_event_id": "terminal-4e40e31e5720cfedae24ae4f821a163d2be41dd34bf32901e14ac8ab60063123",
+    "written_replayed_after_restart": false
+  },
+  "scenario": "callback-recovery",
+  "status": "PASS",
+  "transcript": ".superdev/codex-worker-live/20260820T160403.879477Z-4211-callback-recovery/transcript.jsonl"
+}

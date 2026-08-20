@@ -1750,11 +1750,40 @@ def scenario_callback_recovery() -> Json:
     try:
         payload, completed = runner.run(
             "start", "--name", timeout_name, "--timeout", "0",
-            "--prompt", "Reply with exactly TIMEOUT-LATER and no other text.", cwd=cwd, check=False)
+            "--prompt", "Run `python3 -c \"import time; time.sleep(5)\"`, then reply "
+            "with exactly TIMEOUT-LATER and no other text.", cwd=cwd, check=False)
         timeout_error = assert_typed_error(payload, completed, "timeout_active")
+        timeout_turn_id = timeout_error["data"]["known_ids"]["turn_id"]
+        assert isinstance(timeout_turn_id, str) and timeout_turn_id
+        timeout_snapshot = fixture.origin.events()
+        matching_timeout_events = [
+            event for event in timeout_snapshot
+            if (event.get("event") in ("turn_terminal", "turn_terminal_reference")
+                and event.get("payload", {}).get("completion", {}).get(
+                    "turn", {}).get("turn_id") == timeout_turn_id)
+        ]
+        assert matching_timeout_events == [], matching_timeout_events
+        recorder.record("timeout_no_terminal_snapshot", {
+            "turn_id": timeout_turn_id,
+            "matching_terminal_count": len(matching_timeout_events),
+            "origin_event_count": len(timeout_snapshot),
+        })
         fixture.origin.wait(1, timeout=120.0)
-        later_event = _require_event(fixture.origin, 0, "turn_terminal")
-        assert later_event["payload"]["completion"]["turn"]["status"] == "completed"
+        later_matching_events = [
+            event for event in fixture.origin.events()
+            if (event.get("event") == "turn_terminal"
+                and event.get("payload", {}).get("completion", {}).get(
+                    "turn", {}).get("turn_id") == timeout_turn_id)
+        ]
+        assert len(later_matching_events) == 1, later_matching_events
+        later_event = later_matching_events[0]
+        later_completion = later_event["payload"]["completion"]
+        assert later_completion["turn"] == {
+            "turn_id": timeout_turn_id, "status": "completed", "error": None,
+        }, later_completion
+        assert later_completion["worker"]["name"] == timeout_name, later_completion
+        assert [message["text"] for message in later_completion["messages"]] == [
+            "TIMEOUT-LATER"], later_completion
 
         argv, pending = runner.start(
             "start", "--name", interrupted_name, "--prompt",
@@ -1851,6 +1880,9 @@ def scenario_callback_recovery() -> Json:
             assert shutdown.returncode == 0, shutdown.stdout
             recorder.collect(fake_process, fake_argv, timeout=15.0)
         result = {"wait_timeout_kind": timeout_error["data"]["kind"],
+                  "timeout_turn_id": timeout_turn_id,
+                  "timeout_preterminal_count": len(matching_timeout_events),
+                  "later_matching_terminal_count": len(later_matching_events),
                   "later_terminal_event_id": later_event["event_id"],
                   "interrupted_event_id": interrupted_event["event_id"],
                   "terminal_statuses": ["completed", "interrupted"],

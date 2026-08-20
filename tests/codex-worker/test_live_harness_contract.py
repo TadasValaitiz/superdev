@@ -177,6 +177,14 @@ class LiveHarnessContractTests(unittest.TestCase):
         self.assertIn('"--message-file"', source)
         self.assertIn('"later"', source)
 
+    def test_timeout_contract_proves_no_terminal_before_later_completion(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('time.sleep(5)', source)
+        self.assertIn('matching_timeout_events == []', source)
+        self.assertIn('"timeout_no_terminal_snapshot"', source)
+        self.assertIn('len(later_matching_events) == 1', source)
+        self.assertIn('"timeout_preterminal_count": len(matching_timeout_events)', source)
+
     def test_cleanup_failure_is_not_suppressed(self):
         daemon = FailingDaemon()
         with self.assertRaisesRegex(RuntimeError, "graceful shutdown failed"):
