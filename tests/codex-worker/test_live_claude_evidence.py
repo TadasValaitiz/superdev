@@ -84,6 +84,27 @@ class ClaudeEvidenceTests(unittest.TestCase):
             self.assertEqual(receipt["callback_event_ids"], ["callback-event-1"])
             self.assertTrue(receipt["full_result_recovered"])
 
+            # Claude stream-json can omit injected callback frames while Claude's
+            # final answer still reports their durable IDs and recovered result.
+            terminal_id = "terminal-" + "a" * 64
+            status_result = results[5]
+            status_result["callback"]["last_terminal_attempt"]["event_id"] = terminal_id
+            without_injected_frame = [line for line in lines if line.get("type") != "user"]
+            for line in without_injected_frame:
+                block = line.get("message", {}).get("content", [{}])[0]
+                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t5":
+                    block["content"] = json.dumps({"result": status_result})
+            without_injected_frame.append({
+                "message": {"content": [{
+                    "type": "text",
+                    "text": f"Callback {terminal_id}; recovered: complete result",
+                }]},
+            })
+            transcript.write_text("\n".join(map(json.dumps, without_injected_frame)) + "\n")
+            hidden_receipt = EVIDENCE.validate(transcript, cwd, cli)
+            self.assertEqual(hidden_receipt["callback_event_ids"], [terminal_id])
+            self.assertTrue(hidden_receipt["full_result_recovered"])
+
             for forbidden in ("codex app-server", "python3 /repo/codex-worker model list", "mcp__codex__call"):
                 lines[0]["message"]["content"][0]["input"]["command"] = forbidden
                 transcript.write_text("\n".join(map(json.dumps, lines)) + "\n")

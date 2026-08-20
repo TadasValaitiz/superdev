@@ -179,12 +179,8 @@ class WorkerFacade:
                                FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE)
                     and record is not None):
                 fault = FacadeFault(fault.code, fault.message, fault.kind, fault.retryable,
-                                    fault.source, fault.details, self._known(record), [{
-                                        "command": self._command(
-                                            "message --name %s --message-file <path>" %
-                                            shlex.quote(record.name)),
-                                        "reason": "Retry deliberately with a new proactive event",
-                                    }])
+                                    fault.source, fault.details, self._known(record),
+                                    self._callback_fault_actions(fault.code, record))
             return Err(fault)
 
     def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
@@ -457,6 +453,36 @@ class WorkerFacade:
 
     def _command(self, suffix):
         return "codex-worker --instance %s %s" % (shlex.quote(self.deps.instance.value), suffix)
+
+    def _callback_fault_actions(self, code, record):
+        name = shlex.quote(record.name)
+        status = {"command": self._command("status --name %s" % name),
+                  "reason": "Inspect callback and worker state before continuing"}
+        if code == FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE:
+            return [{
+                "command": self._command(
+                    "message --name %s --message-file <shorter-path>" % name),
+                "reason": "Retry with a shorter proactive message",
+            }]
+        if code == FacadeFaultCode.CALLBACK_SEND_FAILED:
+            return [status, {
+                "command": self._command("message --name %s --message-file <path>" % name),
+                "reason": "Retry deliberately with a new proactive event if still useful",
+            }]
+        reasons = {
+            FacadeFaultCode.CALLBACK_UNAVAILABLE:
+                "Inspect callback state; continue work without assuming a callback",
+            FacadeFaultCode.CALLBACK_TARGET_STALE:
+                "Inspect the stale origin and continue recovery through worker results",
+            FacadeFaultCode.CALLBACK_TARGET_NOT_FOUND:
+                "Inspect worker state, then verify the exact Claude agent name outside Codex",
+            FacadeFaultCode.CALLBACK_TARGET_AMBIGUOUS:
+                "Inspect worker state, then select or rename a unique Claude room",
+            FacadeFaultCode.CALLBACK_TARGET_UNSAFE:
+                "Inspect worker state without changing or unlinking the rejected endpoint",
+        }
+        status["reason"] = reasons.get(code, status["reason"])
+        return [status]
 
     def _raw_resume_command(self, thread_id):
         return self._command("session resume --thread %s" % shlex.quote(thread_id))

@@ -19,7 +19,12 @@ from .commands import (FacadeFault, GoalSetRequest, GoalShowRequest, InterruptWo
 
 JsonId = Optional[Union[str, int]]
 
-MAX_REQUEST_BYTES = 1024 * 1024
+# A proactive message may legitimately approach one million UTF-16 code units;
+# Python's ASCII-safe JSON encoding can expand each unit to a six-byte escape.
+# Leave bounded headroom for the daemon-owned final-envelope refusal while keeping
+# the client response cap smaller and independent.
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
+MAX_RESPONSE_BYTES = 1024 * 1024
 START_LOCK_TIMEOUT_SECONDS = 2.0
 
 
@@ -415,7 +420,7 @@ def rpc_call(socket_path: str, method: str, params: Optional[JsonObject] = None,
                 if not chunk:
                     break
                 received += chunk
-                if len(received) > MAX_REQUEST_BYTES:
+                if len(received) > MAX_RESPONSE_BYTES:
                     raise _fault(-32016, "Daemon response is too large", "daemon_protocol_error")
         except (socket.timeout, OSError) as exc:
             if isinstance(exc, RpcFault):

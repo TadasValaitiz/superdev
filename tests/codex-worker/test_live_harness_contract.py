@@ -162,6 +162,21 @@ class LiveHarnessContractTests(unittest.TestCase):
         ])
         self.assertEqual(contract["five_simultaneous"], 5)
 
+    def test_checkride_preserves_sanitized_frames_and_drives_recovery_mechanisms(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"callback_frame"', source)
+        self.assertIn('"[REDACTED]"', source)
+        self.assertIn('"destination"', source)
+        for fragment in (
+                '"daemon", "start"', '"session", "resume"',
+                '"session", "show"', '"turn", "status"',
+                '"artifact_readback"', '"turn_terminal_reference"',
+                '"failed_terminal_status"', '"pending_same_id_replayed"'):
+            self.assertIn(fragment, source)
+        self.assertNotIn("deterministic dispatcher receipt", source)
+        self.assertIn('"--message-file"', source)
+        self.assertIn('"later"', source)
+
     def test_cleanup_failure_is_not_suppressed(self):
         daemon = FailingDaemon()
         with self.assertRaisesRegex(RuntimeError, "graceful shutdown failed"):

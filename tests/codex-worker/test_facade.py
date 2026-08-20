@@ -231,8 +231,18 @@ class FacadeTests(unittest.TestCase):
                 encoded = result.error.to_dict()
                 self.assertNotIn("secret prose", str(encoded))
                 self.assertNotIn("/tmp/claude.sock", str(encoded))
-                self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[0:4],
-                                 ["codex-worker", "--instance", "verified-instance", "message"])
+                commands = [shlex.split(action["command"])
+                            for action in result.error.next_actions]
+                if code == FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE:
+                    self.assertEqual(commands[0][3:6],
+                                     ["message", "--name", "faults-a"])
+                    self.assertIn("shorter", result.error.next_actions[0]["reason"].lower())
+                elif code == FacadeFaultCode.CALLBACK_SEND_FAILED:
+                    self.assertEqual([command[3] for command in commands],
+                                     ["status", "message"])
+                else:
+                    self.assertEqual(commands[0][3:], ["status", "--name", "faults-a"])
+                    self.assertNotEqual(commands[0][3], "message")
 
     def test_projector_port_declares_the_proactive_event_builder(self):
         from codex_worker.facade import ProjectorPort

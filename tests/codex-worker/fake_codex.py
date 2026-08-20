@@ -82,6 +82,10 @@ class FakeCodex:
             return
         outputs = self.option("turn_outputs", {})
         output = outputs.get(prompt, "done:%s" % prompt) if isinstance(outputs, dict) else "done:%s" % prompt
+        contains_outputs = self.option("turn_output_contains", {})
+        if isinstance(contains_outputs, dict):
+            output = next((value for marker, value in contains_outputs.items()
+                           if marker in prompt), output)
         phases = self.option("turn_phases", {})
         phase = phases.get(prompt) if isinstance(phases, dict) else None
         if self.option("no_agent_messages", False):
@@ -100,11 +104,14 @@ class FakeCodex:
         if type(duration) is int:
             self.send({"method": "item/completed", "params": {"threadId": thread_id, "turnId": turn_id,
                        "item": {"id": "command-%s" % turn_id, "type": "commandExecution", "durationMs": duration}}})
+        statuses = self.option("turn_status_contains", {})
+        status = next((value for marker, value in statuses.items() if marker in prompt),
+                      "completed") if isinstance(statuses, dict) else "completed"
         self.send({
             "method": "turn/completed",
             "params": {
                 "threadId": thread_id,
-                "turn": {"id": turn_id, "status": "completed", "items": []},
+                "turn": {"id": turn_id, "status": status, "items": []},
             },
         })
         self.active_turns.pop(thread_id, None)
@@ -199,10 +206,10 @@ class FakeCodex:
             elif self.mode == "exit":
                 raise SystemExit(7)
             else:
-                self.response(request_id, {"data": [
+                self.response(request_id, {"data": self.option("models", [
                     {"id": "fake-model-a", "supportedReasoningEfforts": [{"reasoningEffort": "medium"}]},
                     {"id": "fake-model-b", "supportedReasoningEfforts": [{"reasoningEffort": "high"}]},
-                ]})
+                ])})
         elif method == "thread/start":
             self.thread_number += 1
             self.thread_id = "thr-fake" if self.thread_number == 1 else "thr-fake-%d" % self.thread_number

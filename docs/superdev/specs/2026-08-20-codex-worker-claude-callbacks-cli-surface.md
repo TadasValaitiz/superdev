@@ -287,6 +287,13 @@ Claude room outside Codex, then retry explicitly; never guess a target.
 2. Inside Claude, add `--no-callback`; status reports disabled.
 3. All ordinary worker results, controls, recovery, and stop remain unchanged.
 
+### Explicit managed-daemon recovery
+
+`codex-worker --instance <instance> daemon start` starts or reuses the selected managed
+daemon without starting a Codex turn. `message` remains non-autostarting; a stopped
+message refusal points to this command so the operator can restore the relay and then
+retry deliberately.
+
 ## 7. Errors and exits
 
 | Code / kind | Exit | Meaning | Safe next action |

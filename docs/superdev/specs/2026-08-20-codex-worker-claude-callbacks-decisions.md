@@ -634,3 +634,26 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** capture revalidation and named-target liveness only.
 - **Revisit-when:** Claude includes an explicit timezone/epoch or macOS exposes a stable
   process birth epoch through the supported stdlib boundary.
+
+## D34 — Expose explicit managed-daemon start and keep envelope sizing daemon-owned
+**When:** 2026-08-20T15:15:00Z · **Phase:** checkride · **Status:** locked
+**Decided by:** Codex after independent CLI checkride evaluation
+
+- **Trigger:** A stopped `message` correctly avoided implicit startup but offered no
+  non-turn-producing recovery, while an added client-side Unicode estimate bypassed
+  D14's daemon-owned final-envelope sizing and lost worker-aware recovery context.
+- **Options weighed:** autostart `message`; require operators to manage foreground
+  `daemon serve`; or add an explicit managed lifecycle action and preserve the daemon
+  as the only final-envelope size authority.
+- **Decided:** Add `codex-worker [--instance <id>] daemon start`. It invokes the existing
+  safe/idempotent managed startup path, returns one `DaemonStatusResponse`, and starts no
+  worker turn. Stopped common-command refusals point to it. Remove the proactive client
+  UTF-16 shortcut; local file/argument validation remains client-owned, while the daemon
+  sizes the serialized Claude user line and returns worker-aware `-32037` recovery. The
+  local RPC request bound is 8 MiB so the largest permitted UTF-16 message and a modestly
+  oversized refusal probe can reach that check even under Python's six-byte JSON escapes;
+  the response bound remains independently capped at 1 MiB.
+- **Rests on:** D14, D23, R7, and the non-destructive managed lifecycle contract.
+- **Affects:** CLI parser/managed lifecycle, stopped-daemon next actions, Unicode ride,
+  CLI companion, and checkride recovery evidence.
+- **Revisit-when:** the callback relay becomes a process independent of the Codex daemon.

@@ -804,15 +804,33 @@ class CliTests(unittest.TestCase):
                 self.assert_json_error(completed, 2)
                 self.assertEqual(self.rpc_calls, [])
 
-    def test_obviously_oversized_unicode_message_refuses_before_rpc_write(self):
+    def test_oversized_unicode_message_reaches_daemon_for_final_envelope_sizing(self):
         huge = Path(self.tempdir.name) / "huge-unicode.txt"
         huge.write_text("😀" * 600000, encoding="utf-8")
         completed = self.run_cli(
             ["message", "--name", "build-1", "--message-file", str(huge)],
             fake_rpc=self.fake_rpc_success, include_socket=False)
-        self.assert_json_error(completed, 1, "callback_payload_too_large")
-        self.assertEqual(json.loads(completed.stdout)["error"]["code"], -32037)
-        self.assertEqual(self.rpc_calls, [])
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(len(self.rpc_calls), 1)
+        self.assertEqual(self.rpc_calls[0][0], "worker/message")
+        self.assertEqual(self.rpc_calls[0][1]["message"], "😀" * 600000)
+
+    def test_managed_daemon_start_is_an_explicit_json_lifecycle_action(self):
+        class Manager:
+            def ensure_running(self):
+                return type("Status", (), {"to_dict": lambda self: {
+                    "status": "ready", "instance": {"instance": "chosen"},
+                }})()
+        original = cli._instance_manager
+        cli._instance_manager = lambda instance: Manager()
+        try:
+            completed = self.run_cli(
+                ["--instance", "chosen", "daemon", "start"], include_socket=False)
+        finally:
+            cli._instance_manager = original
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(json.loads(completed.stdout)["result"]["status"], "ready")
+        self.assertEqual(completed.stderr, "")
 
     def test_message_rejects_socket_and_stopped_daemon_does_not_autostart(self):
         self.rpc_calls = []

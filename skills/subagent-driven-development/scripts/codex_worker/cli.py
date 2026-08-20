@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import os
+import shlex
 import signal
 import sys
 import tempfile
@@ -157,6 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="installed Codex CLI executable path")
     serve.add_argument("--event-limit", type=_positive_int, default=1000,
                        help="per-session in-memory event retention limit")
+    daemon_sub.add_parser("start", help="start the selected managed daemon").set_defaults(
+        method="daemon/start", managed_daemon=True)
     daemon_sub.add_parser("status", help="read daemon health").set_defaults(method="daemon/status")
     daemon_sub.add_parser("stop", help="stop the selected managed daemon").set_defaults(method="daemon/stop", managed_daemon=True)
     daemon_sub.add_parser("shutdown", help="gracefully stop the daemon").set_defaults(method="daemon/shutdown")
@@ -342,6 +345,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _serve(args)
 
     try:
+        if args.family == "daemon" and args.action == "start":
+            if args.socket:
+                raise ValueError("--socket is not valid with daemon start")
+            response = {"jsonrpc": "2.0", "id": "cli",
+                        "result": _instance_manager(args.instance).ensure_running().to_dict()}
+            _print_json(response, args.pretty)
+            return 0
         if args.family == "daemon" and args.action == "status" and not args.socket:
             response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).status().to_dict()}
             _print_json(response, args.pretty)
@@ -458,13 +468,6 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
         return {"name": args.name, "prompt": _prompt(args), "output_schema": _output_schema(args.output_schema), "timeout": args.timeout}
     if method == "worker/message":
         message = _message(args)
-        from .claude_transport import MAX_USER_LINE_UTF16_UNITS
-        if len(message.encode("utf-16-le")) // 2 > MAX_USER_LINE_UTF16_UNITS:
-            raise FacadeFault(
-                FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE,
-                "Proactive callback message exceeds the Claude user-line limit",
-                "callback_payload_too_large",
-            )
         return {"name": args.name, "message": message, "priority": args.priority,
                 "cc_agent_name": args.cc_agent_name}
     if method in ("worker/status", "worker/interrupt", "worker/goal/show"):
@@ -602,7 +605,16 @@ def _common_endpoint(explicit_instance, autostart):
     manager = _instance_manager(explicit_instance)
     status = manager.ensure_running() if autostart else manager.status()
     if status.status != "ready":
-        raise FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped")
+        selected = shlex.quote(manager.identity.value)
+        raise FacadeFault(
+            FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+            known_ids={"instance": manager.identity.value, "name": None,
+                       "session_id": None, "thread_id": None, "turn_id": None},
+            next_actions=[{
+                "command": "codex-worker --instance %s daemon start" % selected,
+                "reason": "Start the selected managed daemon without starting a turn",
+            }],
+        )
     return str(manager.deps.paths.socket_path)
 
 
