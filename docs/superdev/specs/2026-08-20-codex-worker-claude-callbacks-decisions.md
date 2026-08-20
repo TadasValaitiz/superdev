@@ -46,7 +46,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Revisit-when:** Claude publishes a supported authenticated callback API.
 
 ## D3 — Allow explicit return-room override
-**When:** 2026-08-20T08:04:41Z · **Phase:** brainstorm · **Status:** locked
+**When:** 2026-08-20T08:04:41Z · **Phase:** brainstorm · **Status:** superseded-by D5
 **Decided by:** Tadas
 
 - **Trigger:** The initial Claude room is normally correct, but exceptional ownership
@@ -266,3 +266,154 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** the operator-approved repository boundary in design section 4.
 - **Affects:** spec context, implementation-plan staging, probe commits, and receipts.
 - **Revisit-when:** callback transport research becomes a supported Superdev library.
+
+## D15 — Bind callbacks to Claude process identity and scrub the Codex environment
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** The current app-server inherits the daemon environment, and a PID-derived
+  socket can later be reused by another Claude process. Socket permissions and an old
+  child token do not prevent misdelivery on platforms where Claude authentication is
+  optional.
+- **Options weighed:**
+  - A: retain socket/token only — gains a small binding / leaks credentials downstream
+    and cannot distinguish PID reuse.
+  - B: capture registry identity and config root, validate session ID + PID + process
+    start before every write, then remove messaging credentials from the Codex child
+    environment — gains recipient continuity and least capability / adds identity checks.
+- **Decided:** Take option B. Enabled capture requires one registry record matching the
+  ambient socket and captures its session ID, PID, process start, and config root. The
+  daemon consumes the socket/token but launches Codex with both messaging variables
+  removed. Every send revalidates the captured identity; mismatch is stale-target refusal.
+- **Rests on:** MEASURED Claude registry fields and source-confirmed inherited `Popen`
+  environment.
+- **Affects:** binding fields, daemon spawn, default sends, restart, security tests.
+- **Revisit-when:** Claude exposes a kernel-bound recipient handle or supported sender.
+
+## D16 — Use a durable at-least-once write policy with stable duplicate identity
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** A daemon crash after socket write but before state commit is unknowable to
+  the next process; the original pending-only design could neither resume without a
+  payload nor avoid all duplicates.
+- **Options weighed:**
+  - A: at-most-once by marking before send — gains no deliberate duplicate / can lose the
+    only completion callback during a crash.
+  - B: durable at-least-once write policy — persist the full bounded event before send and
+    retry every non-written event with the same ID; gains no intentional loss before a
+    complete write / permits a duplicate in the crash window.
+- **Decided:** Take option B for automatic terminal callbacks. The guarantee is about
+  completing a socket write, never Claude delivery. The terminal callback payload and
+  attempt counter are durable. A crash-window replay uses the same event ID and is
+  explicitly documented as possibly duplicate. Proactive calls remain single bounded
+  attempts; an explicit retry is a new event.
+- **Rests on:** the one-way measured transport and the no-poll objective.
+- **Affects:** callback outbox, attempt states, restart recovery, event schema, AH7.
+- **Revisit-when:** Claude supplies an authenticated delivery acknowledgment or dedupe key.
+
+## D17 — Spill oversized terminal results to a durable verified artifact
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** A complete terminal result can exceed Claude's single-line cap, so the
+  original promise of one complete inline callback was impossible for unbounded output.
+- **Options weighed:**
+  - A: truncate — gains one small prompt / violates complete-report intent.
+  - B: chunk into many Claude prompts — keeps bytes inline / creates ordering and repeated
+    turn-trigger complexity.
+  - C: atomically persist the full event and send a bounded reference envelope with path,
+    digest, and exact size — keeps one notification and complete recoverability / Claude
+    performs one file read after being notified.
+- **Decided:** Take option C. Ordinary results stay inline. Oversized terminal results use
+  `turn_terminal_reference`; the full owner-readable JSON artifact is immutable and
+  digest-addressed. This is notification-driven retrieval, not polling.
+- **Rests on:** same-machine full-access/read-only Claude tools and measured line cap.
+- **Affects:** R3, transport, event artifacts, cleanup retention, acceptance.
+- **Revisit-when:** Claude supports multipart atomic prompt injection or larger frames.
+
+## D18 — Inject the exact worker instance into proactive commands
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** Worker name is unique only inside one instance; a Codex shell may not
+  inherit the same ambient instance selector as the launching Claude command.
+- **Options weighed:**
+  - A: inject name only — gains brevity / may contact the wrong or stopped daemon.
+  - B: inject `--instance <WorkerView.instance>` plus name — gains exact routing / adds
+    one stable argument to the taught command.
+- **Decided:** Take option B for every proactive command and recovery action shown to
+  Codex. The instance and name together identify the relay.
+- **Rests on:** existing instance-scoped daemon architecture and recovery command style.
+- **Affects:** D9 refinement, initialization instructions, CLI examples, live fan-out.
+- **Revisit-when:** the worker gets a trustworthy scoped command wrapper.
+
+## D19 — Freeze exact callback event names and override scope
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** The draft diagram said `terminal` while prose said `turn_terminal`, and
+  D3 remained open-ended after D5 had already selected one-message override.
+- **Options weighed:** preserve aliases (compatibility with nothing shipped, more drift)
+  or freeze one vocabulary and mark the broad decision superseded.
+- **Decided:** Event names are exactly `turn_terminal`, `turn_terminal_reference`, and
+  `worker_message`. D3 is superseded by D5: only proactive `worker_message` supports
+  `cc-agent-name`, for that send only.
+- **Rests on:** D5, D7, D17 and the unshipped draft status.
+- **Affects:** event enum, diagram, payload tests, decision traceability.
+- **Revisit-when:** a version-2 schema deliberately adds an event kind.
+
+## D20 — Make final envelope sizing a daemon-owned protocol refusal
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** The client cannot know the final daemon-owned worker/event envelope, so it
+  cannot truthfully reject oversize proactive payloads as a local exit-2 usage error.
+- **Options weighed:** duplicate envelope construction in the client (drift risk) or size
+  once after daemon construction (typed remote refusal).
+- **Decided:** The daemon counts JavaScript UTF-16 code units on the final JSON user line
+  as `len(line.encode("utf-16-le")) / 2`, excluding the newline, and enforces the measured
+  1,048,576-unit cap. Oversized proactive messages return
+  `callback_payload_too_large`, exit 1. Oversized terminal results follow D17.
+- **Rests on:** MEASURED Claude JavaScript buffer semantics and strict CLI envelopes.
+- **Affects:** R10, transport validation, fault vocabulary, Unicode boundary tests.
+- **Revisit-when:** the receiver changes its decoder or counting rule.
+
+## D21 — Persist resolver root and make disabled stronger than an override
+**When:** 2026-08-20T08:45:25Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex after independent spec review
+
+- **Trigger:** Named resolution can drift with `CLAUDE_CONFIG_DIR`, and the draft did not
+  say whether an explicit override bypasses `--no-callback`.
+- **Options weighed:** use daemon ambient config and allow every override (convenient but
+  nondeterministic/bypasses explicit suppression) or persist the capture root and enforce
+  state-aware rules.
+- **Decided:** Persist the canonical start-time Claude config/registry root in the
+  binding whenever it can be resolved safely, and never substitute later daemon ambient
+  state. Disabled rejects all callback sends, including overrides. Unavailable has no
+  default route but may use an explicit named override only through that persisted root.
+- **Rests on:** D8's explicit suppression and measured `CLAUDE_CONFIG_DIR` behavior.
+- **Affects:** binding nullability/invariants, override resolver, faults, status, tests.
+- **Revisit-when:** overrides receive a separate operator authorization policy.
+
+## D22 — Reserve a closed callback fault-code block
+**When:** 2026-08-20T09:18:00Z · **Phase:** spec · **Status:** locked
+**Decided by:** Codex during spec self-review
+
+- **Trigger:** The existing façade validates a closed kind/code map, while the callback
+  CLI companion named seven new typed faults without assigning JSON-RPC codes.
+- **Options weighed:**
+  - A: reuse generic `codex_failure` or `invalid_params` — gains no enum additions /
+    destroys callback-specific recovery and misstates daemon-owned failures.
+  - B: defer numbers to implementation — gains temporary flexibility / makes the API
+    design non-exhaustive and permits test/docs drift.
+  - C: reserve the next contiguous façade block — gains a closed public contract / uses
+    seven codes.
+- **Decided:** Take option C: `-32031 callback_unavailable`, `-32032
+  callback_target_stale`, `-32033 callback_target_not_found`, `-32034
+  callback_target_ambiguous`, `-32035 callback_target_unsafe`, `-32036
+  callback_send_failed`, and `-32037 callback_payload_too_large`. Durable callback-store
+  failures reuse existing `-32011 registry_error`.
+- **Rests on:** the existing closed `FacadeFaultCode`/`FACADE_FAULT_KINDS` contract.
+- **Affects:** command models, RPC errors, CLI exits, docs, and exhaustive enum tests.
+- **Revisit-when:** the façade introduces a versioned error namespace.

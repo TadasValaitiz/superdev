@@ -12,12 +12,17 @@
 Callback selection is deterministic:
 
 1. `--no-callback` → durable `disabled` state; ambient values are ignored.
-2. Both valid `CLAUDE_CODE_MESSAGING_SOCKET` and
-   `CLAUDE_CODE_MESSAGING_TOKEN` → durable `enabled` binding.
-3. Otherwise → durable `unavailable` state; worker creation proceeds.
+2. Valid socket/token/session/PID ambient values that match one live Claude registry
+   identity → durable `enabled` binding containing the verified session ID, PID,
+   process-start value, endpoint, and canonical Claude config root.
+3. Otherwise → durable `unavailable` state; worker creation proceeds and retains the
+   safety-checked start-time Claude config root when resolvable.
 
 No public `--cc-agent-name` exists on `start`; D6 reserves that property for one
 proactive override only. A later `run` does not inspect or replace ambient callback data.
+Before the daemon launches Codex, it removes `CLAUDE_CODE_MESSAGING_SOCKET` and
+`CLAUDE_CODE_MESSAGING_TOKEN` from the child environment. Disabled/unavailable bindings
+carry nullable secret fields; they never synthesize empty paths or tokens.
 
 ### 1b. Composition rationale
 
@@ -54,7 +59,8 @@ Success result:
     "attempt": {
       "state": "written",
       "reason": null,
-      "attempted_at": "RFC3339 timestamp"
+      "attempted_at": "RFC3339 timestamp",
+      "attempt_count": 1
     }
   }
 }
@@ -68,23 +74,23 @@ The command is injected into the named worker's initialization instructions in t
 form:
 
 ```bash
-codex-worker message --name implement-7f3 \
+codex-worker --instance default message --name implement-7f3 \
   --message "I found a schema ambiguity; I am continuing conservatively."
 ```
 
 Urgent and low-priority variants are explicit:
 
 ```bash
-codex-worker message --name implement-7f3 --priority now \
+codex-worker --instance default message --name implement-7f3 --priority now \
   --message "Blocking safety issue: do not merge yet."
-codex-worker message --name implement-7f3 --priority later \
+codex-worker --instance default message --name implement-7f3 --priority later \
   --message "Progress update: deterministic checks are green."
 ```
 
 One-send override:
 
 ```bash
-codex-worker message --name implement-7f3 \
+codex-worker --instance default message --name implement-7f3 \
   --cc-agent-name orchestrator-original \
   --message "Please inspect the schema boundary."
 ```
@@ -92,15 +98,20 @@ codex-worker message --name implement-7f3 \
 The override does not change the stored default. Zero matching live names return
 `callback_target_not_found`; multiple matching live names return
 `callback_target_ambiguous`. Neither falls back to the origin or an arbitrary match.
+The daemon resolves overrides only below the binding's persisted verified Claude config
+root. An `unavailable` worker may use an override; a `disabled` worker refuses every send,
+including an override.
 
 ### 2b. Composition rationale
 
 This is one command rather than `prepare` + `send` because no human decision belongs
 between building and relaying one notification. It is separate from `run` and `steer`
 because it communicates outward without changing the Codex conversation. Worker name is
-required because daemon fan-out has no reliable per-worker process identity (D4, D5,
-D9, D10). Explicit `--message|--message-file` input follows the existing common prompt
-pattern and keeps validation local (D13).
+required because daemon fan-out has no reliable per-worker process identity, and the
+injected command also pins `--instance` because names are only instance-local (D4, D5,
+D9, D10, D18). Explicit `--message|--message-file` input follows the existing common
+prompt pattern and keeps input validation local (D13); final envelope sizing remains a
+daemon concern (D20).
 
 ## 3. `codex-worker status` — inspect redacted callback state
 
@@ -114,18 +125,21 @@ Additive callback projection:
 {
   "callback": {
     "state": "enabled",
+    "pending_terminal_count": 0,
     "last_terminal_attempt": {
       "event_id": "stable-event-id",
       "state": "written",
       "reason": null,
-      "attempted_at": "RFC3339 timestamp"
+      "attempted_at": "RFC3339 timestamp",
+      "attempt_count": 1
     }
   }
 }
 ```
 
 Allowed binding states are `enabled`, `disabled`, and `unavailable`. The target socket,
-child token, Claude session metadata, peer token, and registry/key paths never appear.
+child token, Claude session/PID/process-start metadata, config root, peer token, and
+registry/key paths never appear.
 
 ### 3b. Composition rationale
 
@@ -144,6 +158,41 @@ status family. It is additive to the current runtime fields (D1, D7).
 The owner-only managed Unix socket is the only RPC path for callback capture. Secret
 capture data must not be accepted on raw explicit-socket methods, included in request
 logging, or echoed in faults.
+
+### 4b. Claude callback event envelopes
+
+All three wire events use the same closed outer shape:
+
+```json
+{
+  "schema": "codex-worker.claude-callback/v1",
+  "event": "turn_terminal",
+  "event_id": "stable-event-id",
+  "emitted_at": "RFC3339 timestamp",
+  "priority": "next",
+  "worker": {"instance": "default", "name": "implement-7f3", "session_id": "worker-session-uuid", "thread_id": "codex-thread-id", "cwd": "/absolute/worktree", "tier": "medium", "model": "gpt-5.6-terra", "effort": "medium", "access": "full"},
+  "payload": {"completion": "the exact public CompletionResponse JSON object"}
+}
+```
+
+`event` is exactly one of:
+
+- `turn_terminal`: `payload.completion` is the complete public
+  `CompletionResponse.to_dict()` projection, including ordered agent messages,
+  structured output (where requested), honest metrics when available, and recovery
+  metadata. The final agent message remains intact, so verdict/report/review content is
+  not reduced to transport metadata.
+- `turn_terminal_reference`: `payload.artifact` contains owner-readable absolute `path`,
+  lowercase hex `sha256`, and positive `size_bytes` for an immutable JSON file whose
+  content is that same complete completion projection. Claude verifies digest and size
+  before using it.
+- `worker_message`: `payload.message` is the caller's non-empty prose. It never carries
+  callback credentials or invents a reply channel.
+
+Terminal events always use `next`; `worker_message` uses the validated requested
+priority. The daemon constructs and sizes the final serialized user line. It counts
+JavaScript UTF-16 code units as `len(line.encode("utf-16-le")) / 2`, excluding the
+newline. This is deliberately not a client-side estimate.
 
 ## 5. Probe scripts — executable research evidence
 
@@ -168,7 +217,10 @@ claim delivery.
 1. Claude runs `codex-worker start --name <unique> --prompt …` with no callback flags.
 2. The command may run in Claude's normal background/concurrent shell machinery.
 3. The daemon sends one `turn_terminal` event at terminal completion with priority
-   `next`; Claude reads the full result from that incoming prompt.
+   `next`; Claude reads the full result from that incoming prompt. If the final envelope
+   would exceed the line cap, it sends `turn_terminal_reference` instead with an
+   owner-readable absolute artifact path, SHA-256 digest, and byte size; Claude verifies
+   and reads that complete JSON artifact.
 4. Claude optionally runs `codex-worker run --name <same> --prompt …`.
 
 Recovery: if no callback arrives, Claude runs `codex-worker status --name <same>` and
@@ -177,18 +229,22 @@ Codex result; `messages` and `history` recover it.
 
 ### Codex proactive update
 
-1. Initialization tells Codex its worker name and the `message` command.
-2. Codex invokes `message --name <same> --message …` and reads written/typed refusal.
+1. Initialization tells Codex its worker instance, name, and exact `message` command.
+2. Codex invokes `codex-worker --instance <instance> message --name <same>
+   --message …` and reads written/typed refusal.
 3. Codex continues its task immediately.
 4. Claude may respond with `steer` if the turn is active or `run` after it ends.
 
 Recovery: `callback_unavailable` means continue work and include the issue in the final
-report. `callback_send_failed` may be retried deliberately; there is no automatic blind
-retry and no synchronous wait.
+report. A proactive `callback_send_failed` may be retried deliberately as a new event;
+there is no synchronous wait. Automatic terminal outbox entries
+retry non-written writes under their original event ID and may duplicate only in the
+crash-before-commit window.
 
 ### One-message alternate reviewer
 
-1. Codex sends `message --name <worker> --cc-agent-name <reviewer> --message …`.
+1. Codex sends `codex-worker --instance <instance> message --name <worker>
+   --cc-agent-name <reviewer> --message …`.
 2. The daemon requires exactly one live matching Claude name and sends once.
 3. Later proactive/default terminal events continue to use the original binding.
 
@@ -203,15 +259,19 @@ Claude room outside Codex, then retry explicitly; never guess a target.
 
 ## 7. Errors and exits
 
-| Kind | Exit | Meaning | Safe next action |
+| Code / kind | Exit | Meaning | Safe next action |
 |---|---:|---|---|
-| `invalid_params` | 2 | Local empty/duplicate message input, invalid priority/name, malformed capture, or oversized encoded line. | Correct arguments; no daemon lifecycle or send occurred. |
-| `callback_unavailable` | 1 | Worker has no enabled binding or was explicitly disabled. | Continue work; inspect status or use a valid one-send override. |
-| `callback_target_not_found` | 1 | Override name has zero live matches. | Verify the exact Claude agent name outside the Codex turn. |
-| `callback_target_ambiguous` | 1 | Override name has multiple live matches. | Rename/select a unique Claude room; no message was sent. |
-| `callback_target_unsafe` | 1 | Socket, key, registry entry, owner, mode, type, or ancestor failed validation. | Inspect the reported safe reason; do not unlink or chmod unknown paths. |
-| `callback_send_failed` | 1 | Connection/write failed before a proven complete frame. | Inspect worker status and retry deliberately if still useful. |
-| `callback_send_uncertain` | 1 | A complete write cannot be proved or disproved. | Do not blindly retry; use event ID when reconciling. |
+| `-32602 invalid_params` | 2 | Local empty/duplicate message input, invalid priority/name, or malformed capture. | Correct arguments; no daemon lifecycle or send occurred. |
+| `-32031 callback_unavailable` | 1 | Worker has no enabled default binding or was explicitly disabled. | Continue work; inspect status. Only `unavailable`, never `disabled`, may use a valid one-send override. |
+| `-32032 callback_target_stale` | 1 | The captured Claude session/PID/process-start/endpoint identity no longer matches. | Do not send to the reused endpoint; inspect status and continue recovery through the worker result. |
+| `-32033 callback_target_not_found` | 1 | Override name has zero live matches. | Verify the exact Claude agent name outside the Codex turn. |
+| `-32034 callback_target_ambiguous` | 1 | Override name has multiple live matches. | Rename/select a unique Claude room; no message was sent. |
+| `-32035 callback_target_unsafe` | 1 | Socket, key, registry entry, owner, mode, type, or ancestor failed validation. | Inspect the reported safe reason; do not unlink or chmod unknown paths. |
+| `-32036 callback_send_failed` | 1 | Connection/write failed before a proven complete frame. | Inspect worker status and retry deliberately if still useful. |
+| `-32037 callback_payload_too_large` | 1 | The daemon's final proactive user line exceeds 1,048,576 JavaScript UTF-16 code units, excluding newline. | Shorten the proactive message; oversized terminal results use an artifact reference automatically. |
+
+Callback-store persistence failures reuse the existing `-32011 registry_error` contract
+with known worker/thread/event identities and safe status/messages recovery.
 
 Automatic terminal callback faults are stored in status rather than replacing the
 successful/failed/interrupted `CompletionResponse` returned by `start` or `run`.
