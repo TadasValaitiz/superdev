@@ -561,3 +561,26 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** Task 1's exact `-32031..-32037` mapping and additive callback status.
 - **Affects:** Task 1 file boundary and its review package only.
 - **Revisit-when:** contract tests move to generated schema enumeration.
+
+## D30 — Separate terminal projection, persistence, and shutdown ownership
+**When:** 2026-08-20T12:24:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex after Task 4 concurrency review
+
+- **Trigger:** The initial dispatcher coupled terminal observation, public projection,
+  and durable persistence. Review exposed predecessor loss, notification-thread blocking,
+  divergent completion metrics, shutdown stranding, and total-store-outage blocking.
+- **Options weighed:** keep persistence on one dispatcher thread; move all persistence to
+  request threads; or coordinate projection and persistence as separate once-only claims
+  with bounded fallback.
+- **Decided:** Use separate per-turn ownership. Runtime retains bounded exact snapshots
+  and publishes copy-isolated notifications; request or dispatcher may create the one
+  authoritative projection, while a healthy dispatcher alone owns normal persistence and
+  retry. Stopped/exited/shutdown fallback makes one enqueue plus one redacted-fault
+  attempt. Total store outage returns the unchanged completion and emits safe structured
+  non-durable evidence without claiming recovery. Cleanup follows a durable boundary or
+  explicit non-durable abandonment, never worker state alone.
+- **Rests on:** R3, R7, R8 and D7/D16's honesty boundary.
+- **Affects:** Task 4 dispatcher/runtime/facade, shared `models.copy_turn_snapshot`,
+  callback-store `record_terminal_fault`, lifecycle tests, and RPC fault pin.
+- **Revisit-when:** callback persistence moves to a separate process or gains a
+  transactional acknowledgment with the Codex turn store.
