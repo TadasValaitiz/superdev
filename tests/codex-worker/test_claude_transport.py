@@ -34,6 +34,7 @@ class UnixInbox:
         self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._listener.bind(self.path)
         self._listener.listen()
+        # MEASURED Claude 2.1.237: inbox sockets are exactly owner-only 0600.
         os.chmod(self.path, 0o600)
         self._listener.settimeout(0.05)
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -76,6 +77,7 @@ class ClaudeTransportTests(unittest.TestCase):
         self.config = self.root / "claude"
         self.sessions = self.config / "sessions"
         self.sockets = self.root / "cc-socks"
+        # MEASURED Claude 2.1.237: session/socket registry directories are 0700.
         self.sessions.mkdir(parents=True, mode=0o700)
         self.sockets.mkdir(mode=0o700)
         os.chmod(self.config, 0o700)
@@ -101,18 +103,20 @@ class ClaudeTransportTests(unittest.TestCase):
 
     def _registry(self, name, session_id, pid, proc_start, sock, suffix=None):
         path = self.sessions / ((suffix or str(pid)) + ".json")
+        # MEASURED Claude 2.1.237: these camel-case fields form the live registry identity.
         path.write_text(json.dumps({"pid": pid, "sessionId": session_id,
                                     "messagingSocketPath": str(sock), "name": name,
                                     "procStart": proc_start}), encoding="utf-8")
-        os.chmod(path, 0o644)
+        os.chmod(path, 0o644)  # MEASURED Claude 2.1.237 registry-file mode.
         return path
 
     def _peer_key(self, sock, token="2" * 32, proc_start=None, prefix=None):
+        # MEASURED Claude 2.1.237: Node path.resolve maps to abspath, not realpath.
         digest = hashlib.sha256(os.path.abspath(str(sock)).encode()).hexdigest()
         path = self.sessions / ("%s.%s.key" % (prefix or self.pid, digest))
         path.write_text(json.dumps({"peerToken": token,
                                     "procStart": proc_start or self.proc_start}), encoding="utf-8")
-        os.chmod(path, 0o600)
+        os.chmod(path, 0o600)  # MEASURED Claude 2.1.237 peer-key mode.
         return path
 
     def _env(self):
@@ -155,7 +159,15 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(capture, self._capture())
         self.assertEqual(capture_from_env({"CLAUDE_CONFIG_DIR": str(self.config)}),
                          CallbackCapture(None, None, None, None, None, str(self.config)))
-        self.assertIsNone(capture_from_env({"CLAUDE_CONFIG_DIR": str(self.root / "missing")}))
+        self.assertEqual(self._fault_kind(lambda: capture_from_env(
+            {"CLAUDE_CONFIG_DIR": str(self.root / "missing")})),
+            "callback_target_unsafe")
+
+    def test_capture_without_config_override_returns_null_when_default_root_is_absent(self):
+        absent_default = self.root / "absent-default-claude"
+        with mock.patch("codex_worker.claude_transport.os.path.expanduser",
+                        return_value=str(absent_default)):
+            self.assertIsNone(capture_from_env({}))
 
     def test_capture_rejects_ambiguous_malformed_and_mismatched_registry(self):
         self._registry("duplicate", self.session_id, self.pid, self.proc_start,
@@ -286,9 +298,11 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertTrue(self.inbox.wait_for_frames())
         auth_raw, user_raw, empty = self.inbox.frames[-1].split(b"\n")
         self.assertEqual(empty, b"")
+        # MEASURED Claude 2.1.237: auth is the first NDJSON line, then one user line.
         self.assertEqual(json.loads(auth_raw), {"type": "auth", "token": self.child_token})
         user = json.loads(user_raw)
         self.assertEqual(user["msg_id"], event.event_id)
+        # MEASURED Claude 2.1.237 envelope plus D27/D28 deterministic identity policy.
         self.assertEqual(str(CALLBACK_UUID_NAMESPACE), "5b290fd0-2df0-5c73-980f-04f284476f55")
         self.assertEqual(user["uuid"], str(uuid.uuid5(CALLBACK_UUID_NAMESPACE, event.event_id)))
         self.assertEqual(user["from"], "uds:" + binding.target_socket)
@@ -310,6 +324,7 @@ class ClaudeTransportTests(unittest.TestCase):
     def test_exact_utf16_limit_for_ascii_bmp_and_non_bmp(self):
         transport = ClaudeTransport()
         binding = self._binding()
+        # MEASURED Claude 2.1.237 JavaScript receiver buffer cap, excluding newline.
         self.assertEqual(MAX_USER_LINE_UTF16_UNITS, 1_048_576)
         for character, units in (("a", 1), ("é", 1), ("😀", 2)):
             with self.subTest(character=character):

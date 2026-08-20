@@ -313,12 +313,13 @@ class ClaudeTransport:
 
 def capture_from_env(env: Mapping[str, str]) -> Optional[CallbackCapture]:
     """Capture a live ambient parent route, or a safe root-only resolver snapshot."""
-    raw_root = env.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    explicit_root = env.get("CLAUDE_CONFIG_DIR")
+    raw_root = explicit_root or os.path.expanduser("~/.claude")
     transport = ClaudeTransport()
     try:
         root = transport._safe_config_root(raw_root)
     except FacadeFault:
-        if env.get("CLAUDE_CONFIG_DIR"):
+        if not explicit_root:
             path = Path(raw_root)
             if not path.exists() and not path.is_symlink():
                 return None
