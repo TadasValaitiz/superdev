@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.models import IdentifierSelector, RpcFault
+from codex_worker.cli import build_parser, _params_for
 from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                                    resolve_instance)
 from codex_worker.commands import (
@@ -776,6 +777,51 @@ class CliTests(unittest.TestCase):
         self.prompt_file.write_text("from file\n", encoding="utf-8")
         self.rpc_calls = []
 
+    def test_message_parser_maps_strict_prose_file_surface(self):
+        parser = build_parser()
+        args = parser.parse_args(["message", "--name", "build-1", "--message", "progress"])
+        self.assertEqual(args.method, "worker/message")
+        self.assertEqual(_params_for(args), {
+            "name": "build-1", "message": "progress", "priority": "next",
+            "cc_agent_name": None,
+        })
+
+    def test_message_local_input_refusals_are_one_json_and_never_connect(self):
+        empty = Path(self.tempdir.name) / "empty-message.txt"
+        empty.write_text("", encoding="utf-8")
+        cases = [
+            ["message", "--name", "build-1", "--message", ""],
+            ["message", "--name", "build-1", "--message-file", str(empty)],
+            ["message", "--name", "build-1", "--message-file", str(empty.parent / "missing.txt")],
+            ["message", "--name", "bad name", "--message", "progress"],
+            ["message", "--name", "build-1", "--message", "progress", "--priority", "invalid"],
+            ["message", "--name", "build-1", "--message", "a", "--message-file", str(empty)],
+        ]
+        for argv in cases:
+            with self.subTest(argv=argv):
+                self.rpc_calls = []
+                completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success, include_socket=False)
+                self.assert_json_error(completed, 2)
+                self.assertEqual(self.rpc_calls, [])
+
+    def test_message_rejects_socket_and_stopped_daemon_does_not_autostart(self):
+        self.rpc_calls = []
+        socket_refusal = self.run_cli(["message", "--name", "build-1", "--message", "progress"],
+                                      fake_rpc=self.fake_rpc_success, include_socket=True)
+        self.assert_json_error(socket_refusal, 2)
+        self.assertEqual(self.rpc_calls, [])
+        original_endpoint = cli._common_endpoint
+        calls = []
+        cli._common_endpoint = lambda instance, autostart: calls.append(autostart) or (_ for _ in ()).throw(
+            FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped"))
+        try:
+            stopped = self.run_cli(["message", "--name", "build-1", "--message", "progress"],
+                                   include_socket=False)
+        finally:
+            cli._common_endpoint = original_endpoint
+        self.assert_json_error(stopped, 1, "daemon_stopped")
+        self.assertEqual(calls, [False])
+
     def fake_codex_bin(self):
         fake_codex = ROOT / "tests" / "codex-worker" / "fake_codex.py"
         fake_bin = Path(self.tempdir.name) / "fake-codex"
@@ -1077,10 +1123,11 @@ class CliTests(unittest.TestCase):
 
     def test_common_command_matrix_builds_exact_rpc_requests(self):
         cases = [
-            (['start', '--name', 'build-1', '--prompt', 'go', '--cwd', self.cwd], 'worker/start',
+            (['start', '--name', 'build-1', '--prompt', 'go', '--cwd', self.cwd, '--no-callback'], 'worker/start',
              {'name': 'build-1', 'prompt': 'go', 'cwd': self.cwd, 'tier': 'medium',
               'model': None, 'effort': 'medium', 'access': 'full', 'goal': None,
-              'token_budget': None, 'output_schema': None, 'timeout': None}),
+              'token_budget': None, 'output_schema': None, 'timeout': None,
+              'no_callback': True, 'callback_capture': None}),
             (['run', '--name', 'build-1', '--prompt', 'again'], 'worker/run',
              {'name': 'build-1', 'prompt': 'again', 'output_schema': None, 'timeout': None}),
             (['status', '--name', 'build-1'], 'worker/status', {'name': 'build-1'}),

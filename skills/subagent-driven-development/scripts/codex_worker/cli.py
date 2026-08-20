@@ -19,7 +19,7 @@ from .rpc import FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe, daemo
 from .runtime import RuntimeStore
 from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowRequest,
                        InterruptWorkerRequest, LimitsRequest, RunWorkerRequest,
-                       StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
+                       MessageWorkerRequest, StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
                        WorkerMessagesRequest, WorkerStatusRequest)
 from .instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                        resolve_instance, validate_instance_id)
@@ -242,10 +242,19 @@ def _add_common_commands(families) -> None:
     start.add_argument("--read-only", action="store_true")
     start.add_argument("--goal")
     start.add_argument("--token-budget", type=_positive_int)
+    start.add_argument("--no-callback", action="store_true")
     _add_turn_options(start)
     run = families.add_parser("run", help="send a follow-up to a named worker")
     run.set_defaults(method="worker/run", common=True)
     _add_name_prompt(run); _add_turn_options(run)
+    message = families.add_parser("message", help="send a non-blocking Claude update")
+    message.set_defaults(method="worker/message", common=True)
+    message.add_argument("--name", required=True)
+    message_input = message.add_mutually_exclusive_group(required=True)
+    message_input.add_argument("--message")
+    message_input.add_argument("--message-file")
+    message.add_argument("--priority", choices=("now", "next", "later"), default="next")
+    message.add_argument("--cc-agent-name")
     for name, method in (("status", "worker/status"), ("messages", "worker/messages"),
                          ("history", "worker/history"), ("interrupt", "worker/interrupt")):
         command = families.add_parser(name)
@@ -347,6 +356,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             raise ValueError("--instance is not valid with daemon shutdown")
         method = args.method
         params = _params_for(args)
+        if method == "worker/start" and not args.no_callback:
+            from .claude_transport import capture_from_env
+            capture = capture_from_env(os.environ)
+            params["callback_capture"] = capture.to_dict() if capture is not None else None
         if getattr(args, "common", False):
             _validate_common_request(method, params)
             if args.socket:
@@ -439,9 +452,13 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
                 "tier": None if args.model else (args.tier or "medium"), "model": args.model, "effort": args.effort,
                 "access": "read_only" if args.read_only else "full", "goal": args.goal,
                 "token_budget": args.token_budget, "output_schema": _output_schema(args.output_schema),
-                "timeout": args.timeout}
+                "timeout": args.timeout, "no_callback": args.no_callback,
+                "callback_capture": None}
     if method == "worker/run":
         return {"name": args.name, "prompt": _prompt(args), "output_schema": _output_schema(args.output_schema), "timeout": args.timeout}
+    if method == "worker/message":
+        return {"name": args.name, "message": _message(args), "priority": args.priority,
+                "cc_agent_name": args.cc_agent_name}
     if method in ("worker/status", "worker/interrupt", "worker/goal/show"):
         return {"name": args.name}
     if method in ("worker/messages", "worker/history"):
@@ -508,6 +525,20 @@ def _prompt(args: argparse.Namespace) -> str:
     return prompt
 
 
+def _message(args: argparse.Namespace) -> str:
+    path = getattr(args, "message_file", None)
+    if path is not None:
+        try:
+            message = Path(path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ValueError("could not read message file: %s" % exc) from exc
+    else:
+        message = args.message
+    if not isinstance(message, str) or not message:
+        raise ValueError("message must be a non-empty string")
+    return message
+
+
 def _client_timeout(method: str, params: JsonObject) -> float:
     if method in ("worker/start", "worker/run"):
         timeout = params.get("timeout")
@@ -530,7 +561,7 @@ def _output_schema(path: Optional[str]):
 
 
 _COMMON_REQUESTS = {
-    "worker/start": StartWorkerRequest, "worker/run": RunWorkerRequest,
+    "worker/start": StartWorkerRequest, "worker/run": RunWorkerRequest, "worker/message": MessageWorkerRequest,
     "worker/status": WorkerStatusRequest, "worker/messages": WorkerMessagesRequest,
     "worker/history": WorkerHistoryRequest, "worker/steer": SteerWorkerRequest,
     "worker/interrupt": InterruptWorkerRequest, "worker/goal/set": GoalSetRequest,

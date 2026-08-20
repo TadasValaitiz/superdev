@@ -10,8 +10,9 @@ sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "script
 
 from codex_worker.commands import (AccessMode, CallbackAttemptState, CallbackAttemptView,
                                    CallbackCapture, CallbackState, Err, FacadeFaultCode, GoalSetRequest,
+                                   FACADE_FAULT_KINDS, FacadeFault,
                                    GoalShowRequest, InterruptWorkerRequest, LimitsRequest,
-                                   Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
+                                   MessagePriority, MessageWorkerRequest, Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
                                    WorkerHistoryRequest, WorkerMessagesRequest,
                                    WorkerStatusRequest)
 from codex_worker.broker import ModelSelectionError, TurnStartSpec
@@ -49,10 +50,16 @@ class _CallbackDispatcher:
 
 
 class _CallbackTransport:
-    def __init__(self, calls): self.calls = calls
+    def __init__(self, calls): self.calls = calls; self.sent = []
     def validate_capture(self, capture):
         self.calls.append("callback_validate")
         return capture
+
+    def send(self, binding, event, cc_agent_name):
+        self.calls.append("callback_send")
+        self.sent.append((binding, event, cc_agent_name))
+        return CallbackAttemptView(event.event_id, CallbackAttemptState.WRITTEN,
+                                   None, "2026-08-20T00:00:00Z", 1)
 
 
 class _Broker:
@@ -61,6 +68,7 @@ class _Broker:
         self.runtime = runtime
         self.calls = []
         self.last_turn_spec = None
+        self.turn_specs = []
         self.control_fault = None
         self.response_text = "done"
 
@@ -73,7 +81,8 @@ class _Broker:
 
     def start_session(self, spec):
         self.calls.append("session_start")
-        record = self.registry.create_worker("thread-1", spec.cwd, spec.name, spec.tier,
+        thread_id = "thread-%d" % (len(self.registry.list()) + 1)
+        record = self.registry.create_worker(thread_id, spec.cwd, spec.name, spec.tier,
                                              spec.model, spec.effort, spec.access.value)
         self.runtime.attach(record)
         return {"session": record.to_dict(), "attached": True}
@@ -81,6 +90,7 @@ class _Broker:
     def start_turn(self, spec):
         self.calls.append("turn_start")
         self.last_turn_spec = spec
+        self.turn_specs.append(spec)
         record = self.registry.resolve(IdentifierSelector(session_id=spec.session_id))
         self.runtime.reserve_start(spec.session_id)
         self.runtime.reconcile_start(spec.session_id, "turn-1")
@@ -155,6 +165,128 @@ class FacadeTests(unittest.TestCase):
 
     def tearDown(self):
         self.tempdir.cleanup()
+
+    def test_message_builds_fresh_v1_event_and_never_starts_a_broker_turn(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        from codex_worker.projection import build_worker_message_event
+
+        event_ids = iter(("event-a", "event-b"))
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher,
+            self.callback_transport, lambda: next(event_ids),
+        ))
+        started = facade.start(StartWorkerRequest("message-a", "caller prose", self.cwd,
+            callback_capture=CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session",
+                                             42, "measured", self.cwd)))
+        self.assertIsInstance(started, Ok)
+        first = facade.message(MessageWorkerRequest("message-a", "progress", MessagePriority.NOW))
+        second = facade.message(MessageWorkerRequest("message-a", "progress", MessagePriority.NOW))
+        self.assertIsInstance(first, Ok)
+        self.assertIsInstance(second, Ok)
+        self.assertEqual(first.value.event_id, "event-a")
+        self.assertEqual(second.value.event_id, "event-b")
+        self.assertEqual(first.value.attempt.event_id, "event-a")
+        self.assertEqual(self.broker.calls.count("turn_start"), 1)
+        event = build_worker_message_event(first.value.worker, "progress", MessagePriority.NOW,
+                                           "event-a", "2026-08-20T00:00:00Z")
+        self.assertEqual(event.schema, "codex-worker.claude-callback/v1")
+        self.assertEqual(event.event, "worker_message")
+        self.assertEqual(event.payload, {"message": "progress"})
+        expected_block = (
+            "You may broadcast a non-blocking update to Claude and continue working:\n"
+            "codex-worker --instance verified-instance message --name message-a --message \"<prose>\"\n"
+            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
+            "This command does not wait for a reply; Claude may later use steer or run.")
+        self.assertEqual(self.broker.turn_specs[0].prompt, "caller prose\n\n" + expected_block)
+        facade.run(RunWorkerRequest("message-a", "follow-up"))
+        self.assertEqual(self.broker.turn_specs[1].prompt, "follow-up")
+
+    def test_message_callback_fault_matrix_is_typed_redacted_and_instance_qualified(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
+        ))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                  "measured", self.cwd)
+        self.assertIsInstance(facade.start(StartWorkerRequest("faults-a", "start", self.cwd,
+                                                               callback_capture=capture)), Ok)
+        codes = (FacadeFaultCode.CALLBACK_UNAVAILABLE, FacadeFaultCode.CALLBACK_TARGET_STALE,
+                 FacadeFaultCode.CALLBACK_TARGET_NOT_FOUND, FacadeFaultCode.CALLBACK_TARGET_AMBIGUOUS,
+                 FacadeFaultCode.CALLBACK_TARGET_UNSAFE, FacadeFaultCode.CALLBACK_SEND_FAILED,
+                 FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE)
+        for code in codes:
+            with self.subTest(code=code):
+                def fail(binding, event, cc_agent_name, code=code):
+                    raise FacadeFault(code, "callback refusal", FACADE_FAULT_KINDS[code])
+                self.callback_transport.send = fail
+                result = facade.message(MessageWorkerRequest("faults-a", "secret prose"))
+                self.assertIsInstance(result, Err)
+                self.assertEqual((result.error.code, result.error.kind),
+                                 (code, FACADE_FAULT_KINDS[code]))
+                self.assertEqual(result.error.known_ids["name"], "faults-a")
+                encoded = result.error.to_dict()
+                self.assertNotIn("secret prose", str(encoded))
+                self.assertNotIn("/tmp/claude.sock", str(encoded))
+                self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[0:4],
+                                 ["codex-worker", "--instance", "verified-instance", "message"])
+
+    def test_projector_port_declares_the_proactive_event_builder(self):
+        from codex_worker.facade import ProjectorPort
+        self.assertIn("build_worker_message_event", ProjectorPort.__dict__)
+
+    def test_message_override_is_one_send_only_and_named_workers_are_independent(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        event_ids = iter("event-%d" % index for index in range(5))
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
+            lambda: next(event_ids),
+        ))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
+                                  "measured", self.cwd)
+        for index in range(5):
+            self.assertIsInstance(facade.start(StartWorkerRequest("fanout-%d" % index, "start", self.cwd,
+                callback_capture=capture)), Ok)
+        bindings = [self.callback_store.binding(self.registry.resolve_name("fanout-%d" % index).session_id)
+                    for index in range(5)]
+        replies = [facade.message(MessageWorkerRequest("fanout-%d" % index, "update-%d" % index,
+                    MessagePriority.NEXT, "other-room" if index == 0 else None)) for index in range(5)]
+        self.assertTrue(all(isinstance(reply, Ok) for reply in replies))
+        self.assertEqual([sent[1].worker.name for sent in self.callback_transport.sent[-5:]],
+                         ["fanout-%d" % index for index in range(5)])
+        self.assertEqual(self.callback_transport.sent[-5][2], "other-room")
+        self.assertEqual([self.callback_store.binding(binding.session_id) for binding in bindings], bindings)
+
+    def test_message_unavailable_override_is_permitted_but_disabled_override_refuses(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(
+            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
+        ))
+        self.assertIsInstance(facade.start(StartWorkerRequest("unavailable-a", "start", self.cwd)), Ok)
+        self.assertIsInstance(facade.start(StartWorkerRequest("disabled-a", "start", self.cwd,
+                                                               no_callback=True)), Ok)
+        original_send = self.callback_transport.send
+        def policy_send(binding, event, cc_agent_name):
+            if binding.state == CallbackState.DISABLED:
+                raise FacadeFault(FacadeFaultCode.CALLBACK_UNAVAILABLE,
+                                  "Callbacks were disabled when this worker started", "callback_unavailable")
+            self.assertEqual((binding.state, cc_agent_name), (CallbackState.UNAVAILABLE, "other-room"))
+            return original_send(binding, event, cc_agent_name)
+        self.callback_transport.send = policy_send
+        accepted = facade.message(MessageWorkerRequest("unavailable-a", "update", MessagePriority.NEXT,
+                                                        "other-room"))
+        refused = facade.message(MessageWorkerRequest("disabled-a", "update", MessagePriority.NEXT,
+                                                       "other-room"))
+        self.assertIsInstance(accepted, Ok)
+        self.assertIsInstance(refused, Err)
+        self.assertEqual(refused.error.code, FacadeFaultCode.CALLBACK_UNAVAILABLE)
 
     def test_start_installs_goal_before_first_turn_and_run_reuses_policy(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade

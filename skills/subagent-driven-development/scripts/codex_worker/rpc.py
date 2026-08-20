@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Optional, Union
 from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
 from .commands import (FacadeFault, GoalSetRequest, GoalShowRequest, InterruptWorkerRequest,
                        LimitsRequest, Ok, RunWorkerRequest, StartWorkerRequest,
-                       SteerWorkerRequest, WorkerHistoryRequest, WorkerMessagesRequest,
+                       MessageWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest, WorkerMessagesRequest,
                        WorkerStatusRequest)
 
 JsonId = Optional[Union[str, int]]
@@ -179,6 +179,7 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
 COMMON_METHODS = {
     "worker/start": ("start", StartWorkerRequest),
     "worker/run": ("run", RunWorkerRequest),
+    "worker/message": ("message", MessageWorkerRequest),
     "worker/status": ("status", WorkerStatusRequest),
     "worker/messages": ("messages", WorkerMessagesRequest),
     "worker/history": ("history", WorkerHistoryRequest),

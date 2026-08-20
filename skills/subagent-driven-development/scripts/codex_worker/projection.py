@@ -9,6 +9,14 @@ from .commands import (
     TurnView, WorkerView,
 )
 from .models import ItemRecord, TurnSnapshot
+from .callback_store import CallbackEvent
+
+
+def build_worker_message_event(worker: WorkerView, message: str, priority, event_id: str,
+                               emitted_at: str) -> CallbackEvent:
+    """Build the public, one-shot proactive callback envelope."""
+    return CallbackEvent("codex-worker.claude-callback/v1", "worker_message", event_id,
+                         emitted_at, priority.value, worker, {"message": message})
 
 
 def agent_view(item: ItemRecord) -> AgentMessageView:

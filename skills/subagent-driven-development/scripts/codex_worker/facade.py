@@ -1,6 +1,8 @@
 """Transport-independent named-worker orchestration service."""
 from dataclasses import dataclass
+import datetime
 import shlex
+import uuid
 from typing import Callable, Optional, Protocol, runtime_checkable
 
 from .broker import (AnnotationPolicy, ModelSelectionError, NativeCodexProxy,
@@ -9,7 +11,7 @@ from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatu
                        CompletionResponse, ControlResponse, FacadeFault,
                        FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
                        GoalView, InterruptWorkerRequest, LimitsRequest, LimitsResponse,
-                       Ok, Err, RecoveryView, Result, RunWorkerRequest, StartWorkerRequest,
+                       MessageWorkerRequest, CallbackSendResponse, Ok, Err, RecoveryView, Result, RunWorkerRequest, StartWorkerRequest,
                        SteerWorkerRequest, Tier, TurnView, WorkerHistoryRequest,
                        WorkerHistoryResponse, WorkerMessagesRequest, WorkerMessagesResponse,
                        WorkerStatusRequest, WorkerStatusResponse, WorkerView,
@@ -54,6 +56,7 @@ class ProjectorPort(Protocol):
     def project_history_turn(self, turn: dict): ...
     def chronological_history_pages(self, pages): ...
     def select_completion_messages(self, items, terminal: bool): ...
+    def build_worker_message_event(self, worker, message, priority, event_id, emitted_at): ...
 
 @runtime_checkable
 class CallbackStorePort(Protocol):
@@ -72,6 +75,7 @@ class CallbackDispatcherPort(Protocol):
 @runtime_checkable
 class CallbackTransportPort(Protocol):
     def validate_capture(self, capture: CallbackCapture) -> CallbackCapture: ...
+    def send(self, binding: CallbackBinding, event, cc_agent_name: Optional[str]): ...
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,7 @@ class FacadeDeps:
     callback_store: Optional[CallbackStorePort] = None
     callback_dispatcher: Optional[CallbackDispatcherPort] = None
     callback_transport: Optional[CallbackTransportPort] = None
+    event_id: Callable[[], str] = lambda: str(uuid.uuid4())
 
 
 class WorkerFacade:
@@ -119,7 +124,10 @@ class WorkerFacade:
                         record.thread_id, request.goal, "active", request.token_budget)
                 except BaseException as exc:
                     return Err(self._effect_fault(exc, record, request.name))
-            return self._start_and_wait(record, worker, request.prompt, request.output_schema,
+            prompt = (self._initial_prompt(request.prompt, record)
+                      if request.callback_capture is not None
+                      and request.callback_capture.target_socket is not None else request.prompt)
+            return self._start_and_wait(record, worker, prompt, request.output_schema,
                                         request.timeout)
         except BaseException as exc:
             return Err(self._effect_fault(exc, record, request.name))
@@ -140,6 +148,44 @@ class WorkerFacade:
                                         request.output_schema, request.timeout)
         except BaseException as exc:
             return Err(self._effect_fault(exc, record, request.name))
+
+    def message(self, request: MessageWorkerRequest) -> Result[CallbackSendResponse, FacadeFault]:
+        record = None
+        try:
+            record = self._resolve_policy(request.name)
+            if isinstance(record, FacadeFault):
+                return Err(record)
+            if self.deps.callback_store is None or self.deps.callback_transport is None:
+                raise FacadeFault(FacadeFaultCode.CALLBACK_UNAVAILABLE,
+                                  "Claude callbacks are unavailable", "callback_unavailable")
+            binding = self.deps.callback_store.binding(record.session_id)
+            if binding is None:
+                raise FacadeFault(FacadeFaultCode.CALLBACK_UNAVAILABLE,
+                                  "No callback binding is available for this worker", "callback_unavailable")
+            worker = self._worker(record)
+            event = self.deps.projector.build_worker_message_event(
+                worker, request.message, request.priority, self.deps.event_id(),
+                datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"))
+            attempt = self.deps.callback_transport.send(binding, event, request.cc_agent_name)
+            return Ok(CallbackSendResponse(worker, event.event_id, attempt))
+        except BaseException as exc:
+            fault = self._effect_fault(exc, record, request.name)
+            if (fault.code in (FacadeFaultCode.CALLBACK_UNAVAILABLE,
+                               FacadeFaultCode.CALLBACK_TARGET_STALE,
+                               FacadeFaultCode.CALLBACK_TARGET_NOT_FOUND,
+                               FacadeFaultCode.CALLBACK_TARGET_AMBIGUOUS,
+                               FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
+                               FacadeFaultCode.CALLBACK_SEND_FAILED,
+                               FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE)
+                    and record is not None):
+                fault = FacadeFault(fault.code, fault.message, fault.kind, fault.retryable,
+                                    fault.source, fault.details, self._known(record), [{
+                                        "command": self._command(
+                                            "message --name %s --message-file <path>" %
+                                            shlex.quote(record.name)),
+                                        "reason": "Retry deliberately with a new proactive event",
+                                    }])
+            return Err(fault)
 
     def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
         try:
@@ -399,6 +445,15 @@ class WorkerFacade:
                             self._command("messages --name %s" % name),
                             self._command("interrupt --name %s" % name),
                             self._raw_resume_command(record.thread_id))
+
+    def _initial_prompt(self, prompt, record):
+        block = (
+            "You may broadcast a non-blocking update to Claude and continue working:\n"
+            "codex-worker --instance %s message --name %s --message \"<prose>\"\n"
+            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
+            "This command does not wait for a reply; Claude may later use steer or run."
+        ) % (self.deps.instance.value, record.name)
+        return prompt + "\n\n" + block
 
     def _command(self, suffix):
         return "codex-worker --instance %s %s" % (shlex.quote(self.deps.instance.value), suffix)
