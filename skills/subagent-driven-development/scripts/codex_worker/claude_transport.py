@@ -29,11 +29,13 @@ def _utc_now() -> str:
 
 
 def _process_start(pid: int) -> Optional[str]:
+    stable_env = dict(os.environ)
+    stable_env["LC_ALL"] = "C"
     try:
         completed = subprocess.run(
             ["ps", "-o", "lstart=", "-p", str(pid)],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, timeout=1.0, check=False,
+            text=True, timeout=1.0, check=False, env=stable_env,
         )
     except (OSError, subprocess.SubprocessError):
         return None

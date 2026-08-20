@@ -9,7 +9,7 @@
   without polling. Callback-disabled and standalone workers keep their existing
   behavior, and status reports the callback state without claiming delivery.
 - **Proactive worker messages:** `codex-worker message` sends inline or file-backed
-  progress at normal, urgent, or blocking priority to the stored origin or one
+  progress at `now`, `next`, or `later` priority to the stored origin or one
   explicitly named alternate Claude session. A one-message override never retargets
   later terminal callbacks.
 - **Durable, honest recovery:** canonical callback artifacts, event IDs, attempt state,

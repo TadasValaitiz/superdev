@@ -1,0 +1,29 @@
+{
+  "broker_commands": [
+    "codex-worker start --name claude-caller-c3060cf3 --prompt 'Reply with exactly CLAUDE-FIRST and no other text.'",
+    "codex-worker message --name claude-caller-c3060cf3 --priority later --message 'MEASURED Claude caller proactive write.'",
+    "codex-worker run --name claude-caller-c3060cf3 --prompt 'Reply with exactly CLAUDE-FOLLOWUP and no other text.'",
+    "codex-worker goal show --name claude-caller-c3060cf3",
+    "codex-worker history --name claude-caller-c3060cf3 --tail 2",
+    "codex-worker status --name claude-caller-c3060cf3",
+    "codex-worker daemon stop"
+  ],
+  "callback_event_ids": [
+    "terminal-99fcf8857b6aea3688d938206403e84a3e64a63dd7cbe82ef358ddf5c586f3e4",
+    "terminal-a2cf7da26c1759e91af17b74e9f1a233e4ab9b830f2a7a194c3df217d985a873"
+  ],
+  "direct_codex_invocation": false,
+  "durable_state": "preserved",
+  "effort": "medium",
+  "full_result_recovered": true,
+  "mcp_invocation": false,
+  "message_count": 2,
+  "model": "gpt-5.6-terra",
+  "native_claude_available": true,
+  "raw_codex_worker_invocation": false,
+  "session_id": "36911ca7-1164-4a85-9013-1c83d843c843",
+  "terminal_status": "completed",
+  "thread_id": "01a01fd3-f67e-7021-9746-5699a221d573",
+  "turn_id": "01a01fd3-f6c2-7263-8e8b-0cdbcb050f89",
+  "worker_name": "claude-caller-c3060cf3"
+}

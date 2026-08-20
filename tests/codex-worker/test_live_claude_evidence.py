@@ -41,6 +41,15 @@ class ClaudeEvidenceTests(unittest.TestCase):
                 "event_id": "callback-event-1",
                 "payload": {"completion": dict(completion)},
             }
+            run_completion = dict(
+                completion, turn={"turn_id": "turn-2", "status": "completed", "error": None},
+                messages=[dict(completion["messages"][0], text="follow-up result")])
+            callback_event_2 = {
+                "schema": "codex-worker.claude-callback/v1",
+                "event": "turn_terminal",
+                "event_id": "callback-event-2",
+                "payload": {"completion": dict(run_completion)},
+            }
             commands = [
                 f"cd {cwd} && {cli} start --name claude-caller-a31f09 --prompt 'answer briefly'",
                 f"{cli} message --name claude-caller-a31f09 --message 'progress'",
@@ -55,14 +64,14 @@ class ClaudeEvidenceTests(unittest.TestCase):
                 {"worker": worker, "event_id": "proactive-event-1", "attempt": {
                     "state": "written", "reason": None,
                     "attempted_at": "2026-08-20T00:00:00Z", "attempt_count": 1}},
-                dict(completion, turn={"turn_id": "turn-2", "status": "completed", "error": None}),
+                run_completion,
                 {"worker": worker, "availability": "absent", "goal": None},
                 {"worker": worker, "turns": [], "requested_tail": 2, "returned": 0,
                  "older_available": False},
                 {"worker": worker, "daemon_status": "ready", "attached": True,
                  "active_turn_id": None, "latest_turn": completion["turn"],
                  "callback": {"state": "enabled", "pending_terminal_count": 0,
-                              "last_terminal_attempt": {"event_id": "callback-event-1",
+                              "last_terminal_attempt": {"event_id": "callback-event-2",
                                 "state": "written", "reason": None,
                                 "attempted_at": "2026-08-20T00:00:00Z", "attempt_count": 1}}},
                 {"instance": {"instance": "claude-live"}, "status_before": "ready",
@@ -76,34 +85,56 @@ class ClaudeEvidenceTests(unittest.TestCase):
                 lines.append({"message": {"content": [{"type": "tool_result", "tool_use_id": f"t{i}", "is_error": False, "content": json.dumps({"result": result})}]}})
                 if i == 0:
                     lines.append({"type": "user", "message": {"role": "user", "content": json.dumps(callback_event)}})
+                if i == 2:
+                    lines.append({"type": "user", "message": {"role": "user", "content": json.dumps(callback_event_2)}})
             transcript.write_text("\n".join(map(json.dumps, lines)) + "\n")
             receipt = EVIDENCE.validate(transcript, cwd, cli)
             self.assertEqual((receipt["session_id"], receipt["thread_id"], receipt["turn_id"]), (sid, tid, turn))
             self.assertTrue(receipt["native_claude_available"])
             self.assertEqual(receipt["durable_state"], "preserved")
-            self.assertEqual(receipt["callback_event_ids"], ["callback-event-1"])
+            self.assertEqual(receipt["callback_event_ids"], ["callback-event-1", "callback-event-2"])
             self.assertTrue(receipt["full_result_recovered"])
 
             # Claude stream-json can omit injected callback frames while Claude's
             # final answer still reports their durable IDs and recovered result.
-            terminal_id = "terminal-" + "a" * 64
+            terminal_id_1 = "terminal-" + "a" * 64
+            terminal_id_2 = "terminal-" + "b" * 64
             status_result = results[5]
-            status_result["callback"]["last_terminal_attempt"]["event_id"] = terminal_id
+            status_result["callback"]["last_terminal_attempt"]["event_id"] = terminal_id_2
             without_injected_frame = [line for line in lines if line.get("type") != "user"]
+            attested = []
             for line in without_injected_frame:
+                attested.append(line)
                 block = line.get("message", {}).get("content", [{}])[0]
                 if block.get("type") == "tool_result" and block.get("tool_use_id") == "t5":
                     block["content"] = json.dumps({"result": status_result})
-            without_injected_frame.append({
+                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t0":
+                    attested.append({"message": {"content": [{"type": "text", "text":
+                        "Callback 1 received (`%s...`)." % terminal_id_1[:17]}]}})
+                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t2":
+                    attested.append({"message": {"content": [{"type": "text", "text":
+                        "Callback 2 received (`%s...`)." % terminal_id_2[:17]}]}})
+            attested.append({
                 "message": {"content": [{
                     "type": "text",
-                    "text": f"Callback {terminal_id}; recovered: complete result",
+                    "text": ("Callbacks %s and %s; recovered: complete result / "
+                             "follow-up result") % (terminal_id_1, terminal_id_2),
                 }]},
             })
-            transcript.write_text("\n".join(map(json.dumps, without_injected_frame)) + "\n")
+            transcript.write_text("\n".join(map(json.dumps, attested)) + "\n")
             hidden_receipt = EVIDENCE.validate(transcript, cwd, cli)
-            self.assertEqual(hidden_receipt["callback_event_ids"], [terminal_id])
+            self.assertEqual(hidden_receipt["callback_event_ids"], [terminal_id_1, terminal_id_2])
             self.assertTrue(hidden_receipt["full_result_recovered"])
+
+            # Successful synchronous start/run output plus a later status event ID is
+            # not proof that Claude observed either automatic callback.
+            unobserved = list(without_injected_frame)
+            unobserved.append({"message": {"content": [{"type": "text", "text":
+                ("Command summary copied IDs %s and %s and outputs complete result / "
+                 "follow-up result") % (terminal_id_1, terminal_id_2)}]}})
+            transcript.write_text("\n".join(map(json.dumps, unobserved)) + "\n")
+            with self.assertRaises(AssertionError):
+                EVIDENCE.validate(transcript, cwd, cli)
 
             for forbidden in ("codex app-server", "python3 /repo/codex-worker model list", "mcp__codex__call"):
                 lines[0]["message"]["content"][0]["input"]["command"] = forbidden

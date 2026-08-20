@@ -54,13 +54,17 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     all_commands = []  # type: List[str]
     callback_events = []  # type: List[Json]
     assistant_text = []  # type: List[str]
-    for line in transcript.read_text(encoding="utf-8").splitlines():
+    assistant_text_records = []  # type: List[tuple]
+    tool_result_positions = {}  # type: Dict[str, int]
+    for record_index, line in enumerate(
+            transcript.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
         document = json.loads(line)
         for candidate in _walk(document):
             if candidate.get("type") == "text" and isinstance(candidate.get("text"), str):
                 assistant_text.append(candidate["text"])
+                assistant_text_records.append((record_index, candidate["text"]))
         for candidate in _walk(document):
             if (candidate.get("schema") == "codex-worker.claude-callback/v1"
                     and candidate.get("event") in ("turn_terminal", "turn_terminal_reference")):
@@ -88,6 +92,7 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
                 if tool_id in tool_commands:
                     assert value.get("is_error") is not True, value
                     tool_results[tool_id] = _json_content(value.get("content"))
+                    tool_result_positions[tool_id] = record_index
 
     assert all_commands, all_commands
     direct_codex = re.compile(r"(?:^|[;&|]\s*|\s)codex(?:\s|$)")
@@ -137,18 +142,53 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
                 if " daemon stop" in command)
     assert stop["status_after"] == "stopped" and stop["durable_state"] == "preserved", stop
     unique_callbacks = {event["event_id"]: event for event in callback_events}
-    reported_ids = sorted(set(re.findall(r"terminal-[0-9a-f]{64}", "\n".join(assistant_text))))
-    callback_ids = sorted(unique_callbacks) if unique_callbacks else reported_ids
+    full_text = "\n".join(assistant_text)
+    reported_ids = list(dict.fromkeys(re.findall(r"terminal-[0-9a-f]{64}", full_text)))
+    callback_ids = sorted(unique_callbacks)
+    recovered = False
+    if unique_callbacks:
+        recovered_completions = [event.get("payload", {}).get("completion")
+                                 for event in unique_callbacks.values()]
+        recovered = start_result in recovered_completions and run_result in recovered_completions
+    else:
+        attestation_pattern = re.compile(
+            r"Callback\s+#?([12])\s+received"
+            r"(?:\s+\(`(terminal-[0-9a-f]{8,64})(?:\.\.\.)?`\))?")
+        attestations = {}  # type: Dict[int, tuple]
+        for position, value in assistant_text_records:
+            match = attestation_pattern.search(value)
+            if match:
+                number = int(match.group(1))
+                assert number not in attestations, {"duplicate_callback_attestation": number}
+                attestations[number] = (position, match.group(2))
+        assert set(attestations) == {1, 2}, {"callback_attestations": attestations}
+        matched_ids = []  # type: List[str]
+        for number in (1, 2):
+            prefix = attestations[number][1]
+            if prefix:
+                matches = [event_id for event_id in reported_ids if event_id.startswith(prefix)]
+                assert len(matches) == 1, {"attestation": number, "prefix": prefix,
+                                           "reported_ids": reported_ids}
+                matched_ids.append(matches[0])
+            else:
+                assert len(reported_ids) == 2, {"attestation": number,
+                                                "reported_ids": reported_ids}
+                matched_ids.append(reported_ids[number - 1])
+        assert matched_ids[0] != matched_ids[1], matched_ids
+        start_tool_id = next(tool_id for tool_id, command in tool_commands.items()
+                             if " start " in command)
+        run_tool_id = next(tool_id for tool_id, command in tool_commands.items()
+                           if " run " in command)
+        start_position = tool_result_positions[start_tool_id]
+        run_position = tool_result_positions[run_tool_id]
+        assert start_position < attestations[1][0] < run_position, attestations
+        assert run_position < attestations[2][0], attestations
+        callback_ids = matched_ids
+        recovered = all(message["text"] in full_text
+                        for result in (start_result, run_result)
+                        for message in result["messages"])
     assert callback_ids, {"callback_events": callback_events, "assistant_text": assistant_text}
     assert status["callback"]["last_terminal_attempt"]["event_id"] in callback_ids
-    recovered = False
-    for event in unique_callbacks.values():
-        payload = event.get("payload", {})
-        if event["event"] == "turn_terminal" and payload.get("completion") == start_result:
-            recovered = True
-    if not unique_callbacks:
-        final_text = "\n".join(assistant_text)
-        recovered = all(message["text"] in final_text for message in start_result["messages"])
     assert recovered, {"callbacks": unique_callbacks, "reported_ids": reported_ids}
     return {
         "session_id": sid, "thread_id": tid, "turn_id": turn_id,

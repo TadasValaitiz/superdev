@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 Base: `cf073be`
-Status: PASS pending final code-review receipt
+Status: review fixes in progress
 
 ## TDD and deterministic gate
 
@@ -16,23 +16,25 @@ Task 1 representative enum minor is closed by the exhaustive exact code/kind gua
 
 ## MEASURED live acceptance
 
-Initial separate raw run directories:
+Tracked receipts for the initial separate runs (each summary retains its original raw
+run path):
 
-- preflight: `.superdev/codex-worker-live/20260820T141136.693287Z-13475-preflight/`
-- common: `.superdev/codex-worker-live/20260820T141214.365903Z-13986-callback-common/`
-- proactive/alternate/origin terminal: `.superdev/codex-worker-live/20260820T141247.118195Z-16520-callback-proactive/`
-- origin metadata replacement/unset retention: `.superdev/codex-worker-live/20260820T141313.541987Z-18109-callback-origin-retention/`
-- timeout/terminal/restart/artifact: `.superdev/codex-worker-live/20260820T141417.462968Z-23274-callback-recovery/`
-- credential/PID/Unicode/stale/ambiguous: `.superdev/codex-worker-live/20260820T141629.212746Z-31212-callback-security/`
-- exactly five simultaneous named workers: `.superdev/codex-worker-live/20260820T141706.195738Z-34392-callback-five-workers/`
-- real Claude caller: `.superdev/codex-worker-live/20260820T142608Z-45432-claude-caller/`
+- preflight: `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/preflight/`
+- common: tracked `callback-common/` beneath that same evidence directory
+- proactive/alternate/origin terminal: tracked `callback-proactive/`
+- origin metadata replacement/unset retention: tracked `callback-origin-retention/`
+- timeout/terminal/restart/artifact: tracked `callback-recovery/`
+- credential/PID/Unicode/stale/ambiguous: tracked `callback-security/`
+- exactly five simultaneous named workers: tracked `callback-five-workers/`
+- real Claude caller: tracked `claude-caller/`
 
-Focused recovery supersedes the first recovery record at
-`.superdev/codex-worker-live/20260820T150957.753587Z-27343-callback-recovery/`.
+Focused recovery supersedes the first recovery record at tracked
+`docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/focused-reride/callback-recovery-clean/`.
 It proves wait timeout then later terminal, completed/failed/interrupted, written
 non-replay, pending same-ID replay (attempt count 4), raw session/turn compatibility,
-and an 801482-byte artifact with exact SHA/readback. All callback statements are local
-written/correlated receipts, never delivery claims. Sanitized raw copies are tracked
+and an 801482-byte artifact with exact SHA/readback. Product/CLI attempt statements are
+local `written` receipts, never delivery claims; the real Claude transcript separately
+contains MEASURED receiver-observed callback attestations. Sanitized raw copies are tracked
 under `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/`.
 
 ## CLI checkride
@@ -47,14 +49,23 @@ and selected-instance stop recovery. Fresh focused executor
 `/root/callback_task8_implementer/callback_focused_reride_executor` rerode the affected
 surface. Final evaluator verdict: PASS at `07ff933`, no blockers.
 
+A fresh final branch reviewer at `gpt-5.6-sol`, high found no Critical issues and three
+Important release-readiness issues: locale-sensitive process identity, a permissive
+no-frame validator fallback, and non-portable receipt provenance. The TDD review wave
+forces a stable process locale, requires two ordered receiver attestations plus both
+full results, adds a no-callback negative control, and repairs the ledger/probe receipts.
+Fresh tracked common/security/real-Claude evidence is under
+`docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/reviewer-fix-wave/`.
+
 ## UC/AH and independent probe receipts
 
 Design §9 contains a rerunnable receipt in every AH1–AH11 cell. Trading probe evidence
 is the untouched worktree
 `/Users/tadas/Projects/ai-ethics/ai-trading-calibration/.claude/worktrees/codex-worker-callback-probes`,
-requested commit range `581999f0..3302175a` (design records the wider provenance range
-`4ce3fd0a..3302175a`). Live pong evidence is the trading main checkout's
-`.superdev/brainstorm/codex-worker-claude-callback-ping-pong.jsonl`, sequence 3/4.
+commit range `581999f0..3302175a`, containing probe implementation `4ce3fd0a` and
+side-effect correction `3302175a`. Live pong evidence from the trading main checkout's
+`.superdev/brainstorm/codex-worker-claude-callback-ping-pong.jsonl`, sequence 3/4, is
+copied verbatim to tracked checkride evidence as `trading-probe-pongs.jsonl`.
 The dirty trading main checkout was not modified.
 
 ## Release and installed product

@@ -22,6 +22,7 @@ from codex_worker.commands import (AccessMode, CallbackAttemptState, CallbackCap
 from codex_worker.claude_transport import (CALLBACK_UUID_NAMESPACE,
                                            MAX_USER_LINE_UTF16_UNITS,
                                            ClaudeTransport, ClaudeTransportDeps,
+                                           _process_start, _same_process_start,
                                            capture_from_env)
 
 
@@ -267,6 +268,15 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertTrue(_same_process_start(registry_utc, local_ps, shift))
         self.assertFalse(_same_process_start(
             registry_utc, "Tue Aug 11 17:42:33 2026", shift))
+
+    def test_process_start_is_stable_under_non_english_ambient_locale(self):
+        stable = subprocess.check_output(
+            ["ps", "-o", "lstart=", "-p", str(self.pid)],
+            text=True, env=dict(os.environ, LC_ALL="C")).strip()
+        with mock.patch.dict(os.environ, {"LC_ALL": "lt_LT.UTF-8"}):
+            observed = _process_start(self.pid)
+        self.assertEqual(observed, stable)
+        self.assertTrue(_same_process_start(stable, observed))
 
     def test_override_requires_one_live_name_and_safe_peer_key(self):
         transport = ClaudeTransport()

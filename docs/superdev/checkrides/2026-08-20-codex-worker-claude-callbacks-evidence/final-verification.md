@@ -8,7 +8,8 @@ Date: 2026-08-20
   — PASS, exit 0.
 - `bash -n tests/codex-worker/live_claude_check.sh` — PASS, exit 0.
 - `python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py'`
-  — PASS, 361 tests in 32.150 seconds, no warning output.
+  — PASS before review (361 tests) and after the review fix wave (362 tests in
+  33.950 seconds), with no warning output.
 - `git diff --check` — PASS, exit 0.
 
 ## Live and checkride gates
@@ -49,3 +50,18 @@ The exact original marketplace source `/Users/tadas/Projects/superdev` and enabl
 See [the sanitized verbatim transcript](installed-7.3.0/install-transcript.md).
 
 No durable worker/callback state or artifacts were deleted.
+
+## Independent code-review fix wave
+
+The fresh Sol/high branch reviewer found no Critical issues and three Important issues.
+The fix wave forces `LC_ALL=C` at the `ps lstart` boundary, adds a real non-English
+ambient-locale regression, requires two distinct ordered receiver attestations and
+both complete results in the real-Claude fallback, adds a successful-output/no-callback
+negative control, and makes every §9 receipt portable and exact. It also preserves the
+trading pong records in the tracked evidence directory and uses the correct
+`581999f0..3302175a` range.
+
+Fresh post-fix live evidence is tracked under `reviewer-fix-wave/`: callback-common
+PASS, callback-security PASS, and a real Claude caller with two ordered terminal
+attestations and exact full result recovery PASS. The installed-product section is
+superseded by the post-review refresh receipt appended after the fix commit.
