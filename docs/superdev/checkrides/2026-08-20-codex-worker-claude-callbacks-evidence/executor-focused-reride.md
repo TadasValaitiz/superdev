@@ -1,7 +1,7 @@
 # Callback CLI focused re-ride — executor transcript
 
-Date: 2026-08-20  
-Commit under ride: `9937c8e`  
+Date: 2026-08-20
+Commit under ride: `9937c8e`
 Substrate/tier: **MEASURED** local `codex-cli` through this worktree's `bin/codex-worker`, real local managed daemons, and the measured-shape local Claude registry/inbox fixture in `tests/codex-worker/live_broker_check.py`. The fixture is same-machine AF_UNIX receipt capture, not a Claude-delivery claim. Callback authentication tokens are replaced by `[REDACTED]` in the committed harness JSONL.
 
 Each section is one literal top-level invocation, captured serially. The linked scenario JSONL is the complete sanitized harness record of every CLI subprocess it drove, including callback frames and their destination labels.

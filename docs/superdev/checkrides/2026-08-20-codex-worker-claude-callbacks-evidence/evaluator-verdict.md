@@ -1,9 +1,9 @@
 # Codex worker → Claude callback checkride evaluator verdict
 
-Date: 2026-08-20  
-Candidate product SHA: `ed3b0237a287aaa75cdf4757d8593c2223f3c32b`  
-Role: independent CHECKRIDE EVALUATOR; judgment only, no product edits  
-Identity: `/root/callback_task8_implementer/callback_checkride_evaluator`  
+Date: 2026-08-20
+Candidate product SHA: `ed3b0237a287aaa75cdf4757d8593c2223f3c32b`
+Role: independent CHECKRIDE EVALUATOR; judgment only, no product edits
+Identity: `/root/callback_task8_implementer/callback_checkride_evaluator`
 Model: `gpt-5.6-sol`, reasoning effort `high` (controller-dispatched configuration; not inferred from runtime output)
 
 ## VERDICT: NEEDS_WORK
@@ -75,10 +75,10 @@ After fixes, reride the affected refusal outputs, stopped-daemon recovery, daemo
 
 ## Focused fix-wave re-evaluation — 2026-08-20
 
-Candidate product SHA: `07ff9334927f6de17881e513d219521087f1f7be`  
-Compared with: `ed3b023..07ff933` (fix wave `9937c8e`, cleanup/recovery correction `07ff933`)  
-Role: independent CHECKRIDE EVALUATOR; judgment only, no product or executor-evidence edits  
-Identity: `/root/callback_task8_implementer/callback_checkride_evaluator`  
+Candidate product SHA: `07ff9334927f6de17881e513d219521087f1f7be`
+Compared with: `ed3b023..07ff933` (fix wave `9937c8e`, cleanup/recovery correction `07ff933`)
+Role: independent CHECKRIDE EVALUATOR; judgment only, no product or executor-evidence edits
+Identity: `/root/callback_task8_implementer/callback_checkride_evaluator`
 Model: `gpt-5.6-sol`, reasoning effort `high` (controller-dispatched configuration; not inferred from runtime output)
 
 ### FINAL VERDICT: PASS

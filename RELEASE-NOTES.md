@@ -1,5 +1,27 @@
 # Superdev Release Notes
 
+## v7.3.0 (2026-08-20)
+
+### Durable Claude callbacks for named Codex workers
+
+- **Automatic terminal callbacks:** workers started from a verified local Claude
+  session retain that origin and write completed, failed, or interrupted results back
+  without polling. Callback-disabled and standalone workers keep their existing
+  behavior, and status reports the callback state without claiming delivery.
+- **Proactive worker messages:** `codex-worker message` sends inline or file-backed
+  progress at normal, urgent, or blocking priority to the stored origin or one
+  explicitly named alternate Claude session. A one-message override never retargets
+  later terminal callbacks.
+- **Durable, honest recovery:** canonical callback artifacts, event IDs, attempt state,
+  and target identity survive daemon restarts. Pending events retry with the same ID;
+  recorded writes are not intentionally replayed. Stale, ambiguous, PID-reused,
+  identity-drifted, unsafe, and oversized targets refuse with typed JSON.
+- **MEASURED acceptance:** six separately runnable live callback scenarios passed on
+  Codex CLI 0.148.0, including exactly five simultaneous named workers. A real Claude
+  caller used only PATH common commands, recovered full callback results, and preserved
+  durable state. The independent command checkride records both happy and refusal
+  paths; token usage, capacity, and transport delivery remain explicitly unclaimed.
+
 ## v7.2.0 (2026-08-20)
 
 ### Named Codex worker command façade
