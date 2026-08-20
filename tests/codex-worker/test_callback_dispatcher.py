@@ -171,6 +171,12 @@ class DispatcherTests(unittest.TestCase):
 
     def test_one_projection_is_reused_by_client_and_callback_then_context_is_released(self):
         transport = _Transport()
+        enqueue_calls = []
+        original_enqueue = self.store.enqueue_terminal
+        def counted_enqueue(session_id, event):
+            enqueue_calls.append(event.event_id)
+            return original_enqueue(session_id, event)
+        self.store.enqueue_terminal = counted_enqueue
         dispatcher = self._dispatcher(transport)
         dispatcher.start(); self.addCleanup(dispatcher.shutdown)
         snapshot = TurnSnapshot("turn-shared", "completed", None, [])
@@ -180,6 +186,7 @@ class DispatcherTests(unittest.TestCase):
         self._wait(lambda: len(transport.sent) == 1)
         self.assertEqual(transport.sent[0].payload["completion"], completion.to_dict())
         self.assertEqual(dispatcher.test_projector.calls, 1)
+        self.assertEqual(len(enqueue_calls), 1)
         self._wait(lambda: dispatcher.tracked_turn_count() == 0)
 
     def test_stopped_dispatcher_cannot_strand_synchronous_projection(self):
@@ -190,6 +197,10 @@ class DispatcherTests(unittest.TestCase):
             self.worker.session_id, "turn-stopped", snapshot)
         self.assertEqual(completion.turn.turn_id, "turn-stopped")
         self.assertEqual(dispatcher.test_projector.calls, 1)
+        pending = self.store.pending(self.worker.session_id)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].event.payload["completion"], completion.to_dict())
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
 
     def test_failed_dispatcher_thread_cannot_strand_synchronous_projection(self):
         dispatcher = self._dispatcher()
@@ -201,6 +212,43 @@ class DispatcherTests(unittest.TestCase):
             self.worker.session_id, "turn-thread-failed", snapshot)
         self.assertEqual(completion.turn.turn_id, "turn-thread-failed")
         self.assertEqual(dispatcher.test_projector.calls, 1)
+        pending = self.store.pending(self.worker.session_id)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].event.payload["completion"], completion.to_dict())
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+
+    def test_stopped_dispatcher_persistence_failure_is_durable_and_nonfatal(self):
+        dispatcher = self._dispatcher()
+        def fail_enqueue(session_id, event):
+            raise RuntimeError("secret callback route")
+        self.store.enqueue_terminal = fail_enqueue
+        snapshot = TurnSnapshot("turn-stopped-fault", "completed", None, [])
+        dispatcher.observe_turn(
+            self.worker.session_id, "turn-stopped-fault", self.context)
+        completion = dispatcher.completion_for(
+            self.worker.session_id, "turn-stopped-fault", snapshot)
+        self.assertEqual(completion.turn.turn_id, "turn-stopped-fault")
+        attempt = self.store.status_view(self.worker.session_id).last_terminal_attempt
+        self.assertEqual(attempt.state, CallbackAttemptState.FAILED)
+        self.assertEqual(attempt.reason, "RuntimeError")
+        self.assertNotIn("secret", repr(attempt.to_dict()))
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+
+    def test_shutdown_drains_ready_turn_after_worker_has_exited(self):
+        dispatcher = self._dispatcher()
+        dispatcher._run = lambda: None
+        dispatcher.start()
+        snapshot = TurnSnapshot("turn-shutdown-drain", "completed", None, [])
+        dispatcher.observe_turn(
+            self.worker.session_id, "turn-shutdown-drain", self.context)
+        dispatcher.queue(self.context, snapshot)
+        dispatcher.abandon_completion(self.worker.session_id, "turn-shutdown-drain")
+        dispatcher.shutdown()
+        pending = self.store.pending(self.worker.session_id)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].event.payload["completion"]["turn"]["turn_id"],
+                         "turn-shutdown-drain")
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
 
     def test_shutdown_race_wakes_and_allows_synchronous_projection(self):
         dispatcher = self._dispatcher()
@@ -222,6 +270,10 @@ class DispatcherTests(unittest.TestCase):
         completion = completed[0]
         self.assertEqual(completion.turn.turn_id, "turn-shutdown")
         self.assertEqual(dispatcher.test_projector.calls, 1)
+        pending = self.store.pending(self.worker.session_id)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].event.payload["completion"], completion.to_dict())
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
 
     def test_contextless_raw_terminal_does_not_enter_dispatcher_cache(self):
         dispatcher = self._dispatcher()

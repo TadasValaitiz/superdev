@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Tuple
 
@@ -71,6 +72,7 @@ class TerminalCallbackDispatcher:
         self._completions = {}  # type: Dict[Tuple[str, str], CompletionResponse]
         self._projection_errors = {}  # type: Dict[Tuple[str, str], BaseException]
         self._projection_owners = set()
+        self._persistence_owners = set()
         self._processing = set()
         self._callback_done = set()
         self._client_done = set()
@@ -121,16 +123,17 @@ class TerminalCallbackDispatcher:
             isolated = self._snapshots[key]
         try:
             completion = self._project_once(key, context, isolated)
-        except BaseException:
+        except BaseException as exc:
+            event_id = terminal_event_id(session_id, turn_id, "turn_terminal")
+            self._durable_fault_once(key, session_id, event_id, type(exc).__name__)
             with self._condition:
                 self._client_done.add(key)
-                if not self._worker_available():
-                    self._callback_done.add(key)
                 self._cleanup(key)
             raise
+        callback_done, durable = self._persist_once(key, context, completion)
         with self._condition:
             self._client_done.add(key)
-            if not self._worker_available():
+            if not callback_done and durable and not self._worker_available():
                 self._callback_done.add(key)
             self._cleanup(key)
         return CompletionResponse.from_dict(completion.to_dict())
@@ -145,17 +148,19 @@ class TerminalCallbackDispatcher:
         with self._condition:
             return len(set(self._contexts) | set(self._snapshots) | set(self._completions)
                        | set(self._projection_errors) | set(self._projection_owners)
+                       | set(self._persistence_owners)
                        | set(self._processing))
 
     def shutdown(self, timeout: float = 6.0) -> None:
+        deadline = time.monotonic() + max(0.0, timeout)
         with self._condition:
-            if not self._started:
-                return
             self._stopping = True
             self._condition.notify_all()
             thread = self._thread
         if thread is not None:
-            thread.join(max(0.0, timeout))
+            thread.join(max(0.0, deadline - time.monotonic()))
+        if thread is None or not thread.is_alive():
+            self._drain_ready(deadline)
         with self._condition:
             if thread is None or not thread.is_alive():
                 self._started = False
@@ -189,8 +194,6 @@ class TerminalCallbackDispatcher:
     def _run(self) -> None:
         while True:
             with self._condition:
-                if self._stopping:
-                    return
                 key = self._ready_key()
                 if key is not None:
                     self._processing.add(key)
@@ -199,6 +202,8 @@ class TerminalCallbackDispatcher:
                 else:
                     context = None
                     snapshot = None
+                    if self._stopping:
+                        return
             if key is not None:
                 self._process_terminal(key, context, snapshot)
                 continue
@@ -227,20 +232,81 @@ class TerminalCallbackDispatcher:
         try:
             completion = self._project_once(key, context, snapshot)
         except BaseException as exc:
-            self._record_fault_until_stopping(key[0], event_id, type(exc).__name__)
-            self._mark_callback_done(key)
-            return
-        try:
-            self._persist_completion(context, completion)
-        except Exception as exc:
-            reason = exc.kind if isinstance(exc, FacadeFault) else type(exc).__name__
-            self._record_fault_until_stopping(key[0], event_id, reason)
-            # Retain the work and retry persistence after bounded backoff.
+            self._durable_fault_once(key, key[0], event_id, type(exc).__name__)
             with self._condition:
                 self._processing.discard(key)
-                self._condition.wait(self.retry_backoff)
+                self._cleanup(key)
+                self._condition.notify_all()
             return
-        self._mark_callback_done(key)
+        callback_done, _ = self._persist_once(key, context, completion)
+        if not callback_done:
+            with self._condition:
+                self._processing.discard(key)
+                if not self._stopping:
+                    self._condition.wait(self.retry_backoff)
+            return
+        with self._condition:
+            self._processing.discard(key)
+            self._cleanup(key)
+            self._condition.notify_all()
+
+    def _persist_once(self, key, context, completion) -> Tuple[bool, bool]:
+        with self._condition:
+            while True:
+                if key in self._callback_done:
+                    return True, True
+                if key not in self._persistence_owners:
+                    self._persistence_owners.add(key)
+                    break
+                self._condition.wait()
+        try:
+            self._persist_completion(context, completion)
+        except BaseException as exc:
+            reason = exc.kind if isinstance(exc, FacadeFault) else type(exc).__name__
+            event_id = terminal_event_id(key[0], key[1], "turn_terminal")
+            recorded = self._record_fault_until_stopping(key[0], event_id, reason)
+            with self._condition:
+                self._persistence_owners.discard(key)
+                if recorded and self._stopping:
+                    self._callback_done.add(key)
+                    self._cleanup(key)
+                self._condition.notify_all()
+            return bool(recorded and self._stopping), recorded
+        with self._condition:
+            self._persistence_owners.discard(key)
+            self._callback_done.add(key)
+            self._cleanup(key)
+            self._condition.notify_all()
+            return True, True
+
+    def _durable_fault_once(self, key, session_id, event_id, reason) -> bool:
+        with self._condition:
+            while True:
+                if key in self._callback_done:
+                    return True
+                if key not in self._persistence_owners:
+                    self._persistence_owners.add(key)
+                    break
+                self._condition.wait()
+        recorded = self._record_fault_until_stopping(session_id, event_id, reason)
+        with self._condition:
+            self._persistence_owners.discard(key)
+            if recorded:
+                self._callback_done.add(key)
+                self._cleanup(key)
+            self._condition.notify_all()
+        return recorded
+
+    def _drain_ready(self, deadline: float) -> None:
+        while time.monotonic() < deadline:
+            with self._condition:
+                key = self._ready_key()
+                if key is None:
+                    return
+                self._processing.add(key)
+                context = self._contexts[key]
+                snapshot = self._snapshots[key]
+            self._process_terminal(key, context, snapshot)
 
     def _project_once(self, key, context, snapshot) -> CompletionResponse:
         with self._condition:
@@ -302,32 +368,27 @@ class TerminalCallbackDispatcher:
                 self._condition.notify_all()
 
     def _record_fault_until_stopping(self, session_id: str, event_id: str,
-                                     reason: str) -> None:
+                                     reason: str) -> bool:
         while True:
             try:
                 self.store.record_terminal_fault(session_id, event_id, reason, self.now())
-                return
+                return True
             except Exception:
                 with self._condition:
                     if self._stopping:
-                        return
+                        return False
                     self._condition.wait(self.retry_backoff)
 
-    def _mark_callback_done(self, key) -> None:
-        with self._condition:
-            self._processing.discard(key)
-            self._callback_done.add(key)
-            self._cleanup(key)
-            self._condition.notify_all()
-
     def _cleanup(self, key) -> None:
-        if key not in self._callback_done or key not in self._client_done:
+        if (key not in self._callback_done or key not in self._client_done
+                or key in self._processing):
             return
         self._contexts.pop(key, None)
         self._snapshots.pop(key, None)
         self._completions.pop(key, None)
         self._projection_errors.pop(key, None)
         self._projection_owners.discard(key)
+        self._persistence_owners.discard(key)
         self._processing.discard(key)
         self._callback_done.discard(key)
         self._client_done.discard(key)
