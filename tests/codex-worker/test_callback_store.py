@@ -133,3 +133,16 @@ class CallbackStoreTests(unittest.TestCase):
         self.assertEqual(self.store.publish_artifact("event-1", self.completion()), artifact)
         with self.assertRaises(ValueError):
             self.store.publish_artifact("event-1", CompletionResponse(self.worker, TurnView("turn", "failed", None), [], None, {}, RecoveryView("status", "messages", "interrupt")))
+
+    def test_artifact_race_preserves_different_target_created_at_publication(self):
+        target = self.artifacts / "event-1.json"
+        foreign = b'{"foreign":true}\n'
+        def racing_link(source, destination):
+            Path(destination).write_bytes(foreign)
+            os.chmod(destination, 0o600)
+            return os.link(source, destination)
+        store = CallbackStore(self.path, self.artifacts, CallbackStoreDeps(link=racing_link))
+        with self.assertRaises(ValueError):
+            store.publish_artifact("event-1", self.completion())
+        self.assertEqual(target.read_bytes(), foreign)
+        self.assertEqual(list(self.artifacts.glob("artifact.*")), [])

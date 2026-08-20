@@ -133,6 +133,7 @@ class CallbackStoreDeps:
     getuid: Callable[[], int] = os.getuid
     fsync: Callable[[int], None] = os.fsync
     replace: Callable[[str, Path], None] = os.replace
+    link: Callable[[str, Path], None] = os.link
 
 
 class CallbackStore:
@@ -229,14 +230,16 @@ class CallbackStore:
             fd, temporary = tempfile.mkstemp(prefix="artifact.", dir=str(self.artifact_dir))
             try:
                 os.fchmod(fd, 0o600)
+                temporary_stat = os.fstat(fd)
                 with os.fdopen(fd, "wb") as handle:
                     handle.write(payload); handle.flush(); self.deps.fsync(handle.fileno())
                 try:
-                    self.deps.replace(temporary, target)
+                    self.deps.link(temporary, target)
                 except FileExistsError:
-                    pass
-                self._verify_artifact(target, digest, len(payload))
-                self._fsync_parent(self.artifact_dir)
+                    self._verify_artifact(target, digest, len(payload))
+                else:
+                    self._verify_artifact(target, digest, len(payload), temporary_stat)
+                    self._fsync_parent(self.artifact_dir)
             finally:
                 try: os.unlink(temporary)
                 except FileNotFoundError: pass
@@ -312,8 +315,13 @@ class CallbackStore:
         try: self.deps.fsync(descriptor)
         finally: os.close(descriptor)
 
-    def _verify_artifact(self, path: Path, digest: str, size: int) -> None:
+    def _verify_artifact(self, path: Path, digest: str, size: int,
+                         expected_stat: Optional[os.stat_result] = None) -> None:
         self._owner_regular(path, 0o600)
+        if expected_stat is not None:
+            final_stat = self.deps.lstat(path)
+            if (final_stat.st_dev, final_stat.st_ino) != (expected_stat.st_dev, expected_stat.st_ino):
+                raise ValueError("callback artifact publication changed inode")
         data = path.read_bytes()
         if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
             raise ValueError("callback artifact collision or tampering")
