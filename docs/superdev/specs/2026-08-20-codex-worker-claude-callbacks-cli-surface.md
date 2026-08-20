@@ -76,10 +76,12 @@ Success result:
     },
     "event_id": "stable-event-id",
     "attempt": {
+      "event_id": "stable-event-id",
       "state": "written",
       "reason": null,
       "attempted_at": "RFC3339 timestamp",
-      "attempt_count": 1
+      "attempt_count": 1,
+      "turn_id": null
     }
   }
 }
@@ -150,7 +152,8 @@ Additive callback projection:
       "state": "written",
       "reason": null,
       "attempted_at": "RFC3339 timestamp",
-      "attempt_count": 1
+      "attempt_count": 1,
+      "turn_id": "codex-turn-id"
     }
   }
 }
