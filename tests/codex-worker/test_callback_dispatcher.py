@@ -88,11 +88,12 @@ class DispatcherTests(unittest.TestCase):
             self.worker, None, 10.0,
             RecoveryView("status", "messages", "interrupt", "resume"))
 
-    def _dispatcher(self, transport=None, backoff=0.01):
+    def _dispatcher(self, transport=None, backoff=0.01, diagnostic=None):
         projector = _Projector()
         dispatcher = TerminalCallbackDispatcher(self.store, transport or _Transport(), self.runtime,
                                           projector, lambda: 12.0,
-                                          lambda: "2026-08-20T00:00:01Z", backoff)
+                                          lambda: "2026-08-20T00:00:01Z", backoff,
+                                          diagnostic)
         dispatcher.test_projector = projector
         return dispatcher
 
@@ -233,6 +234,94 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(attempt.reason, "RuntimeError")
         self.assertNotIn("secret", repr(attempt.to_dict()))
         self.assertEqual(dispatcher.tracked_turn_count(), 0)
+
+    def test_total_store_outage_returns_exact_completion_with_safe_diagnostic(self):
+        evidence = []
+        dispatcher = self._dispatcher(diagnostic=evidence.append)
+        def fail_enqueue(session_id, event):
+            raise RuntimeError("secret enqueue route")
+        def fail_fault(session_id, event_id, reason, attempted_at):
+            raise OSError("secret fault path")
+        self.store.enqueue_terminal = fail_enqueue
+        self.store.record_terminal_fault = fail_fault
+        snapshot = TurnSnapshot("turn-total-outage", "completed", None, [])
+        dispatcher.observe_turn(
+            self.worker.session_id, "turn-total-outage", self.context)
+        completed = []
+        caller = threading.Thread(target=lambda: completed.append(dispatcher.completion_for(
+            self.worker.session_id, "turn-total-outage", snapshot)))
+        caller.start(); caller.join(0.2)
+        if caller.is_alive():
+            dispatcher.shutdown(0.1)
+            caller.join(1)
+        self.assertFalse(caller.is_alive())
+        self.assertEqual(completed[0].turn.turn_id, "turn-total-outage")
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["kind"], "terminal_callback_persistence_lost")
+        self.assertEqual(evidence[0]["enqueue_error"], "RuntimeError")
+        self.assertEqual(evidence[0]["fault_error"], "OSError")
+        self.assertNotIn("secret", repr(evidence))
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+
+    def test_healthy_slow_store_does_not_block_synchronous_completion(self):
+        entered = threading.Event(); release = threading.Event()
+        original = self.store.enqueue_terminal
+        def slow_enqueue(session_id, event):
+            entered.set(); release.wait(1)
+            return original(session_id, event)
+        self.store.enqueue_terminal = slow_enqueue
+        dispatcher = self._dispatcher(); dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        snapshot = TurnSnapshot("turn-slow-sync", "completed", None, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-slow-sync", self.context)
+        dispatcher.queue(self.context, snapshot)
+        self.assertTrue(entered.wait(1))
+        completed = []
+        caller = threading.Thread(target=lambda: completed.append(dispatcher.completion_for(
+            self.worker.session_id, "turn-slow-sync", snapshot)))
+        caller.start(); caller.join(0.2)
+        release.set(); caller.join(1)
+        self.assertFalse(caller.is_alive())
+        self.assertEqual(completed[0].turn.turn_id, "turn-slow-sync")
+
+    def test_healthy_broken_store_does_not_block_synchronous_completion(self):
+        evidence = []
+        dispatcher = self._dispatcher(backoff=0.01, diagnostic=evidence.append)
+        dispatcher.start()
+        self.store.enqueue_terminal = lambda session_id, event: (_ for _ in ()).throw(
+            RuntimeError("secret enqueue"))
+        self.store.record_terminal_fault = lambda *args: (_ for _ in ()).throw(
+            OSError("secret fault"))
+        snapshot = TurnSnapshot("turn-broken-sync", "completed", None, [])
+        dispatcher.observe_turn(self.worker.session_id, "turn-broken-sync", self.context)
+        dispatcher.queue(self.context, snapshot)
+        completed = []
+        caller = threading.Thread(target=lambda: completed.append(dispatcher.completion_for(
+            self.worker.session_id, "turn-broken-sync", snapshot)))
+        caller.start(); caller.join(0.2)
+        self.assertFalse(caller.is_alive())
+        self.assertEqual(completed[0].turn.turn_id, "turn-broken-sync")
+        dispatcher.shutdown(0.2)
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+        self.assertEqual(len(evidence), 1)
+        self.assertNotIn("secret", repr(evidence))
+
+    def test_shutdown_is_bounded_during_total_store_outage(self):
+        evidence = []
+        dispatcher = self._dispatcher(backoff=0.01, diagnostic=evidence.append)
+        dispatcher.start()
+        self.store.enqueue_terminal = lambda session_id, event: (_ for _ in ()).throw(
+            RuntimeError("secret enqueue"))
+        self.store.record_terminal_fault = lambda *args: (_ for _ in ()).throw(
+            OSError("secret fault"))
+        snapshot = TurnSnapshot("turn-outage-shutdown", "completed", None, [])
+        dispatcher.observe_turn(
+            self.worker.session_id, "turn-outage-shutdown", self.context)
+        dispatcher.queue(self.context, snapshot)
+        dispatcher.abandon_completion(self.worker.session_id, "turn-outage-shutdown")
+        started = time.monotonic(); dispatcher.shutdown(0.2)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(dispatcher.tracked_turn_count(), 0)
+        self.assertEqual(len(evidence), 1)
 
     def test_shutdown_drains_ready_turn_after_worker_has_exited(self):
         dispatcher = self._dispatcher()
