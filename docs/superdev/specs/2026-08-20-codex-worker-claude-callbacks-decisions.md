@@ -545,3 +545,19 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** transport encoder, unavailable override, probe parity, tests, checkride.
 - **Revisit-when:** Claude makes sender/reply identity mandatory or provides a supported
   daemon identity.
+
+## D29 — Update exhaustive contract consumers with the model seam
+**When:** 2026-08-20T10:38:00Z · **Phase:** build · **Status:** locked
+**Decided by:** Codex during Task 1 review
+
+- **Trigger:** Task 1's planned closed fault/status additions made legacy exhaustive
+  assertions in `test_rpc_cli.py` and `test_facade.py` fail, although the task's initial
+  owned-file list named only `commands.py` and `test_commands.py`.
+- **Options weighed:** leave the fast gate red and document it; weaken the exhaustive
+  assertions; or update the exact consumers alongside the additive contract.
+- **Decided:** Update the two exhaustive consumers in the same Task 1 commit. They pin
+  the new public contract and preserve the fast-gate invariant; no extra production
+  behavior or interface was introduced.
+- **Rests on:** Task 1's exact `-32031..-32037` mapping and additive callback status.
+- **Affects:** Task 1 file boundary and its review package only.
+- **Revisit-when:** contract tests move to generated schema enumeration.
