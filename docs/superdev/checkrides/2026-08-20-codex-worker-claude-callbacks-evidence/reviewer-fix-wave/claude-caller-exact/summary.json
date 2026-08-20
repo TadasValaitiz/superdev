@@ -1,0 +1,24 @@
+{
+  "bash_commands": ".superdev/codex-worker-live/20260820T154941Z-84427-claude-caller/claude-bash-commands.json",
+  "callback_event_ids": [
+    "terminal-61b80798e6174472a1253ee1ecff1ca127fceff0c508220cd5f18b0962751014",
+    "terminal-0683d40b4a43c6228553860d188c18e309b67912c5ba1ff70bf795a39b606cb9"
+  ],
+  "claude_transcript": ".superdev/codex-worker-live/20260820T154941Z-84427-claude-caller/claude.stream.jsonl",
+  "claude_version": "2.1.237 (Claude Code)",
+  "direct_codex_invocation": false,
+  "durable_state": "preserved",
+  "effort": "medium",
+  "full_result_recovered": true,
+  "mcp_invocation": false,
+  "message_count": 2,
+  "model": "gpt-5.6-terra",
+  "native_claude_available": true,
+  "scenario": "claude-code-common-caller",
+  "session_id": "5d363b66-657a-4a9e-ae72-ec494c563069",
+  "status": "PASS",
+  "thread_id": "01a01fdd-7767-79e1-92ff-f174c9693bc0",
+  "turn_id": "01a01fdd-779f-7520-bc81-49a55244f03e",
+  "validated_evidence": ".superdev/codex-worker-live/20260820T154941Z-84427-claude-caller/validated-common-evidence.json",
+  "worker_name": "claude-caller-09ce3ec5"
+}

@@ -68,3 +68,11 @@ superseded by the post-review refresh receipt appended after fix commit `79d6ec2
 That refresh includes a PASS installed callback smoke under Lithuanian
 `LC_ALL=lt_LT.UTF-8`, followed by exact restoration of the original marketplace and
 enabled 7.2.0 state.
+
+The reviewer's remaining I2 concern was then closed at the evidence contract: every
+ordered receiver attestation must include a parseable `CALLBACK_COMPLETION_N` object
+equal to the corresponding complete start/run result. A callback attestation without
+that complete object and a command-summary-only transcript are both negative controls.
+Fresh `bash tests/codex-worker/live_claude_check.sh` PASS evidence is tracked at
+`reviewer-fix-wave/claude-caller-exact/`; its two complete received objects compare
+exactly and `full_result_recovered` is true.

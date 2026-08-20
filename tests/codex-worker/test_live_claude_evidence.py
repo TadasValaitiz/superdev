@@ -110,10 +110,13 @@ class ClaudeEvidenceTests(unittest.TestCase):
                     block["content"] = json.dumps({"result": status_result})
                 if block.get("type") == "tool_result" and block.get("tool_use_id") == "t0":
                     attested.append({"message": {"content": [{"type": "text", "text":
-                        "Callback 1 received (`%s...`)." % terminal_id_1[:17]}]}})
+                        "Callback 1 received (`%s...`). CALLBACK_COMPLETION_1=%s" % (
+                            terminal_id_1[:17], json.dumps(completion, separators=(",", ":")))}]}})
                 if block.get("type") == "tool_result" and block.get("tool_use_id") == "t2":
                     attested.append({"message": {"content": [{"type": "text", "text":
-                        "Callback 2 received (`%s...`)." % terminal_id_2[:17]}]}})
+                        "Callback 2 received (`%s...`). CALLBACK_COMPLETION_2=%s" % (
+                            terminal_id_2[:17], json.dumps(run_completion,
+                                                          separators=(",", ":")))}]}})
             attested.append({
                 "message": {"content": [{
                     "type": "text",
@@ -125,6 +128,16 @@ class ClaudeEvidenceTests(unittest.TestCase):
             hidden_receipt = EVIDENCE.validate(transcript, cwd, cli)
             self.assertEqual(hidden_receipt["callback_event_ids"], [terminal_id_1, terminal_id_2])
             self.assertTrue(hidden_receipt["full_result_recovered"])
+
+            attested_without_payload = json.loads(json.dumps(attested))
+            for line in attested_without_payload:
+                block = line.get("message", {}).get("content", [{}])[0]
+                if block.get("type") == "text" and "CALLBACK_COMPLETION_" in block["text"]:
+                    block["text"] = block["text"].split(" CALLBACK_COMPLETION_", 1)[0]
+            transcript.write_text(
+                "\n".join(map(json.dumps, attested_without_payload)) + "\n")
+            with self.assertRaises(AssertionError):
+                EVIDENCE.validate(transcript, cwd, cli)
 
             # Successful synchronous start/run output plus a later status event ID is
             # not proof that Claude observed either automatic callback.

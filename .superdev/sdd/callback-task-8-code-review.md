@@ -59,3 +59,42 @@ None.
 Ready to merge: **No**.
 
 The core callback/recovery implementation and release packaging have substantial positive evidence, and all fresh deterministic/package gates passed. Merge is blocked by one production correctness defect (locale-dependent origin validation) and two acceptance-gate/provenance defects (a validator that can pass without a callback, and non-reconstructable/inaccurate §9 receipts). Correct those, rerun the focused live/installed gates, and request a focused re-review.
+
+---
+
+# Focused re-review — 2026-08-20 — candidate `76ee44b`
+
+## Closure check
+
+- **I1 — closed.** `skills/subagent-driven-development/scripts/codex_worker/claude_transport.py:33` forces `LC_ALL=C` only at the `ps` process-start boundary. `tests/codex-worker/test_claude_transport.py:260` exercises the real boundary under Lithuanian ambient locale, and the tracked installed-product locale smoke passes under literal `LC_ALL=lt_LT.UTF-8` (`docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/installed-7.3.0/install-transcript.md:158`).
+- **I2 — partial.** The fallback now requires two distinct, ordered receiver attestations, associates them with two full-length reported terminal IDs, and rejects the explicit successful-output/no-attestation negative (`tests/codex-worker/live_claude_evidence.py:154`, `tests/codex-worker/test_live_claude_evidence.py:129`). However, the claimed complete-result recovery is still not validated; see the Important issue below.
+- **I3 — closed.** §9 and the report cite tracked checkout-relative receipts, the exact trading range `581999f0..3302175a` demonstrably contains both `4ce3fd0a` and `3302175a`, and the two source pongs are preserved in tracked `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/trading-probe-pongs.jsonl` (`docs/superdev/specs/2026-08-20-codex-worker-claude-callbacks-design.md:682`, `docs/superdev/specs/2026-08-20-codex-worker-claude-callbacks-design.md:690`).
+- **M1 — closed.** Product/CLI `written` receipts are now distinguished from separately MEASURED receiver-observed arrival (`.superdev/sdd/callback-task-8-report.md:31`).
+- **M2 — closed.** Release notes use the exact public enum `now|next|later` (`RELEASE-NOTES.md:11`).
+
+## Remaining issues
+
+### Critical
+
+None.
+
+### Important
+
+1. `tests/codex-worker/live_claude_evidence.py:187` — in the stream-no-frame branch, `recovered` is true when only each completion's `messages[*].text` appears somewhere in accumulated assistant text. It does not prove that Claude recovered either complete callback result: worker identity, turn/error, structured output, metrics, and recovery fields may all be absent or differ. Nevertheless, the validator emits `full_result_recovered: true` (`live_claude_evidence.py:206`), and the report/final receipt describe “both full results” and “exact full result recovery” (`.superdev/sdd/callback-task-8-report.md:55`, `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/final-verification.md:58`). The positive unit fixture itself reports only the two message strings (`tests/codex-worker/test_live_claude_evidence.py:117`). Fix by making each ordered attestation carry a machine-checkable canonical completion (or a canonical digest generated from the callback payload) and compare it to the corresponding start/run result; add a negative that preserves both attestations, IDs, and message texts while omitting or altering another completion field.
+
+### Minor
+
+None.
+
+## Verification
+
+- Focused warning-strict unit lane: **PASS**, 16 tests (`test_claude_transport.py` and `test_live_claude_evidence.py`).
+- The fresh tracked real-Claude transcript validates and contains two ordered receiver attestations and two distinct terminal IDs.
+- `git diff --check ec42d98..76ee44b`: **PASS**.
+- Fresh Claude, installed-locale, and trading-pong receipts are tracked; the trading range resolves to both expected commits.
+
+## Assessment
+
+Ready to merge: **No**.
+
+Four of the five prior findings are closed, including the production locale defect and portable provenance. I2 is materially improved and the checked-in real-Claude transcript is credible, but the acceptance validator still overstates message-text recovery as recovery of both complete results. Because AH1 and the release evidence explicitly gate on complete result recovery, that semantic gap remains an Important merge blocker.

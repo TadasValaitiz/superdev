@@ -58,6 +58,7 @@ PROMPT=$(printf '%s\n' \
   "6. codex-worker status --name $WORKER" \
   '7. codex-worker daemon stop' \
   'The automatic callback is an incoming user event with a callback event_id. Read its complete completion payload; do not claim delivery beyond the written receipt.' \
+  'Immediately after each automatic callback and before the next command, emit exactly `Callback #N received. CALLBACK_COMPLETION_N=<json>` where N is 1 or 2 and <json> is the complete compact JSON object from that incoming event payload.completion, with no fields omitted and no text after the JSON. Do not reconstruct it from the earlier command response.' \
   'Then report the worker name, session_id, thread_id, first turn_id, model, effort, access, cwd, both complete final messages, callback event IDs, goal availability, history count, and durable_state. Do not omit or abbreviate any command output while reasoning.')
 
 set +e

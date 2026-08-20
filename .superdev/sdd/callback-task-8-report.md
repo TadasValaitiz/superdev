@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 Base: `cf073be`
-Status: review fixes complete; focused re-review pending
+Status: final exact-completion fix complete; focused re-review pending
 
 ## TDD and deterministic gate
 
@@ -56,6 +56,9 @@ forces a stable process locale, requires two ordered receiver attestations plus 
 full results, adds a no-callback negative control, and repairs the ledger/probe receipts.
 Fresh tracked common/security/real-Claude evidence is under
 `docs/superdev/checkrides/2026-08-20-codex-worker-claude-callbacks-evidence/reviewer-fix-wave/`.
+The final exact-completion rerun is the `claude-caller-exact/` child: both ordered
+receiver attestations contain parseable full completion objects equal to their
+corresponding complete command results, closing the reviewer's remaining I2 concern.
 
 ## UC/AH and independent probe receipts
 

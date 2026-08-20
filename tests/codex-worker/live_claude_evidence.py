@@ -160,7 +160,14 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
             if match:
                 number = int(match.group(1))
                 assert number not in attestations, {"duplicate_callback_attestation": number}
-                attestations[number] = (position, match.group(2))
+                marker = "CALLBACK_COMPLETION_%d=" % number
+                assert marker in value, {"callback_attestation_missing_completion": number}
+                raw_completion = value.split(marker, 1)[1].lstrip()
+                completion, end = json.JSONDecoder().raw_decode(raw_completion)
+                assert not raw_completion[end:].strip(), {
+                    "callback_attestation_trailing_text": number}
+                assert isinstance(completion, dict), completion
+                attestations[number] = (position, match.group(2), completion)
         assert set(attestations) == {1, 2}, {"callback_attestations": attestations}
         matched_ids = []  # type: List[str]
         for number in (1, 2):
@@ -184,9 +191,8 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
         assert start_position < attestations[1][0] < run_position, attestations
         assert run_position < attestations[2][0], attestations
         callback_ids = matched_ids
-        recovered = all(message["text"] in full_text
-                        for result in (start_result, run_result)
-                        for message in result["messages"])
+        recovered = (attestations[1][2] == start_result
+                     and attestations[2][2] == run_result)
     assert callback_ids, {"callback_events": callback_events, "assistant_text": assistant_text}
     assert status["callback"]["last_terminal_attempt"]["event_id"] in callback_ids
     assert recovered, {"callbacks": unique_callbacks, "reported_ids": reported_ids}
