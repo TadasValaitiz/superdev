@@ -49,6 +49,8 @@ class InstancePaths:
     log_path: Path
     metadata_path: Path
     lock_path: Path
+    callback_path: Path
+    callback_artifact_dir: Path
 
 
 @dataclass(frozen=True)
@@ -82,7 +84,8 @@ def derive_instance_paths(identity: InstanceIdentity, platform: str, state_home:
     runtime_dir = Path(temp_root) / ("scw-%s-%s" % (uid, key_hash[:20]))
     return InstancePaths(durable_dir, runtime_dir / "s", durable_dir / "registry.json",
                          durable_dir / "daemon.log", durable_dir / "instance.json",
-                         runtime_dir / "l")
+                         runtime_dir / "l", durable_dir / "callbacks.json",
+                         durable_dir / "callback-artifacts")
 
 
 def _owner_regular(path: Path, mode: int) -> bool:

@@ -99,6 +99,11 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(load_managed_identity(self.paths.registry_path), self.identity)
         self.assertEqual(stat.S_IMODE(os.stat(self.paths.metadata_path).st_mode), 0o600)
 
+    def test_instance_paths_reserve_callback_state_and_artifacts(self):
+        self.assertEqual(self.paths.callback_path, self.paths.durable_dir / "callbacks.json")
+        self.assertEqual(self.paths.callback_artifact_dir,
+                         self.paths.durable_dir / "callback-artifacts")
+
     def test_stop_is_idempotent_and_preserves_durable_state(self):
         self.manager.ensure_running()
         stopped = self.manager.stop()
