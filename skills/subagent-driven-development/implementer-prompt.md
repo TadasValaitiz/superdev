@@ -53,6 +53,8 @@ Subagent (general-purpose):
 
     ## Your Job
 
+    **Broad arc?** If your brief is an arc (a whole deliverable, plan checkpoints inside), work in arc phases per checkpoint: implement → self-review → checkpoint receipt (tests run, marker delta, map rows claimed) → next phase. You keep TDD's inner red-green loop per slice; the reviewer will independently attack your guards at each checkpoint — write guards you have watched fail. If the arc starts with an archive sweep, the harvest file must be REVIEWER-SIGNED before you archive anything.
+
     Once you're clear on requirements:
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
@@ -150,6 +152,7 @@ Subagent (general-purpose):
     Then report back with ONLY (under 15 lines — the detail lives in the
     report file):
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    - **RESUME:** worker kind · your name/agent-id · exact resume command or address · session ref · territory one-liner (MANDATORY — this is how fixes reach you without re-grounding)
     - Commits created (short SHA + subject)
     - One-line test summary (e.g. "14/14 passing, output pristine")
     - Your concerns, if any

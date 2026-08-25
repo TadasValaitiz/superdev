@@ -5,17 +5,30 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching a fresh implementer subagent per task, a task review (spec compliance + code quality) after each, and a broad whole-branch review at the end.
+Execute a plan by dispatching ONE carrying implementer per broad, role-carried arc (glossary: superdev:system-design), reviews at plan checkpoints rather than per-mini-task, resume-first fixes, and a broad whole-branch review at the end. Bite-size task-by-task dispatch remains the mode for Sonnet-class mechanical work.
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + task review (spec + quality) + broad final review = high quality, fast iteration
+**Core principle:** one carrying implementer per arc + checkpoint-cadence review + resume-first fixes = long uninterrupted runs with an independent oracle. (Legacy bite-size mode: fresh subagent per task + review per task — still right for small mechanical work.)
+
+## The arc model (default for substantial work — D36–D38)
+
+- **Task shape:** a broad, role-carried ARC — many files, hours, one deliverable — not a 2-3-file mini-task. The plan's execution-shape proposal fixes the arc count; the granularity dial keys to worker class (broad ↔ Codex/opus-class; bite-size ↔ Sonnet-class).
+- **One carrying implementer per arc; never parallel initial writes** (everything lands in one worktree). Parallelism = reads always, and quick-fix lanes in the SAME worktree after the shape exists — see parallel-execution.md.
+- **Reviews at plan checkpoints** (`## Checkpoint Cn` in the plan): the reviewer reads the diff-since-last-checkpoint + the implementer's report — never per-mini-task; frequent small reviews cost more than they catch. The reviewer is also the TEST ADVERSARY (task-reviewer-prompt.md): it writes/commissions failing tests per checkpoint and observes every guard fail before the checkpoint clears.
+- **Fixes are resume-first:** message the ORIGINAL implementer (its live context is the memory) with only the new findings — SendMessage for Claude subagents, `codex-worker run --name` for Codex. Fresh dispatch + report file only when resume fails.
+- **RESUME metadata is mandatory** in every implementer/reviewer report: worker kind · name/agent-id · exact resume command or address · session ref · territory one-liner. The controller tracks these as rows in the progress ledger (`.superdev/sdd/progress.md`) — no separate registry file.
+- **Roles:** carrying implementer · reviewer/adversary · **follow-up** — the short-lived third seat that lands checkpoint findings, quick fixes and cleanup after the arc's shape exists (the quick-fix lane's usual occupant).
+- **Auto-enter:** when writing-plans ends with the operator agreeing the execution shape, SDD auto-enters — no "shall I proceed"; the agreement WAS the flip (the room goes autonomous there).
+- **Design-class deviations file residue:** an arc that hits an architecture-vs-code discrepancy resolves it locally, plants a `MIG-MARK`, and appends a residue row (`design/residue/residue.jsonl`, own ID block) — never a local L1 ruling (see Decision Logging below).
 
 ## Codex workers from Claude Code
 
-Native Claude Code remains the default complete SDD route. Use a local Codex worker only when the
-operator or plan explicitly selects it; Codex is opt-in, never a replacement for native
-Claude dispatch or main-session design. Read [Codex worker broker](codex-worker.md),
+Codex workers are a first-class implementer choice beside native Claude — not the default,
+but the **long-run powerhouse**: they excel at very long arcs and at **resuming the same
+session** rather than starting new ones. For a broad arc, prefer one Codex worker carrying
+the whole arc with `run --name` continuations over any sequence of fresh dispatches.
+Main-session design stays native Claude. Read [Codex worker broker](codex-worker.md),
 give every worker a collision-resistant readable name (role plus random or numbered
 suffix), and use `start` for its first message then short `run` follow-ups. Preserve
 the normal task brief/report/review-package contracts: a worker never reviews its own
@@ -280,6 +293,7 @@ controllers that lost their place have re-dispatched entire completed task
 sequences — the single most expensive failure observed. Track progress in
 a ledger file, not only in todos.
 
+- The ledger also carries the RESUME rows: one line per live/parked subagent — `task/arc · worker kind · name/id · resume command · territory` — so a fix or a neighbouring arc resumes instead of re-deriving (D32).
 - At skill start, check for a ledger:
   `cat "$(git rev-parse --show-toplevel)/.superdev/sdd/progress.md"`. Tasks listed there
   as complete are DONE — do not re-dispatch them; resume at the first task
@@ -400,7 +414,7 @@ Done!
 - Start implementation on main/master branch without explicit user consent
 - Skip task review, or accept a report missing either verdict (spec compliance AND task quality are both required)
 - Proceed with unfixed issues
-- Dispatch multiple implementation subagents in parallel (conflicts)
+- Dispatch multiple implementation subagents writing in parallel — one worktree, one carrying implementer per arc; quick-fix lanes only after the shape exists (parallel-execution.md)
 - Make a subagent read the whole plan file (hand it its task brief —
   `scripts/task-brief` — instead)
 - Skip scene-setting context (subagent needs to understand where task fits)
@@ -424,9 +438,9 @@ Done!
 - Don't rush them into implementation
 
 **If reviewer finds issues:**
-- Implementer (same subagent) fixes them
-- Reviewer reviews again
-- Repeat until approved
+- **Continuation-first (D40):** message/resume the ORIGINAL implementer with the findings — its context is intact; no re-grounding
+- Fresh fix subagent (with the report + RESUME metadata) only when the original cannot be resumed
+- Reviewer reviews again; repeat until approved
 - Don't skip the re-review
 
 **If subagent fails task:**
