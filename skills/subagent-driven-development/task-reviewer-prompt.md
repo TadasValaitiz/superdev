@@ -14,7 +14,7 @@ Subagent (general-purpose):
          model silently inherits the session's most expensive one]
   prompt: |
     You are reviewing one task's implementation: first whether it matches its
-    requirements, then whether it is well-built. This is a task-scoped gate,
+    requirements, then whether it is well-built. This is a checkpoint-scoped gate,
     not a merge review — a broad whole-branch review happens separately after
     all tasks are complete.
 
@@ -101,9 +101,23 @@ Subagent (general-purpose):
     - DRY without premature abstraction?
     - Edge cases handled?
 
-    **Tests:**
+    **Tests — you are the ADVERSARY (D38), not just a reader:**
     - Do the new and changed tests verify real behavior, not mocks?
-    - Are the task's edge cases covered?
+    - Are the edge cases covered?
+    - **Write or commission at least one adversarial test per substantive claim** the
+      arc's report makes — a test the implementation SHOULD pass but that was not
+      shaped by the implementer's own assumptions. Run it.
+    - **Every guard must be observed to fail:** for each new guard/assertion in the
+      diff, break the guarded property (locally, uncommitted) and watch the test go
+      red, then restore. A guard nobody watched fail is not a guard — this checkpoint
+      does not clear with an unobserved guard.
+    - **Rewrite territory (harvest-delete-rewrite):** author the requirement tests
+      FROM the harvest file, checking against the vision — never against the code.
+      If the arc's first checkpoint is the archive sweep, your sign-off on the
+      harvest file is REQUIRED before anything is archived.
+    - The implementer's own suite evidence stands — do not re-run THEIR suite
+      wholesale; run your adversarial tests and any focused test a specific doubt
+      raises.
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
@@ -178,7 +192,7 @@ Subagent (general-purpose):
   are already in this template)
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed
   report to
-- `[BASE_SHA]` — commit before this task
+- `[BASE_SHA]` — the last cleared checkpoint's SHA (for a bite-size task: the commit before it)
 - `[HEAD_SHA]` — current commit
 - `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review
   package to (`scripts/review-package BASE HEAD` prints the unique path it

@@ -80,8 +80,6 @@ The harness owns fan-out. It launches independent shell commands and correlates 
 one by `result.worker.name`, never launch order:
 
 ```sh
-(cd "$IMPLEMENT_A_WORKTREE" && codex-worker start --name implement-a31 --prompt-file implement-a.md) &
-(cd "$IMPLEMENT_B_WORKTREE" && codex-worker start --name implement-b32 --prompt-file implement-b.md) &
 (cd "$REVIEW_C_WORKTREE" && codex-worker start --name review-c33 --prompt-file review-c.md) &
 (cd "$REVIEW_D_WORKTREE" && codex-worker start --name review-d34 --prompt-file review-d.md) &
 (cd "$VERIFY_E_WORKTREE" && codex-worker start --name verify-e35 --prompt-file verify-e.md) &
