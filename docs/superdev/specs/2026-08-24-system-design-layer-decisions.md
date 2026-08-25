@@ -234,3 +234,7 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **Archive sweep ownership (closing the D16 gap):** the sweep is the implementer's FIRST plan checkpoint; the reviewer signs off the harvest file **before** anything is archived; post-development cleanup (delete archived tests, keep manifest) is a close-gate item.
 - Alternatives: A same-mind red-green scaled (inert-guard bias scales with the arc — the 17-inert-guard evidence) · B full test-author split (re-introduces write fan-out; interface guessing). Revisit-when: reviewer-authored guards themselves go inert twice → rotate the adversary seat.
 - **R22 deep-dive complete:** all seven questions ruled (D36, D37, D38 + prior D27/D28/D32). **D10 and D16 move provisional → ratified** with these mechanics.
+
+## D39 — Wave-2 execution shape agreed: variant A (inline, 3 broad tasks)
+**When:** 2026-08-25T07:24:02Z · **Phase:** plan · **Status:** locked · **Decided by:** Tadas ("A")
+- Inline in the authoring session; tasks: (1) SDD rewrite (role-split, broad arcs, resume registry, Codex long-run emphasis, parallel-execution rename per D37) · (2) TDD (clearance mechanics, reviewer-adversary seam) · (3) writing-plans execution-shape elicitation + brainstorming test-disposition. Baseline→edit→GREEN per task; one release (superdev 7.5.0) with receipts. Auto-start on plan-reviewer fold, per D29/D35 precedent.
