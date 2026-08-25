@@ -247,3 +247,8 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 
 ## Wave-2 build closure — 2026-08-25T07:34:37Z
 **Phase:** build. Shipped superdev 7.5.0: SDD arc model (D32/D36–D38/D40), parallel-execution rewritten (D37; `subagent-driven-parallel` retired), test-clearance.md (D16/D38), execution-shape elicitation + auto-start (D27–D29), brainstorm disposition (6b/§7b), glossary additions. All three tasks baseline→edit→GREEN (a6bf6/abbd5); plan-review errata folded; AH9 completes (SDD sweep clean), AH8/AH17/AH19 skill-text halves receipted. Remaining live receipts (AH2–AH8-live, AH11–AH15, AH16-live, AH17–AH19-live) land at rollout in ai-trading-calibration. The system-design layer is now FULLY SHIPPED at skill level: waves 1+2 complete, D1–D40.
+
+## D41 — Bootstrap lives in superdev, standalone and conversational
+**When:** 2026-08-25T07:57:10Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- The dev-organisation bootstrap is a **superdev skill**, standalone — superdev must carry no loose links to room-graph-orchestration (cross-check ordered; fix any found). **Not deterministic**: a target project may already have conventions (doc layout, ledgers, test structure) that must be **bridged, adopted, or discarded** — a scaffold script can't judge that, so the bootstrap is conversational: survey what exists, propose a mapping per convention, operator rules, then create the floor accordingly. Rejected: (a) room-graph as home (superdev standalone-ness wins), (c) scaffold plugin (overkill).
+- Milestone entry protocol confirmed as designed: seed corpus (session) → HIL co-plan with the orchestrator → charters; milestone→milestone via the handoff; backlog feeds only the boundary conversation.

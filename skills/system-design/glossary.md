@@ -1,6 +1,6 @@
 # The shared vocabulary
 
-One table, one meaning per word, across superdev and room-graph-orchestration. Skills link here; none restates it.
+One table, one meaning per word, across every skill that touches the development organisation. Skills link here; none restates it.
 
 ## Boundless (design side)
 | Term | Means |
