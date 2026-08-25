@@ -17,7 +17,7 @@ charter (probe gate: census attached, map rows cited, test disposition set)     
   → operator present?
       yes → HIL brainstorm: corpus passages quoted at file:line,
             angle-by-angle, item angles written beside the spec                  LOCKED
-      no  → self-brainstorming to the ratification gate; waits as a desk DECIDE  DEFERRED (D30 unratified)
+      no  → self-brainstorming to the ratification gate; waits as a desk DECIDE  LOCKED (D30/D33; mechanics land across waves 1–2)
   → writing-plans: execution-shape variants proposed (tasks · deliverables ·
     workers · rooms) → operator agrees                                           LOCKED
   → THE FLIP: agreement = auto-start; room goes autonomous; desk shows
@@ -38,7 +38,7 @@ charter (probe gate: census attached, map rows cited, test disposition set)     
 - A room has exactly two waiting states: the D30 ratification wait (pre-flip) and a DECIDE classified BLOCK (any time). Everything else is motion.
 
 ## Visible collisions
-- **"Always merges" vs "operator required to brainstorm"** — collided in review; reconciled by D30's single named exception (the ratification wait). MISMATCH until wave 1 lands.
+- **"Always merges" vs "operator required to brainstorm"** — collided in review; reconciled by D30's single named exception (the ratification wait). MISMATCH until its mechanics land (chartering side wave 1, auto-enter side wave 2).
 - **Long arcs vs per-task review ceremony** — today's skill text (bite-size tasks, review-per-task) is a MISMATCH with D32's long cadence.
 
 ## Reconciled outcome
