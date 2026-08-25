@@ -191,3 +191,10 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **Rests on:** D10 (wider role-carried tasks), R24 (snapshots citable by feedback/residue).
 - **Revisit-when:** snapshots grow stale enough to mislead a dispatch twice → add a freshness stamp + verify-commands rerun before pasting.
 - **Open from this round (not yet ruled):** flip Codex to preferred implementer for broad arcs? · review cadence per plan checkpoint with mid-arc continuation fixes?
+
+## D32 — Resume beats snapshot: track resume metadata, not snapshot files (supersedes D31's artifact)
+**When:** 2026-08-25T06:21:11Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- **Decided:** if a subagent can be resumed, its own session **is** the memory — no snapshot artifact. Both worker kinds store sessions (Codex: named worker sessions continued via `codex-worker run --name`; Claude subagents: addressable via SendMessage while the parent lives, session persisted on disk). So SDD keeps a **resume registry** instead: every subagent's report carries a mandatory **RESUME metadata block** — worker kind · name/agent-id · the exact resume command or SendMessage address · session/instance ref · territory one-liner — and the controller tracks it in the progress ledger. Fixes and re-entries into a territory go to the resumed agent, carrying only the new findings. The report file remains the fallback reground source if a resume ever fails; no separate snapshot files. D31's registry idea survives as this resume registry; its snapshot artifact is superseded.
+- **Codex:** NOT the default implementer, but **recognized as first-class** — the worker-class table names it plainly beside native Claude; no "explicit opt-in only" framing.
+- **Review cadence: longer.** Produce more code before reviewing — reviews move to plan checkpoints or per-deliverable, never per-mini-task; frequent small reviews cost more than they catch. Mid-arc findings go to the resumed implementer.
+- **Revisit-when:** a resume fails twice on real work → reconsider a lightweight snapshot for cross-session territory handoffs.
