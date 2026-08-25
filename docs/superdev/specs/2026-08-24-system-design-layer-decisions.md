@@ -205,3 +205,13 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **D30 ratified:** operator-absent charters self-brainstorm to the ratification gate and wait as a desk DECIDE — the one exception to "always merges".
 - **Naming pairs ratified:** residue/residual and system-angle/item-angle both stay, distinguished in the glossary.
 - Condition: a final cold-read subagent review over spec + log + angles passes; any blocking finding reopens the relevant D#.
+
+## D34 — Plan-phase forks (wave 1)
+**When:** 2026-08-25T06:30:13Z · **Phase:** plan · **Status:** locked · **Decided by:** Claude
+- **No separate command file:** `/superdev:self-improvement` already invokes the skill by name; the "command" (R24) is the skill's new **inbox mode** (detects/accepts a process-feedback ledger argument). A thin alias skill was rejected — one more description in every prompt for zero capability.
+- **writing-skills discipline per edit task:** each skill-edit task carries its own baseline→edit→verify cycle inside the task, not as a separate testing milestone.
+- **Wave-1 AH subset:** organisation-level hints (AH2–AH8, AH11–AH15, AH17–AH19) need live rooms and land at rollout in the calibration project; this plan receipts AH1, AH9, AH16 (simulated session), AH10 (per-edit discipline).
+
+## D35 — Execution shape agreed: variant A (inline, 5 broad tasks)
+**When:** 2026-08-25T06:32:48Z · **Phase:** plan · **Status:** locked · **Decided by:** Tadas ("A")
+- Per D29 this agreement is the flip: execution auto-starts once the plan reviewer's findings are folded. Inline in the authoring session; reviewer subagents at milestone gates; baseline/compliance subagents per edit.
