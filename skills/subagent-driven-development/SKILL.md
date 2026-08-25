@@ -64,12 +64,10 @@ asking. executing-plans covers exactly two cases: the plan header says
 `Execution: inline` (trivial plan: 1-2 tasks, no substantive design), or the operator
 explicitly takes the plan to a separate/parallel session.
 
-**Parallel mode (multi-milestone plans):** when the plan header says
-`Execution: subagent-driven-parallel`, follow [parallel-execution.md](parallel-execution.md) —
-file-disjoint lanes in isolated worktrees, SHA-pinned concurrent reviews, read-only
-grounding pipelined across milestones, milestone gates on a frozen tree, two-lane
-comprehension ceiling. Sequential per-task execution (this file) remains the default
-for everything else.
+**Parallelism:** the plan mode `subagent-driven-parallel` is RETIRED (D37/D40) —
+parallelism is a phase property, not a plan shape. Reads always run in parallel;
+after an arc's shape lands, quick-fix lanes may write in the SAME worktree with
+disjoint file sets and serial commits. See [parallel-execution.md](parallel-execution.md).
 
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
