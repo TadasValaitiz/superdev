@@ -168,3 +168,19 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 **When:** 2026-08-25T06:03:33Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
 - Inside an item room the operator participates in brainstorming, bridges into writing-plans, agrees on the execution-shape proposal — and then **steps out**. Execution starts automatically at that moment; no further "shall I proceed" prompts, no waiting for the operator between plan approval and the first commit. The operator returns only via the desk's queue (a DECIDE, a checkride, or by choice).
 - **Revisit-when:** an execution auto-start ever proceeds past a materially changed plan without the operator having seen the change.
+
+## D30 — Operator-absent chartering: self-brainstorm to a ratification gate, wait as a desk DECIDE
+**When:** 2026-08-25T06:07:37Z · **Phase:** spec · **Status:** provisional (operator to ratify) · **Decided by:** Claude, from the pipeline-walk review
+- **Trigger:** R4 promises chartered rooms always run to merge, but D29 makes the operator a required brainstorm participant — a room chartered while the operator is away would stall before its first marker.
+- **Decided:** such a room runs `self-brainstorming` (its stated purpose: pre-work when no human respondent is available) through spec and plan to the **ratification gate**, then waits there as a desk DECIDE. This waiting-at-ratification state is the **one named exception** to R8's "always finishes and merges". On ratification (+ execution-shape agreement) it auto-starts per D29. Alternatives: withhold item charters while the operator is away (stalls the milestone — rejected as a larger concession); let it proceed unratified (violates D29 and the operator's own verdict that self-brainstorming is not a substitute at real forks).
+- **Revisit-when:** ratification queues exceed ~2 items — then the operator's availability, not the mechanism, is the bottleneck.
+
+## Consistency rulings from the pipeline walk (2026-08-25, applied to the spec)
+- **Auto-start trigger = the agreement**, not the detach (D29's "at that moment" stands; AH18 reworded). Staying attached after agreement is fine — the operator becomes an observer; no further prompts either way.
+- **Item-room modes:** HIL from brainstorm through shape agreement; autonomous after; the agreement is the flip. Owner of the plan→execution handoff: writing-plans hands off, subagent-driven-development auto-enters (wave-2 line added).
+- **Test disposition precedence:** the **brainstorm sets the disposition** {keep · regenerate · archive-then-rewrite · fix-in-place}; the plan may only refine it into mechanics (which tests, which archive path), never reverse it. One vocabulary, in the glossary.
+- **Angle split:** **system angle** (design/angles/, five kinds, anti-loosening machinery binds) vs **item angle** (beside the spec, operator's template, no INDEX/sweep obligations). Glossary carries both, like residue/residual.
+- **Plan checkpoints** are cleared by the room's reviewer role; only a failed one emits an event (orchestrator, desk-visible). They never notify the architect (unchanged).
+- **Conformance reports** are produced at the checkpoint session, over the diffs published since the last one; charters issued between checkpoints get none.
+- **Close gate checklist** gains: archived tests deleted, manifest retained (beside the worktree check). **Probe gate binds item charters only** (ad-hoc probe rooms are how censuses get made).
+- **Gate receipts** defined: the evidence lines a plan checkpoint and the close gate record (tests run, marker delta, map rows claimed).
