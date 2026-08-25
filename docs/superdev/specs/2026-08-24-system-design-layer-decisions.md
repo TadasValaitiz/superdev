@@ -215,3 +215,6 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 ## D35 — Execution shape agreed: variant A (inline, 5 broad tasks)
 **When:** 2026-08-25T06:32:48Z · **Phase:** plan · **Status:** locked · **Decided by:** Tadas ("A")
 - Per D29 this agreement is the flip: execution auto-starts once the plan reviewer's findings are folded. Inline in the authoring session; reviewer subagents at milestone gates; baseline/compliance subagents per edit.
+
+## Wave-1 build closure — 2026-08-25T06:44:39Z
+**Phase:** build. Shipped: superdev 7.4.0 (system-design skill + 7 skill edits) · room-graph-orchestration 2.3.0 (dev-organisation template, GREEN-LIGHT/CORRECTION events, residue conventions), both installed. All five tasks baseline→edit→GREEN per AH10. Receipts: AH1, AH9 (minus SDD, deferred), AH10, AH16 (simulated). **Rollout-owned (human-in-loop, named per Mode):** AH2–AH8, AH11–AH15, AH17–AH19 — live receipts come from adopting the organisation in ai-trading-calibration (A5). **Wave 2 gate:** the R22 item-room deep-dive (role-split SDD, test clearance, execution-shape elicitation, parallel-execution rename). Deviations: none against the plan beyond reviewer-folded items; one bonus (CORRECTION event added to protocol.md — a pre-existing gap the Task-5 baseline exposed).
