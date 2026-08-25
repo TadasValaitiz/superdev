@@ -184,3 +184,10 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **Conformance reports** are produced at the checkpoint session, over the diffs published since the last one; charters issued between checkpoints get none.
 - **Close gate checklist** gains: archived tests deleted, manifest retained (beside the worktree check). **Probe gate binds item charters only** (ad-hoc probe rooms are how censuses get made).
 - **Gate receipts** defined: the evidence lines a plan checkpoint and the close gate record (tests run, marker delta, map rows claimed).
+
+## D31 — Subagent snapshots are tracked and pasted into the next dispatch
+**When:** 2026-08-25T06:16:20Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- **Decided:** SDD tracks its subagents and their **REGROUND snapshots** as first-class artifacts: every implementer writes `.superdev/sdd/task-N-snapshot.md` (territory map: files + why · invariants and traps · fast verify commands · unfinished edges) at task end and at each plan checkpoint; fix agents append deltas, never rewrite. A **snapshot registry** (`.superdev/sdd/snapshots.md`: task · territory · snapshot path · agent name while addressable) lets the controller, when dispatching the NEXT subagent into overlapping territory, paste/point the relevant snapshot(s) into the dispatch — reground becomes a read, not a re-derivation. Complementary fast path: while the original implementer is still addressable, fixes go by SendMessage continuation (its live context is the snapshot); the skill's "same subagent"/"fresh fix subagent" contradiction is resolved in favour of continuation-first.
+- **Rests on:** D10 (wider role-carried tasks), R24 (snapshots citable by feedback/residue).
+- **Revisit-when:** snapshots grow stale enough to mislead a dispatch twice → add a freshness stamp + verify-commands rerun before pasting.
+- **Open from this round (not yet ruled):** flip Codex to preferred implementer for broad arcs? · review cadence per plan checkpoint with mid-arc continuation fixes?
