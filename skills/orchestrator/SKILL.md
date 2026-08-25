@@ -99,9 +99,18 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
    (in-milestone) · escape-hatch items filed · milestone-level sweep (cross-room doc/code
    coherence — the deviation-audit instinct at milestone altitude) · **per-room close
    verified: worktree merged AND retired (`git worktree list`), archived tests deleted with
-   their manifest kept** · **the milestone handoff written** (both sections) when a design
+   their manifest kept, and — when the item changed a user-facing surface — its date-stamped
+   scenario intent doc exists in `design/scenarios/` (the checkride's distill step)** · **the milestone handoff written** (both sections) when a design
    corpus exists. Present the evidence; the human approves; you land milestone→main (a
    fast-forward — your one merge act, the sole human gate on the merge path).
+
+## The battery — the operational suite at milestone close
+
+Before the milestone close gate, charter an **ad-hoc battery room**: an executor walks EVERY
+scenario intent in `design/scenarios/` against the current surface (re-deriving commands —
+intents, never scripts), an evaluator judges each against its what-good-looks-like criteria;
+verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
+milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
 
 ## The system-design layer (binds whenever the project has a `design/` corpus)
 

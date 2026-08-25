@@ -45,6 +45,16 @@ diligence, not brilliance.
    never patched silently around it.
 5. **Commit the final transcript + verdict** with the work (`…-checkride.md`) — the ride is
    evidence, and it must be reconstructable later.
+5b. **Distill the ride into a scenario intent document** (D42/D43 — the reusable half; the
+   transcript is evidence, this is intent): `design/scenarios/<YYYY-MM-DD>-<item>-<slug>.md`
+   — operator goal · the journey at intent level (never exact commands) · what-good-looks-like
+   criteria, including criteria born from this ride's findings. Date-stamped, append-only;
+   no merging or refinement here (a later room owns that). One per changed surface; refresh =
+   a new dated file. This artifact is what the milestone-close battery re-drives.
+5c. **File the observations:** every non-blocking, experience-class observation (naming
+   friction, missing output detail) becomes a backlog item (or a residue row when
+   design-class) directly from the evaluator's verdict — never left living only inside the
+   transcript.
 6. When the human is present, they are the evaluator's final reader: the evaluator prepares
    the ride, the human stamps it.
 

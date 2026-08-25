@@ -255,3 +255,14 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 
 ## Bootstrap closure — 2026-08-25T07:59:25Z
 **Phase:** build. D41 delivered: `bootstrapping-dev-organisation` shipped in superdev 7.6.0 (baseline a0ace → skill → GREEN a2e26, verbatim on all six probes). Cross-check clean: no superdev→room-graph links (glossary header made self-contained). The organisation is now fully deployable from zero: bootstrap → seed → launch → charter → handoff.
+
+## D42 — Operational scenarios are INTENT documents; no replayable scripts
+**When:** 2026-08-25T08:11:49Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- **Trigger:** code+unit-test validation misses operator-experience discrepancies (naming, missing output detail); only live step-by-step CLI rides with reasoning about output catch them; captured scenarios must accumulate into an operational suite.
+- **Decided:** a captured scenario is an **intent document** — operator goal · journey at intent level · what-good-looks-like criteria — never a replayable script. Deterministic scripts fail on every intentional improvement and miss experience regressions; non-deterministic execution (an executor re-deriving commands each run) finds more gaps and stays focused on user experience. A replayable script may later be *derived from* an intent doc if ever needed; the artifact of record is the intent. Rejected: A (recorded scripts), C (script-as-attachment — even as attachment it anchors the wrong thing; the PASS transcript remains committed as checkride *evidence*, but it is not part of the scenario).
+- **Revisit-when:** a known-fragile path needs exact replay twice → derive a script from its intent doc, marked as derived.
+
+## D43 — Scenario foundation only: date-stamped capture at item close; refinement deferred to a later room
+**When:** 2026-08-25T08:15:15Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- **No merging, refining, or composing now.** The foundation is exactly: after an item's worktree merges, a **date-stamped scenario intent artifact exists** for the surfaces it changed — `design/scenarios/<YYYY-MM-DD>-<item>-<slug>.md`, append-only, no INDEX curation, no architect sweep obligation. Distilled from the checkride's ride+findings as its final step; a close-gate line verifies it exists. At **milestone close** the accumulated scenarios are reusable (the battery — an ad-hoc room walking the intents; report rides the handoff). Refinement/merge/composition belongs to **some other room, later** — deliberately out of scope. Evaluator observations (non-blocking, experience-class) auto-file as backlog rows — the manual observation→backlog loop made mechanical.
+- **Revisit-when:** the scenarios directory passes ~30 files or two batteries trip over duplicates → charter the refinement room.

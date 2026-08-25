@@ -47,3 +47,11 @@ Subagent (general-purpose):
     trustworthy. When the human is present, they read your verdict and stamp it — prepare
     the ride so that stamping is easy.
 ```
+
+## After the verdict — observations do not die in the transcript
+
+Advisory findings (friction/polish: confusing names, missing detail in output) that do not
+block PASS are STILL filed: list them in a final `## Observations → backlog` section of your
+verdict, one line each (surface · what · why it matters to the operator), so the controller
+appends them as backlog items (residue when design-class). An observation that exists only
+inside the ride transcript is an observation lost.

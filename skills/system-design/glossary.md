@@ -34,6 +34,8 @@ One table, one meaning per word, across every skill that touches the development
 | **quick-fix lane** | a small parallel write scope in the SAME worktree, post-shape: disjoint files, serial commits, follow-up seats |
 | **test disposition** | {keep · regenerate · archive-then-rewrite · fix-in-place} — set at brainstorm, refined (never reversed) by the plan |
 | **harvest file** | the business requirements extracted from tests BEFORE archiving; reviewer-signed; the source for rewrite-territory requirement tests |
+| **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like) in `design/scenarios/` — distilled from a checkride, re-driven by the battery; never a replayable script |
+| **battery** | the milestone-close ad-hoc room that walks every scenario intent against the current surface |
 | **gate receipt** | the evidence line a plan checkpoint or the close gate records: tests run, marker delta, map rows claimed |
 
 ## Kept unchanged
