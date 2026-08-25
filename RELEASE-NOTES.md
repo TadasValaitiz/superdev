@@ -1,5 +1,20 @@
 # Superdev Release Notes
 
+## v7.4.0 (2026-08-25)
+
+### The system-design layer (wave 1)
+
+- **New skill `system-design`** — the design corpus (`design/`: angles, visions, current→target map, decision log, residue, conformance, handoffs), the MIG-MARK/DOC-MARK marker grammars with grep censuses, the operator-ruled session protocol with worked examples, and the shared glossary (milestone · item · plan/design checkpoint · bridge · handoff · residue ≠ residual · system/item angle · vision). Solo and architect-room modes.
+- **orchestrator** — the system-design layer duties: design checkpoints (rule + green lights + feel), the two-way handover protocol, residue vs residual, two-step map-row discharge, the design-dry pause (withholds charters only; wait-at-ratification is the one sanctioned waiting state), process-feedback capture with immediate brief adaptation, close gate gains worktree-retired + archived-tests checks, milestone handoff required at close.
+- **self-improvement** — inbox mode: consume an accumulated `process-feedback.jsonl`, cluster, triage, one batched operator gate, one version bump.
+- **brainstorming** — item-level corpus awareness (quote map rows/angle passages at file:line; ground RESHAPE/REPLACE territory on visions), problem-space evaluation, angle-by-angle dialogue, item angle companions (`item-angle-template.md`), DOC-MARK status line on §5 areas, corpus checks in the spec reviewer.
+- **writing-plans** — plan sections renamed to **plan checkpoints** (never notify a design authority); Read-first gains map rows/visions. (SDD's parallel-execution keeps the old vocabulary until wave 2 — DOC-MARKed.)
+- **using-git-worktrees** — the retirement half: the creator merges and removes; close means the worktree is gone.
+- **finishing-a-development-branch** — enterable-room exception: a room retires its own worktree at its close gate.
+- **using-superdev** — shared-vocabulary pointer.
+
+Companion release: room-graph-orchestration 2.3.0 (dev-organisation template; GREEN-LIGHT/CORRECTION events; residue vs residual conventions). Spec + decision log (D1–D35): `docs/superdev/specs/2026-08-24-system-design-layer-design.md`.
+
 ## v7.3.0 (2026-08-20)
 
 ### Durable Claude callbacks for named Codex workers
