@@ -112,6 +112,12 @@ Vague name, tests mock not code
 
 ### Verify RED - Watch It Fail
 
+**Who watches what fail (D38):** in a broad arc, YOU (the implementer) watch your own
+inner-loop tests fail as you write them — that discipline is unchanged. But guards do not
+clear on your word: at each plan checkpoint the REVIEWER independently breaks the guarded
+property and observes the guard go red (watched-to-fail is the reviewer's duty, not your
+ritual). A guard nobody watched fail is not a guard — the ~17-inert-guards incident is why.
+
 **MANDATORY. Never skip.**
 
 ```bash
@@ -268,6 +274,15 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 | "TDD will slow me down" | TDD faster than debugging. Pragmatic = test-first. |
 | "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
 | "Existing code has no tests" | You're improving it. Add tests for existing code. |
+
+## Domain shifts — when the models themselves are being replaced
+
+The Iron Law governs NEW code. It does not oblige you to keep mass-obsolete tests alive
+while the domain under them is REPLACEd or RESHAPEd: there, the **test disposition** set at
+the item brainstorm governs the OLD tests — {keep · regenerate · archive-then-rewrite ·
+fix-in-place}. Mechanics, artifacts and the reviewer seam: [test-clearance.md](test-clearance.md).
+Never `@skip` your way through a migration — archive with a manifest and harvest, or keep
+and fix. A skipped test is a lie with a TODO on it.
 
 ## Red Flags - STOP and Start Over
 
