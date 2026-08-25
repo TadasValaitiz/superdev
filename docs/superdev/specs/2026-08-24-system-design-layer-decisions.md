@@ -238,3 +238,9 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 ## D39 — Wave-2 execution shape agreed: variant A (inline, 3 broad tasks)
 **When:** 2026-08-25T07:24:02Z · **Phase:** plan · **Status:** locked · **Decided by:** Tadas ("A")
 - Inline in the authoring session; tasks: (1) SDD rewrite (role-split, broad arcs, resume registry, Codex long-run emphasis, parallel-execution rename per D37) · (2) TDD (clearance mechanics, reviewer-adversary seam) · (3) writing-plans execution-shape elicitation + brainstorming test-disposition. Baseline→edit→GREEN per task; one release (superdev 7.5.0) with receipts. Auto-start on plan-reviewer fold, per D29/D35 precedent.
+
+## D40 — Wave-2 plan forks (from the plan review)
+**When:** 2026-08-25T07:30:27Z · **Phase:** plan · **Status:** locked · **Decided by:** Claude
+- `Execution: subagent-driven-parallel` **retired** as a plan mode: parallelism is a *phase inside an arc* (D37), not a plan shape; enum becomes `subagent-driven | inline`; parallel-execution.md is rewritten from that premise (quick-fix lanes, same worktree, reads always).
+- **No separate resume registry file**: RESUME metadata rows live in the SDD progress ledger (D32's "tracked in the progress ledger" upheld).
+- The same-subagent/fix-subagent contradiction resolves **continuation-first** (D32): message the original implementer; fresh dispatch + report only when resume fails.
