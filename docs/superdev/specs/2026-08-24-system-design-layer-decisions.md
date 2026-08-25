@@ -163,3 +163,8 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **Execution shape:** writing-plans always proposes 2–3 variants (task count · deliverable count · worker class · subagent/room count, with a recommendation) before writing tasks; replaces the silent `Execution:` default even for small plans (one-variant proposal acceptable). Deeper execution improvements are owned by the R22 item-room deep-dive.
 - **Archive lifecycle** (supersedes D27's open mechanics): initial sweep pushes affected tests to `tests/_archived/<plan>/` with a manifest + harvest file so anything can be **recalled during development**; after development completes, a cleanup step **deletes the archived tests and keeps only the manifest** for the record. Archive is a development-time buffer, not a museum.
 - **Revisit-when:** a recalled test saves a build twice → maybe keep archives one milestone longer.
+
+## D29 — The operator's item arc: brainstorm → agree execution shape → step out → execution auto-starts
+**When:** 2026-08-25T06:03:33Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
+- Inside an item room the operator participates in brainstorming, bridges into writing-plans, agrees on the execution-shape proposal — and then **steps out**. Execution starts automatically at that moment; no further "shall I proceed" prompts, no waiting for the operator between plan approval and the first commit. The operator returns only via the desk's queue (a DECIDE, a checkride, or by choice).
+- **Revisit-when:** an execution auto-start ever proceeds past a materially changed plan without the operator having seen the change.
