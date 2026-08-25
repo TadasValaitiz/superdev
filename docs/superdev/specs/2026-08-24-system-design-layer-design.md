@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-25 · **Status:** draft
 **Mode:** human-in-loop
-**Decision log:** ./2026-08-24-system-design-layer-decisions.md (D1–D23)
+**Decision log:** ./2026-08-24-system-design-layer-decisions.md (D1–D24 + the 2026-08-25 revisit-when addendum — the arbitration surface)
 **Companions:** `../design/design.html` (v3 diagrams; sources `reporting.mmd`, `lifecycle.mmd`) · evidence base (pinned): `/Users/tadas/Projects/ai-ethics/ai-trading-calibration/docs/superpowers/specs/2026-08-21-orchestrator-handoff-state.md`, `…/docs/reference/2026-08-21-orchestrator-process-feedback.md`, and the bench-architecture worktree `/Users/tadas/Projects/ai-ethics/ai-trading-calibration/.claude/worktrees/bench-architecture` @ `0c88eaa7` (12-angle series, 4 seat reports, angle-08 map)
 **Origin:** brainstorm with Tadas
 
@@ -79,11 +79,16 @@ The file form of design authority (R1); everything else cites it.
   ```
   design/
   ├─ angles/        NN-<slug>.md numbered series + INDEX.md (number · purpose · anchors · last-updated · DOC-MARK counts)
-  ├─ visions/       <area>.md — post-migration domain documents (D12; default rule: any REPLACE cluster spanning >1 module needs one before its ruling)
+  ├─ visions/       <area>.md — post-migration domain documents (D12; default rule: any REPLACE **or RESHAPE** cluster spanning >1 module needs one before its ruling)
   ├─ map.md         current→target map (row grammar in 5.2)
   ├─ decisions.md   design D# log — architect single-writer; supersede, never erase
-  └─ residue-collections/   <date>-checkpoint-<n>.md + -response.md (protocol in 5.4)
+  ├─ residue/residue.jsonl        append-only; any room, own ID block (5.10)
+  ├─ residue-collections/         <date>-checkpoint-<n>.md + -response.md (protocol in 5.4)
+  ├─ conformance/<item>.md        architect's advisory reports (5.10)
+  ├─ handoffs/<milestone>.md      milestone handoff (5.10)
+  └─ marker-census.md             generated; never hand-edited (5.10)
   ```
+  The floor includes every ledger §5.10 names — the scaffold and the protocols cannot disagree. "Architect-only" writers mean the architect **role**: the solo `/system-design` skill and the ARCHITECT room are the same authority in one or many sessions.
 - **Interface:** grep-stable names; briefs cite `design/…` paths; the solo skill and the architect room write the same shape.
 - **Serves:** R1, R14 · **Governed by:** D1, D12, D17 · **Realizes:** UC1, UC2
 
@@ -109,7 +114,7 @@ The persistent holder of the corpus and of nothing else.
 
 The bounded world-keeper: charters, collects, checkpoints, pauses, closes.
 
-- **Design:** its whole job is the current milestone (D11): grounding probe → charter (cites map rows, test disposition, bridges — the probe gate, R19); collects residue continuously and routes pointers; watches for checkpoint conditions (rule + green lights + feel — D19) and writes the **handover** (`what we got` facts: merges, map rows discharged, marker delta, deduped clusters · `where we feel gaps` labelled as feel, by angle · `upcoming focus` with blocking flags · green-light roster); receives the response; schedules the session via the desk. Owns the **design-dry pause** (D18/D21): it withholds *charters*, never stops live rooms — chartered items run to merge (D3); scoped to the charters needing the missing ruling, and "full stop" = no further charters when the gap sits on a bridge every remaining charter crosses. Verifies at room close that the worktree is merged and retired (the close gate). May charter ad-hoc rooms (D9); never executes work, no micro tier (D22); disposes measurement-closed items — the operator sees only genuine forks. Closes the milestone only with the handoff done (R6).
+- **Design:** its whole job is the current milestone (D11): grounding probe → charter (cites map rows, test disposition, bridges — the probe gate, R19); collects residue continuously and routes pointers; watches for checkpoint conditions (rule + green lights + feel — D19) and writes the **handover** (`what we got` facts: merges, map rows discharged, marker delta, deduped clusters · `where we feel gaps` labelled as feel, by angle · `upcoming focus` with blocking flags · green-light roster); receives the response; schedules the session via the desk. Owns the **design-dry pause** (D18/D21): it withholds *charters*, never stops live rooms — chartered items run to merge (D3); scoped to the charters needing the missing ruling, and "full stop" = no further charters when the gap sits on a bridge every remaining charter crosses. Verifies at room close that the worktree is merged and retired (the close gate). May charter ad-hoc rooms (D9); never executes work, no micro tier (D22); disposes measurement-closed items — the operator sees only genuine forks. Closes the milestone only with the handoff done (R6). Map-row **discharge** is two-step: the orchestrator *claims* it in the handover's "what we got"; the architect *writes* it into `map.md` at the session — the map keeps one writer.
 - **The gate ladder** (named, not numbered — the only gates in this organisation): **the ruling gate** (operator approval: angle/map/vision changes bind only when ruled — R3); **the probe gate** (veto: no charter without a grounding census — R19); **the publish recipe** (mechanical FF-CAS script; never blocks for architectural reasons — R8); **the close gate** (veto: a room may not close until its worktree is merged and retired — R7). Each is enforced outside the node it binds; each has been watched to fail before adoption.
 - **Interface:** cursor · residue ledger (collector/router) · checkpoint handovers · charters · pause/green-light events to the desk.
 - **Serves:** R4, R5, R10, R11, R12, R18, R19 · **Governed by:** D8, D9, D11, D19–D22 · **Realizes:** UC4, UC5, UC7, UC8
@@ -135,6 +140,7 @@ Deferred work and unexamined design, made countable.
 One queue so the operator's scarcest resource — architecture time — is visibly scheduled.
 
 - **Design:** the proven view-only contract (hedge-graph/room-graph front desk: filter, rank, dedupe, two destinations, never decide) plus: a **DESIGN column** at the top of "waiting on you" — checkpoint handovers awaiting a session, design-dry pauses with their tick-time and what they're costing — and merge/green-light events in the digest. Conversations happen in the room that needs the operator; the desk only points.
+- **Interface / contract:** renders `frontdesk/digest.md` (its only write, per 5.10) from the queue, cursor and events; never a source of truth.
 - **Serves:** R17 · **Governed by:** D4 · **Realizes:** UC4
 
 ### 5.8 The glossary
@@ -154,7 +160,7 @@ The change set, in the two existing plugins.
 - **superdev — edits, wave 1 (not governed by provisional D10/D16):** `orchestrator` (milestone boundary, design checkpoints + handover, design-dry pause, green lights, no micro tier, ad-hoc rooms, close gate); `brainstorming` (reads the corpus first when one exists; visions as grounding; scope note "system-scale design → system-design skill"); `writing-plans` ("Milestone Mn" → "Checkpoint Cn" plan checkpoints; charter-style Read-first citing map rows); `using-git-worktrees` (retirement half: lifecycle belongs to the room that made it; close = merged + removed); `finishing-a-development-branch` (align its merge/cleanup options with the close gate — the room, not the finisher, retires the worktree); `using-superdev` (glossary pointer).
 - **superdev — edits, wave 2 (after the R22 deep-dive ratifies D10/D16):** `subagent-driven-development` (role-split: implementer · reviewer · follow-up; wider tasks; design-class deviations file residue); `brainstorming` (mandatory test-disposition section); `test-driven-development` (test-clearance protocol).
 - **room-graph-orchestration — edits:** `graph-creator` (the development-organisation shape as a named starting template; architect/desk brief variants); `room-communication` (green-light event; residue-row convention; residue/residual glossary pair). Its `orchestrator` skill: substance unchanged (D24).
-- Sequencing: `system-design` skill first (everything cites it) → wave 1 (superdev orchestrator + non-item skills; room-graph graph-creator template) → **item-room deep-dive (R22)** → wave 2 (the D10/D16-governed skills). Every edit under writing-skills discipline (baseline failure observed → edit → re-test). The implementation plan slices this by repo and wave; this section fixes only the change set and the ordering constraint.
+- Sequencing: `system-design` skill first (everything cites it) → wave 1 (superdev orchestrator + non-item skills; room-graph `graph-creator` template **and `room-communication`** — its green-light event is a checkpoint input) → **item-room deep-dive (R22)** → wave 2 (the D10/D16-governed skills). Every edit under writing-skills discipline (baseline failure observed → edit → re-test). The implementation plan slices this by repo and wave; this section fixes only the change set and the ordering constraint.
 - **Serves:** R23 · **Governed by:** D6, D24 · **Realizes:** all UCs (delivery)
 
 ### 5.10 The protocol table — every ledger, one writer
@@ -187,7 +193,7 @@ D1 corpus is law + persistent human-driven architect · D2 ledgers truth/message
 | ID | Assumption / question | Affects | Status |
 |----|----------------------|---------|--------|
 | A1 | The role-split item-room internals (one implementer carrying wider tasks + reviewer + follow-up) outperform bite-size task fan-out with current Codex/Sonnet workers | R22, 5.5 | unratified — the deep-dive tests it |
-| A2 | The vision-size default (stated in 5.1: **any REPLACE cluster spanning more than one module needs a vision before ruling**) may need per-project tuning | R14 | default promoted into the design; tuning unratified |
+| A2 | The vision-size default (stated in 5.1: **any REPLACE or RESHAPE cluster spanning more than one module needs a vision before ruling**) may need per-project tuning | R14 | default promoted into the design; tuning unratified |
 | A3 | Green-light signals are honest enough to weigh into checkpoints (a room saying "nothing more to contribute" under pressure to look done) | R11 | unratified — mitigated by rule+feel inputs; revisit if checkpoints fire early |
 | A4 | The angle staleness check (grep D#s vs log status) is implementable as a small script in the skill | R15 | unratified — trivial if D# lines are grep-stable; verified at skill authoring |
 | A5 | Existing milestone in ai-trading-calibration can adopt this incrementally (glossary + handover first) without re-chartering live rooms | 5.9 | unratified — operator's call at rollout |
@@ -210,7 +216,7 @@ D1 corpus is law + persistent human-driven architect · D2 ledgers truth/message
 | # | Acceptance hint (operator terms) | Proves | Lane | Receipt |
 |---|----------------------------------|--------|------|---------|
 | AH1 | A solo `/system-design` run in a fresh project produces the canonical corpus with at least one angle, a map, and a D# log — and a second session grounds on it without re-deriving | UC1, R1, R15 | slow | |
-| AH2 | The architect room survives a milestone: attached twice weeks apart, it resumes with context and its corpus current | UC2, R2, R5 | slow | |
+| AH2 | The architect room survives a milestone: attached twice weeks apart, it resumes with context and its corpus current | UC2, R2 | slow | |
 | AH3 | An item room that hits a design discrepancy finishes anyway: marker planted, residue filed, merge completed, worktree gone at close — and the architect's next session folds that residue into the corpus without the architect ever entering the tactical question | UC3, UC8, UC9, R7, R8, R13 | slow | |
 | AH4 | With the operator absent and a charter needing an unruled row, exactly the affected charters are withheld (live rooms keep running to merge) and the desk's DESIGN column shows why | UC4, R4, R17 | slow | |
 | AH5 | A design checkpoint produces the three-part handover, an agree/disagree response with at least one cluster bounced down, and a session agenda organised by angle — while a plan checkpoint inside an item fires nothing at the architect | UC5, R10–R12 | slow | |
@@ -222,7 +228,7 @@ D1 corpus is law + persistent human-driven architect · D2 ledgers truth/message
 | AH11 | The architect, messaged mid-lull with a juicy design question and no operator present, files it to the agenda and does nothing else — and never initiates design alone | R3 | slow | |
 | AH12 | Every protocol in the table has its ledger created with the stated single writer, and a message-vs-ledger disagreement resolves to the ledger | R21 | fast | |
 | AH13 | A charter that would exceed the milestone or lacks a probe reference is refused; an ad-hoc room is chartered for a probe without touching the architect room | R5, R18, R19 | slow | |
-| AH14 | A big REPLACE ruling is refused in-session until its vision exists; the next session's brainstorm grounds on that vision, not the legacy module | UC1, R14 | slow | |
+| AH14 | A big REPLACE or RESHAPE ruling is refused in-session until its vision exists; the next session's brainstorm grounds on that vision, not the legacy module | UC1, R14 | slow | |
 
 ## 10. Drift protocol
 

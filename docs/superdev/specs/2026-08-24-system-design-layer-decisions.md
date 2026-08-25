@@ -137,3 +137,5 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **D21** revisit: if a withheld charter turns out to have been safe twice → narrow what "needs the ruling" means.
 - **D22** revisit: if item rooms refuse small work and it pools unowned → a "sweeper" item per milestone, still not an orchestrator tier. (D22's claim to supersede a D10 micro-task mention is withdrawn — D10 contains none.)
 - **D23** revisit: if the angle set exceeds ~15 → merge angles at a session; the INDEX makes bloat visible.
+- **D17** note (2026-08-25): the corpus floor is extended by the §5.10 protocol ledgers (`residue/`, `conformance/`, `handoffs/`, `marker-census.md`) — spec-mandated, not per-project extensions.
+- **D18** note (2026-08-25): its "pause or stop execution" phrasing is superseded by D21+R4/R8 — a design-dry pause withholds charters only; live rooms always run to merge.
