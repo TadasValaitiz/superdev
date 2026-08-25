@@ -29,6 +29,11 @@ One table, one meaning per word, across superdev and room-graph-orchestration. S
 | **task** | one role-carried unit inside a plan — broad for Codex/opus-class workers, bite-size for Sonnet-class |
 | **bridge** | the seam between bounded things (items, domains, CLIs) where a dependency crosses; ordering falls out of contested bridges. ("joint" retired) |
 | **handoff** | the milestone-close package: architectural suggestions + the next milestone's upfront design, visions included. ("runway" retired) |
+| **arc** | one broad, role-carried unit of work: one carrying implementer, many files, plan checkpoints inside |
+| **carrying implementer** | the single agent that writes an arc's initial implementation — never parallelised |
+| **quick-fix lane** | a small parallel write scope in the SAME worktree, post-shape: disjoint files, serial commits, follow-up seats |
+| **test disposition** | {keep · regenerate · archive-then-rewrite · fix-in-place} — set at brainstorm, refined (never reversed) by the plan |
+| **harvest file** | the business requirements extracted from tests BEFORE archiving; reviewer-signed; the source for rewrite-territory requirement tests |
 | **gate receipt** | the evidence line a plan checkpoint or the close gate records: tests run, marker delta, map rows claimed |
 
 ## Kept unchanged

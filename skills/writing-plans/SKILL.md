@@ -7,7 +7,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Task granularity dials to worker class (see Granularity below). DRY. YAGNI. TDD. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
 
@@ -42,9 +42,14 @@ deliverable needs them; split only where a reviewer could meaningfully
 reject one task while approving its neighbor. Each task ends with an
 independently testable deliverable.
 
-## Bite-Sized Task Granularity
+## Granularity — dial to worker class
 
-**Each step is one action (2-5 minutes):**
+- **Broad role-carried ARCS (default for substantial work, D36):** one carrying
+  implementer (Codex/opus-class — Codex is the long-run + resume-first powerhouse), many
+  files, one deliverable, plan checkpoints inside, reviews at checkpoints (SDD's arc
+  model). Steps are arc phases (implement → self-review → checkpoint receipt), not
+  minute-actions.
+- **Bite-size tasks (Sonnet-class mechanical work only):** each step one action (2-5 minutes):
 - "Write the failing test" - step
 - "Run it to make sure it fails" - step
 - "Implement the minimal code to make the test pass" - step
@@ -66,10 +71,9 @@ independently testable deliverable.
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Execution:** subagent-driven | subagent-driven-parallel | inline — decided at plan
-time per the Execution Handoff rule (inline ONLY when the plan is 1-2 tasks with no
-interface handoffs AND no substantive design doc behind it; PARALLEL only for
-multi-milestone long plans — see subagent-driven-development/parallel-execution.md)
+**Execution:** subagent-driven | inline — recorded AFTER the operator agrees the
+execution-shape proposal (see Execution Handoff; `subagent-driven-parallel` is retired —
+parallelism is a phase inside an arc, per SDD's parallel-execution.md)
 
 **Mode:** autonomous | human-in-loop — carried from the anchor (design doc). Governs
 how the finishing gate routes an unmet acceptance hint / anchor deviation: autonomous
@@ -203,7 +207,6 @@ git commit -m "feat: add specific feature"
 
 ## Plan checkpoints (optional — long plans only)
 
-<!-- DOC-MARK[DEFERRED][wave-2]: subagent-driven-development/parallel-execution.md still speaks the old milestone vocabulary until wave 2 renames it. -->
 A **plan checkpoint** is a room-internal gate group — it verifies state and may hand off between phases; it NEVER notifies an architect or any design authority (that is a *design checkpoint*, a different altitude — see superdev:system-design `glossary.md`). When a plan is long enough (roughly 8+ tasks or multiple distinct deliverable phases), group tasks under checkpoint headers:
 
 ```markdown
@@ -218,9 +221,9 @@ checkpoint's area slow tests green (separate commands, never the monolith) ·
 ### Task 2: ...
 ```
 
-Checkpoints are the unit of parallel execution (`Execution: subagent-driven-parallel`):
-within a checkpoint section, file-disjoint tasks may run as concurrent lanes; the
-checkpoint gate is serial on a frozen tree. Single-checkpoint plans don't need the
+Checkpoints are gates, not parallel lanes (D37): the initial implementation of an arc is
+never parallel; quick-fix lanes (same worktree, disjoint files, serial commits) open only
+after a checkpoint has landed the shape. The checkpoint gate is serial on a frozen tree. Single-checkpoint plans don't need the
 headers — the finishing gate is their only gate. A checkpoint whose narrative line you
 cannot write is two checkpoints (or none). ("Milestone" now names the orchestrator's
 implementation boundary, one altitude up — never a plan section.)
@@ -240,6 +243,15 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - Complete code in every step — if a step changes code, show the code
 - Exact commands with expected output
 - DRY, YAGNI, TDD, frequent commits
+
+## Operational strategy (REQUIRED section in the plan when tests/legacy code are touched)
+
+The plan *refines* the brainstorm's test disposition into mechanics — never reverses it
+(glossary: superdev:system-design). For each touched area: the disposition
+({keep · regenerate · archive-then-rewrite · fix-in-place}), and for archive-then-rewrite
+the concrete artifacts: `tests/_archived/<plan>/` path, manifest, harvest file
+(reviewer-signed BEFORE archiving — the arc's first checkpoint), close-gate cleanup.
+Mechanics: test-driven-development/test-clearance.md.
 
 ## Self-Review
 
@@ -278,12 +290,20 @@ protocol — check the D#'s revisit-when trigger and amend the spec's decision s
 don't quietly plan around it. A plan whose choices are all traceable to the spec or
 the log is re-plannable months later; one with silent choices is not.
 
-## Execution Handoff
+## Execution Handoff — the shape proposal, then auto-start
 
-**Subagent-driven development is the DEFAULT — do not ask which approach.** After
-saving the plan, announce and proceed:
+**Always propose the execution shape to the operator before executing** (R26/D28): 2–3
+variants — task/arc count · deliverable count · worker class (Codex long-arc vs
+Sonnet bite-size) · subagents/rooms — each with a recommendation. Small plans may present
+one variant. **The operator's agreement is the flip (D29): execution auto-starts on it** —
+no further proceed-prompts; if the operator steps out, the build runs and their next
+touchpoint is a desk/report entry, not a question. (D27 arc: this elicitation is HIL while
+choices calibrate; after ~3 consistent choices for the same signature, extract the pattern
+into a protocol note and stop asking.)
 
-**"Plan complete and saved to `docs/superdev/plans/<filename>.md`. Proceeding with subagent-driven development."**
+After agreement, announce and proceed:
+
+**"Shape agreed. Proceeding with subagent-driven development."**
 
 - **REQUIRED SUB-SKILL:** Use superdev:subagent-driven-development
 - Fresh subagent per task + two-stage review

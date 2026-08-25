@@ -129,6 +129,14 @@ rejected lines) lives in the decision log; D-numbers are shared between the file
 Assumptions are honest debts. A self-brainstormed spec leads its hand-off with this
 section — nothing implementation-critical may rest on an unratified A#.
 
+## 7b. Test disposition (when existing tests/legacy code are touched)
+
+| area touched | disposition (keep · regenerate · archive-then-rewrite · fix-in-place) | if archiving: what the harvest must capture |
+|---|---|---|
+
+Set here, by the operator, at brainstorm time; the plan refines mechanics only. See
+test-driven-development/test-clearance.md.
+
 ## 8. Not doing
 
 Declined scope, with why — the YAGNI ledger. Prevents the next reader from
