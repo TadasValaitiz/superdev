@@ -1,5 +1,13 @@
 # Superdev Release Notes
 
+## v7.7.0 (2026-08-25)
+
+### Operational scenarios — the checkride's reusable half (D42/D43)
+
+- **cli-checkride** — the ride now ends by distilling a **date-stamped scenario INTENT document** into `design/scenarios/<date>-<item>-<slug>.md` (operator goal · intent-level journey · what-good-looks-like criteria; never exact commands, never a replayable script), and the evaluator's advisory observations (naming friction, missing output detail) auto-file as backlog items instead of dying in the transcript.
+- **orchestrator** — the item close gate verifies the scenario doc exists for changed surfaces; **the battery** is a named ad-hoc room at milestone close: executor re-drives every scenario intent, evaluator judges each against its criteria, report rides the handoff.
+- **system-design** — `design/scenarios/` joins the corpus floor (append-only; refinement/merging deliberately deferred to a later room); glossary gains scenario · battery.
+
 ## v7.6.0 (2026-08-25)
 
 ### bootstrapping-dev-organisation — the cold start
