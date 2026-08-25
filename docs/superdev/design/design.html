@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>superdev × orchestrator — the development organisation (v3)</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg:#fbfbfa; --fg:#1a1a1a; --muted:#6b6b6b; --card:#fff; --line:#e4e4e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16171a; --fg:#e8e8e6; --muted:#9a9a96; --card:#1e2024; --line:#2e3136; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; padding:2.5rem 1.25rem 4rem; background:var(--bg); color:var(--fg);
+    font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size:1.5rem; font-weight:650; margin:0 0 .25rem; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:.875rem; margin:0 0 2rem; }
+  figure {
+    margin:0 0 2rem; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:1.5rem; overflow-x:auto;
+  }
+  figcaption {
+    font-size:.8125rem; font-weight:600; color:var(--muted); margin-bottom:1rem;
+    text-transform:uppercase; letter-spacing:.06em;
+  }
+  .mermaid { display:flex; justify-content:center; min-width:min-content; }
+  .legend {
+    font-size:.8125rem; color:var(--muted); border-top:1px solid var(--line);
+    padding-top:1rem; margin-top:2.5rem;
+  }
+  .legend code { color:var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>superdev × orchestrator — the development organisation (v3)</h1>
+  <p class="sub">Generated for review — open in a browser, then bring corrections back to the terminal.</p>
+  <figure>
+    <figcaption>reporting</figcaption>
+    <div class="mermaid">
+%% The development organisation — who reports to whom, who talks, who gates
+flowchart TB
+  OP(["OPERATOR<br/>rules design forks · checkrides · walks into any room"])
+  FD["FRONT DESK (persistent, view-only)<br/>one queue of events from every room<br/>points the operator AT the room that needs them"]
+  ORCH["ORCHESTRATOR (persistent)<br/>cursor · grounding probe → charters · COLLECTS residue<br/>checkpoint watcher → initiates design sessions<br/>micro-task tier · may charter AD-HOC rooms"]
+  ARCH["ARCHITECT (persistent — the future)<br/>corpus: angles · current→target map · design D# log<br/>works per-CHECKPOINT on the residue collection<br/>conformance reports · never tactical, never blocks"]
+  R1["ITEM ROOM ×N (ephemeral — the present)<br/>OWNS its worktree: create → work → FF-CAS merge → retire<br/>SDD inside (role-split: implementer · reviewer · follow-up)<br/>resolves discrepancies locally · plants MARKERS · files residue"]
+
+  ORCH -->|reports to| OP
+  ARCH -->|reports to| OP
+  FD -->|reports to| ORCH
+  R1 -->|reports to| ORCH
+
+  ORCH <-.->|peers · info| ARCH
+  ADHOC["AD-HOC ROOM (orchestrator-chartered)<br/>probe · spike · sweep — foreign skill mixes<br/>kept out of the architect room"]
+  ADHOC -->|reports to| ORCH
+  R1 <-.->|peers · info: corpus questions| ARCH
+  R1 -.->|events| FD
+  ARCH -.->|events: agenda ripe| FD
+  ORCH -.->|queue| FD
+
+  G2{{"gate · approval<br/>OPERATOR rules design sessions —<br/>angle/map changes bind only when ruled"}}
+  ARCH --- G2 --- OP
+  G3{{"gate · veto<br/>GROUNDING PROBE gates chartering —<br/>no item room without a measured census"}}
+  ORCH --- G3 --- R1
+  G4{{"gate · script<br/>FF-CAS publish recipe (mechanical) —<br/>merge always possible, never architect-blocked"}}
+  R1 --- G4
+  G5{{"gate · veto<br/>room CLOSE requires worktree merged & retired<br/>(orchestrator verifies; the 30-dead-worktrees fix)"}}
+  ORCH --- G5 --- R1
+    </div>
+  </figure>
+  <figure>
+    <figcaption>lifecycle</figcaption>
+    <div class="mermaid">
+%% Real time: continuous development with a continuously-thinking architect
+sequenceDiagram
+  participant OP as OPERATOR
+  participant FD as FRONT DESK
+  participant AR as ARCHITECT (future)
+  participant OR as ORCHESTRATOR
+  participant RM as item room (present)
+  Note over OR,RM: STEADY STATE — nothing waits for design
+  OR->>OR: grounding probe → charter (cites map rows + test verdicts)
+  OR->>RM: launch (worktree)
+  RM->>RM: SDD: brainstorm-lite reads corpus → plan → build
+  RM->>RM: hits arch-vs-code discrepancy → RESOLVES IT LOCALLY<br/>plants a debt MARKER if the clean fix belongs to a later pass
+  RM-->>OR: pointer: residue row (discrepancy + marker + insight)
+  RM-->>FD: event: "residue filed"
+  OR->>OR: collects residue · watches checkpoints (merges, milestones)
+  RM->>RM: finishes → FF-CAS merges → retires its own worktree
+  AR-->>OR: pointer: conformance report on the published diff (advisory)
+  OR->>OR: next charter absorbs markers / follow-up item
+  Note over OP,AR: CHECKPOINT → DESIGN SESSION
+  OR-->>AR: pointer: checkpoint reached — residue COLLECTION handed over
+  AR->>AR: works the collection: clusters, contested rows, marker census, agenda
+  AR-->>FD: event: agenda ready
+  FD-->>OP: one queue; operator attaches to ARCHITECT
+  OP->>AR: session in-room: census-first · lettered forks · rulings
+  AR->>AR: update angles + map + D# (supersede, never erase)
+  AR-->>OR: pointer: map changed → re-charter / close stale items
+    </div>
+  </figure>
+  <p class="legend">
+    <strong>Reading the arrows.</strong> A solid arrow means <code>reports to</code> —
+    authority flows against it, reports flow along it. Every node has exactly one reports-to
+    parent. A dashed arrow is data flow and carries no authority.
+  </p>
+</main>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    securityLevel: 'loose'
+  });
+  mermaid.contentLoaded();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+%% Real time: continuous development with a continuously-thinking architect
+sequenceDiagram
+  participant OP as OPERATOR
+  participant FD as FRONT DESK
+  participant AR as ARCHITECT (future)
+  participant OR as ORCHESTRATOR
+  participant RM as item room (present)
+  Note over OR,RM: STEADY STATE — nothing waits for design
+  OR->>OR: grounding probe → charter (cites map rows + test verdicts)
+  OR->>RM: launch (worktree)
+  RM->>RM: SDD: brainstorm-lite reads corpus → plan → build
+  RM->>RM: hits arch-vs-code discrepancy → RESOLVES IT LOCALLY<br/>plants a debt MARKER if the clean fix belongs to a later pass
+  RM-->>OR: pointer: residue row (discrepancy + marker + insight)
+  RM-->>FD: event: "residue filed"
+  OR->>OR: collects residue · watches checkpoints (merges, milestones)
+  RM->>RM: finishes → FF-CAS merges → retires its own worktree
+  AR-->>OR: pointer: conformance report on the published diff (advisory)
+  OR->>OR: next charter absorbs markers / follow-up item
+  Note over OP,AR: CHECKPOINT → DESIGN SESSION
+  OR-->>AR: pointer: checkpoint reached — residue COLLECTION handed over
+  AR->>AR: works the collection: clusters, contested rows, marker census, agenda
+  AR-->>FD: event: agenda ready
+  FD-->>OP: one queue; operator attaches to ARCHITECT
+  OP->>AR: session in-room: census-first · lettered forks · rulings
+  AR->>AR: update angles + map + D# (supersede, never erase)
+  AR-->>OR: pointer: map changed → re-charter / close stale items
