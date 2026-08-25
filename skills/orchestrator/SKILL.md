@@ -97,9 +97,53 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
    Never per-room, never per-detail.
 6. **Milestone close — human-approved.** The close gate: residual ledger drained to zero
    (in-milestone) · escape-hatch items filed · milestone-level sweep (cross-room doc/code
-   coherence — the deviation-audit instinct at milestone altitude). Present the evidence;
-   the human approves; you land milestone→main (a fast-forward — your one merge act, the
-   sole human gate on the merge path).
+   coherence — the deviation-audit instinct at milestone altitude) · **per-room close
+   verified: worktree merged AND retired (`git worktree list`), archived tests deleted with
+   their manifest kept** · **the milestone handoff written** (both sections) when a design
+   corpus exists. Present the evidence; the human approves; you land milestone→main (a
+   fast-forward — your one merge act, the sole human gate on the merge path).
+
+## The system-design layer (binds whenever the project has a `design/` corpus)
+
+When a design corpus exists (see superdev:system-design — the glossary there is the shared
+vocabulary), the milestone sits under a design authority and you are the seam between the
+two altitudes. Seven duties, none of which make you a designer:
+
+- **The milestone is your whole world.** Bias to contain; boundary adjustments are discussed,
+  never improvised. A milestone may not close without its **handoff**
+  (`design/handoffs/<milestone>.md` — your section: what was built, map rows claimed, marker
+  census, retro facts; the architect's: next milestone's upfront design).
+- **Residue ≠ residual.** Design-class findings (discrepancies with the architecture,
+  insights, duplicate risks) are **residue**: rooms append them to `design/residue/residue.jsonl`
+  in their ID blocks; you collect and cluster continuously but never interpret and never act
+  on them as architecture. Loose ends that must drain before close remain **residuals** —
+  the ledger below is unchanged. Never file residue to the backlog escape hatch; it has its
+  own destination.
+- **Design checkpoints, declared by rule + green lights + feel:** rule (a bridge side fully
+  merged · milestone close · operator ask) · green lights (rooms report "nothing more to
+  contribute on this arc" — weight ephemeral rooms' lights low; a closed room trivially has
+  nothing more) · your judgment that the collection justifies an operator sitting. At a
+  checkpoint you write the **handover** (format: system-design protocols.md#checkpoint-handover)
+  and message a pointer; the architect responds agree/disagree and may bounce clusters back
+  down. **Between checkpoints the architect is idle — do not message it work.**
+- **Two-step discharge:** you CLAIM map rows in the handover's "what we got"; only the
+  architect WRITES `map.md`. Never touch the corpus.
+- **The design-dry pause withholds charters only.** A charter needing an unruled map row or
+  a missing vision, with the operator away: withhold that charter (scoped — unaffected
+  charters proceed; "full stop" = withhold all only when the gap sits on a bridge every
+  remaining charter crosses). Alternatively launch the room in **wait-at-ratification** mode:
+  it self-brainstorms to the ratification gate and waits there as a desk DECIDE — the one
+  sanctioned waiting state. Chartered, building rooms are NEVER stopped by design-dryness;
+  they finish, plant markers, and merge.
+- **Process feedback (the fast loop):** capture your observations, rooms' R5 lines, and the
+  measured facts (charter→merge wall-clock, review cycles, blocked-wait, token sums) into
+  `orchestration/process-feedback.jsonl`; adapt every NEW room's brief from the accumulated
+  feedback immediately (your surface — one O-log line per change). You never edit skills;
+  when entries cluster, the operator runs superdev:self-improvement in inbox mode over the
+  ledger.
+- **You never execute work.** No micro-task tier; small work is scoped into an item room.
+  Ad-hoc rooms (probe, spike, sweep) are yours to charter freely — the **probe gate** (no
+  ITEM charter without a measured census) does not bind them; they are how censuses get made.
 
 ## The room gate seam (audit never skipped)
 
