@@ -151,8 +151,8 @@ are not delegated to a Codex worker. If native Claude lacks the required `sonnet
 
 When the operator or plan explicitly selects a Codex worker, resolve the same tiers
 through [Codex model selection](codex-model-selection.md), then follow [Codex worker
-broker](codex-worker.md) for the named-worker commands and task handoff. Codex is
-opt-in; native Claude dispatch does not require it.
+broker](codex-worker.md) for the named-worker commands and task handoff. Choose Codex whenever the arc is long —
+its long-run + resume-first strength (D36) is the deciding factor, not an opt-in hurdle.
 
 ## Handling Implementer Status
 

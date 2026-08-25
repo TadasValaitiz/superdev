@@ -1,5 +1,16 @@
 # Superdev Release Notes
 
+## v7.5.0 (2026-08-25)
+
+### The system-design layer (wave 2 — the engine room)
+
+- **subagent-driven-development** — the arc model: one carrying implementer per broad role-carried arc; reviews at plan checkpoints (never per-mini-task); the reviewer is the test adversary (writes adversarial tests, observes every guard fail before a checkpoint clears; authors requirement tests from the harvest file in rewrite territory); resume-first fixes with a mandatory RESUME metadata block tracked in the progress ledger; the follow-up role; design-class deviations file residue; auto-enter on the writing-plans shape agreement; Codex framed as the long-run + resume-first powerhouse. `parallel-execution.md` rewritten: the `subagent-driven-parallel` plan mode is retired — parallelism = reads always + same-worktree quick-fix lanes post-shape.
+- **test-driven-development** — `test-clearance.md`: the four dispositions; the archive lifecycle (sweep = first checkpoint → `tests/_archived/<plan>/` + manifest + reviewer-signed harvest → recall buffer → close-gate cleanup, manifest kept); the inert-guard rule; SKILL.md carve-out for domain shifts and the watched-to-fail split.
+- **writing-plans** — the execution-shape proposal replaces "do not ask" (variants → operator agreement = auto-start, D29); the granularity dial replaces bite-size-everything; the Operational strategy section; `Execution:` enum reduced to `subagent-driven | inline`.
+- **brainstorming** — mandatory test-disposition question (checklist 6b) recorded in the spec template's §7b; glossary gains arc · carrying implementer · quick-fix lane · test disposition · harvest file.
+
+Rulings D36–D40 in `docs/superdev/specs/2026-08-24-system-design-layer-decisions.md`.
+
 ## v7.4.0 (2026-08-25)
 
 ### The system-design layer (wave 1)
