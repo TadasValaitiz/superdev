@@ -200,14 +200,13 @@ D1 corpus is law + persistent human-driven architect · D2 ledgers truth/message
 |----|----------------------|---------|--------|
 | A1 | The role-split item-room internals (one implementer carrying wider tasks + reviewer + follow-up) outperform bite-size task fan-out with current Codex/Sonnet workers | R22, 5.5 | unratified — the deep-dive tests it |
 | A2 | The vision-size default (stated in 5.1: **any REPLACE or RESHAPE cluster spanning more than one module needs a vision before ruling**) may need per-project tuning | R14 | default promoted into the design; tuning unratified |
-| A3 | Green-light signals are honest enough to weigh into checkpoints (a room saying "nothing more to contribute" under pressure to look done) | R11 | unratified — mitigated by rule+feel inputs; revisit if checkpoints fire early |
+| A3 | Green-light signals are honest enough to weigh into checkpoints — noting that an ephemeral room's green light at close is near-vacuous; weight persistent/ad-hoc room signals higher | R11 | unratified — mitigated by rule+feel inputs; revisit if checkpoints fire early |
 | A4 | The angle staleness check (grep D#s vs log status) is implementable as a small script in the skill | R15 | unratified — trivial if D# lines are grep-stable; verified at skill authoring |
 | A5 | Existing milestone in ai-trading-calibration can adopt this incrementally (glossary + handover first) without re-chartering live rooms | 5.9 | unratified — operator's call at rollout |
 | A6 | Harvest→delete→rewrite is the right default test clearance for REPLACE'd areas (D16 is provisional; R20 rests on it) | R20, 5.5 | unratified — the R22 deep-dive tests it |
 | A7 | D24: superdev's orchestrator is the right home for §5.4 (room-graph's stays generic) | 5.9 | unratified — operator to ratify with this spec |
 | A8 | D30: self-brainstorm-to-ratification is the right operator-absent behaviour | R4, 5.5 | unratified — operator to ratify with this spec |
 | A9 | The Operational-strategy section's HIL phase ends in a protocol extraction (D27); tracked so the extraction happens rather than being remembered | R26 | open — extract after ~3 consistent choices |
-| A3 | Green lights from ephemeral item rooms are near-vacuous at close; weight persistent/ad-hoc room signals higher when judging checkpoints | R11 | noted; fold into orchestrator skill text |
 
 ## 8. Not doing
 
