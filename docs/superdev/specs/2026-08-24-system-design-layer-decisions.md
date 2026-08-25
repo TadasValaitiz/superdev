@@ -198,3 +198,10 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - **Codex:** NOT the default implementer, but **recognized as first-class** — the worker-class table names it plainly beside native Claude; no "explicit opt-in only" framing.
 - **Review cadence: longer.** Produce more code before reviewing — reviews move to plan checkpoints or per-deliverable, never per-mini-task; frequent small reviews cost more than they catch. Mid-arc findings go to the resumed implementer.
 - **Revisit-when:** a resume fails twice on real work → reconsider a lightweight snapshot for cross-session territory handoffs.
+
+## D33 — Ratification by delegation (operator: "I'm not going to read those docs, so I trust you")
+**When:** 2026-08-25T06:26:41Z · **Phase:** spec · **Status:** locked · **Decided by:** Tadas (delegated), Claude (rulings)
+- **D24 ratified:** §5.4's milestone law lands in superdev's `orchestrator`; room-graph's stays generic.
+- **D30 ratified:** operator-absent charters self-brainstorm to the ratification gate and wait as a desk DECIDE — the one exception to "always merges".
+- **Naming pairs ratified:** residue/residual and system-angle/item-angle both stay, distinguished in the glossary.
+- Condition: a final cold-read subagent review over spec + log + angles passes; any blocking finding reopens the relevant D#.
