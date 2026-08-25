@@ -1,5 +1,11 @@
 # Superdev Release Notes
 
+## v7.6.0 (2026-08-25)
+
+### bootstrapping-dev-organisation — the cold start
+
+New skill: the conversational bootstrap for the development organisation in any project. Technical preflight (git, `crossSessionInbound: "accept"` — the setting that silently eats room messages, worktrees) → survey existing conventions and put an **adopt / bridge / discard** ruling table to the operator (recorded in `orchestration/conventions.md`) → create the floor per rulings → **seed the corpus before any charter** (an empty corpus can charter nothing) → launch orchestrator → desk → idle architect → first milestone via the orchestrator's HIL co-plan; later milestones open from the handoff; the backlog feeds only the boundary conversation. Deliberately not a script (D41): existing conventions are judged, not scaffolded over. Cross-check: superdev carries no dependency on room-graph-orchestration.
+
 ## v7.5.0 (2026-08-25)
 
 ### The system-design layer (wave 2 — the engine room)

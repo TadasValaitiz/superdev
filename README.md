@@ -187,6 +187,8 @@ The Pi package loads the Superdev skills and a small extension that injects the 
 
 ## The Basic Workflow
 
+00. **bootstrapping-dev-organisation** - Activates when standing up the rooms, corpus and ledgers in a project before its first milestone; bridges existing conventions by operator ruling.
+
 0. **system-design** - Activates for architecture-scale work: the design corpus (angles, current→target map, visions, markers), operator-ruled sessions, and the shared glossary every other skill links. Item-level work consumes its corpus.
 
 1. **brainstorming** - Activates before writing code. Refines rough ideas through questions, explores alternatives, presents design in sections for validation. Saves design document.
