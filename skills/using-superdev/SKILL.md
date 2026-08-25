@@ -23,6 +23,10 @@ This is not negotiable. You cannot rationalize your way out of this.
 
 Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
 
+## Shared vocabulary
+
+The glossary for milestone · item · plan/design checkpoint · bridge · handoff · residue ≠ residual · marker · vision · corpus lives in superdev:system-design (`glossary.md`). Skills link it; when two skills seem to use a word differently, that file wins.
+
 ## Skill Priority
 
 When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superdev' most common process skills, but the rule holds for any of them.

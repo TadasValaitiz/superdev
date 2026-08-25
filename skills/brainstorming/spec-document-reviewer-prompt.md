@@ -41,6 +41,7 @@ Subagent (general-purpose):
     | Consistency | Internal contradictions, conflicting requirements. |
     | Clarity | Requirements ambiguous enough to build the wrong thing. |
     | Scope | Focused enough for a single plan; §8 Not-doing present, so scope was actually decided rather than left open. |
+    | Corpus & angles (when a `design/` corpus or item angles exist) | Collisions between areas/angles are surfaced and reconciled, not left implicit; every §5 area carries a DOC-MARK status; item angle companions cite the governing system passages at file:line and contradict none of them (a contradiction must appear as residue, not a silent local ruling). |
     | YAGNI | Unrequested features, over-engineering, areas serving no R#/UC#. |
 
     ## Calibration

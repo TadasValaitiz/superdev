@@ -99,6 +99,7 @@ One subsection per area. Each MUST open with its narrative link-sentence.
 ### 5.x <Area>
 
 <Link-sentence: the role this area plays in the §4 story.>
+**Status:** `DOC-MARK[LOCKED|FLEXIBLE|DEFERRED|BLIND|MISMATCH|SEED-ILLUSTRATIVE][D#|owner]` — epistemic, per superdev:system-design `map-and-markers.md#doc-mark`; when a corpus exists, cite the governing map row / system-angle passage at file:line.
 
 - **Design:** the actual shape — structures, flow, behavior.
 - **Interface / contract:** what consumers see; what this area promises.

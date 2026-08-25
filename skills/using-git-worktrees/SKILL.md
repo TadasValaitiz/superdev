@@ -183,6 +183,23 @@ Ready to implement <feature-name>
 - **Problem:** Can't distinguish new bugs from pre-existing issues
 - **Fix:** Report failures, get explicit permission to proceed
 
+## Retirement — the creator merges and removes
+
+A worktree's lifecycle belongs to whoever created it, end to end. Creating without
+retiring is how repositories accumulate dozens of dead worktrees (measured: ~30 in one
+project), each a wrong-cwd accident waiting.
+
+- **You created it → you retire it:** after the work merges (FF-CAS or finishing flow),
+  `git worktree remove <path>` (add `--force` only for an already-merged tree with
+  generated litter), then `git branch -d` the merged branch.
+- **Close means gone:** a room or session may not report itself closed while
+  `git worktree list` still shows its tree. An orchestrator verifies this at the close
+  gate; don't make it chase you.
+- **Native tools:** if the worktree came from a native tool (e.g. `EnterWorktree`), exit
+  via the native path (`ExitWorktree` remove) rather than raw git.
+- Abandoned work is still explicit: either merge, or remove with the branch kept and a
+  note where the project tracks work — never silently leave the tree.
+
 ## Red Flags
 
 **Never:**
@@ -194,6 +211,7 @@ Ready to implement <feature-name>
 - Proceed with failing tests without asking
 
 **Always:**
+- Retire what you created: merged → `git worktree remove` + branch cleanup; close = worktree gone
 - Run Step 0 detection first
 - Prefer native tools over git fallback
 - Follow directory priority: explicit instructions > existing project-local directory > default

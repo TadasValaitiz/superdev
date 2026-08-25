@@ -126,7 +126,7 @@ hints (§9) — the operator-language "what must be demonstrable." Do NOT copy a
 table into the plan; that split acceptance across two files and let them drift. Instead:
 
 - Name which UC#/AH# THIS plan discharges (a subset, if the anchor spans multiple plans).
-- Each gate (milestone gate in parallel mode; the finishing gate always) answers its
+- Each gate (checkpoint gate in parallel mode; the finishing gate always) answers its
   owned hints with RECEIPTS — one re-runnable piece of evidence per hint (test+output,
   CLI transcript, file:line), filled into the anchor's §9 receipt column when the real
   surface exists.
@@ -152,7 +152,9 @@ line, it doesn't belong in the plan.]
 
 **Read first:** [The Context-pack sections THIS task's implementer must read
 before coding — specific anchors, not whole documents: "spec §5.2", "domain
-model N.3 delta ledger rows for OrderSpec", "CLI surface family 1 table".
+model N.3 delta ledger rows for OrderSpec", "CLI surface family 1 table" —
+and, when a `design/` corpus exists, the governing map rows and the vision
+doc for any RESHAPE/REPLACE territory (ground on the vision, not the dying code).
 Subagents have Read — point them at the truth instead of paraphrasing it.]
 
 **Files:**
@@ -199,28 +201,29 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
-## Milestones (optional — long plans only)
+## Plan checkpoints (optional — long plans only)
 
-When a plan is long enough to need them (roughly 8+ tasks or multiple distinct
-deliverable phases), group tasks under milestone headers:
+<!-- DOC-MARK[DEFERRED][wave-2]: subagent-driven-development/parallel-execution.md still speaks the old milestone vocabulary until wave 2 renames it. -->
+A **plan checkpoint** is a room-internal gate group — it verifies state and may hand off between phases; it NEVER notifies an architect or any design authority (that is a *design checkpoint*, a different altitude — see superdev:system-design `glossary.md`). When a plan is long enough (roughly 8+ tasks or multiple distinct deliverable phases), group tasks under checkpoint headers:
 
 ```markdown
-## Milestone M1: <name — the deliverable this phase completes>
+## Checkpoint C1: <name — the deliverable this phase completes>
 
-[One-line milestone narrative: what is TRUE about the system when this gate passes.]
-**Milestone gate:** frozen tree · review findings folded · fast suite + this
-milestone's area slow tests green (separate commands, never the monolith) ·
-**anchor acceptance hints owned by this milestone answered with receipts** (unanswered → named + routed by Mode).
+[One-line checkpoint narrative: what is TRUE about the system when this gate passes.]
+**Checkpoint gate:** frozen tree · review findings folded · fast suite + this
+checkpoint's area slow tests green (separate commands, never the monolith) ·
+**anchor acceptance hints owned by this checkpoint answered with receipts** (unanswered → named + routed by Mode) · the gate receipt records tests run, marker delta, map rows claimed when a corpus exists.
 
 ### Task 1: ...
 ### Task 2: ...
 ```
 
-Milestones are the unit of parallel execution (`Execution: subagent-driven-parallel`):
-within a milestone, file-disjoint tasks may run as concurrent lanes; the milestone
-gate is serial on a frozen tree. Single-milestone plans don't need the headers — the
-finishing gate is their only gate. A milestone whose narrative line you cannot write
-is two milestones (or none).
+Checkpoints are the unit of parallel execution (`Execution: subagent-driven-parallel`):
+within a checkpoint section, file-disjoint tasks may run as concurrent lanes; the
+checkpoint gate is serial on a frozen tree. Single-checkpoint plans don't need the
+headers — the finishing gate is their only gate. A checkpoint whose narrative line you
+cannot write is two checkpoints (or none). ("Milestone" now names the orchestrator's
+implementation boundary, one altitude up — never a plan section.)
 
 ## No Placeholders
 

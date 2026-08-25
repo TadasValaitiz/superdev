@@ -1,6 +1,6 @@
 ---
 name: self-improvement
-description: Use when a superdev skill or its subagents misfired — a subagent missing context it needed, an orchestrator acting on a thin report, a workflow gap — or when the operator asks to improve/evolve the plugin. Diagnoses WHERE in the information flow the failure entered (prompt, orchestrator, return contract, context doc, or missing subagent), plans the smallest fix at that boundary, and applies it ONLY after operator approval, then version-bumps and reinstalls so Claude Code picks it up. Not for fixing the project the skill was working on — this improves the toolchain itself.
+description: Use when a superdev skill or its subagents misfired — a subagent missing context it needed, an orchestrator acting on a thin report, a workflow gap — or when the operator asks to improve/evolve the plugin, or hands over an accumulated process-feedback ledger (orchestration/process-feedback.jsonl) for batched improvement. Diagnoses WHERE in the information flow the failure entered (prompt, orchestrator, return contract, context doc, or missing subagent), plans the smallest fix at that boundary, and applies it ONLY after operator approval, then version-bumps and reinstalls so Claude Code picks it up. Not for fixing the project the skill was working on — this improves the toolchain itself.
 ---
 
 # Self-Improvement — fix the toolchain where the information died
@@ -28,6 +28,27 @@ those paths — discovering mid-apply that another file needs touching reopens t
 6. **Apply** — edit source repo, version-bump, changelog, commit
 7. **Ship** — `claude plugin update`, verify new version installed, operator reloads
 8. **Verify** — confirm the change is live; where feasible, encode the failure as an eval case
+
+## Inbox mode — a process-feedback ledger instead of one failure
+
+When the input is an accumulated ledger (`orchestration/process-feedback.jsonl` — rooms'
+brief-gap and friction entries in their ID blocks, plus the orchestrator's measured facts),
+do NOT run the checklist per entry. Three steps precede it:
+
+1. **Cluster** entries by implicated skill + boundary class; note frequency and severity.
+   Measured-fact rows (wall-clock, review cycles, tokens) are corroborating evidence for
+   clusters, not clusters themselves.
+2. **Triage:** clusters with ≥2 independent entries first; singletons only when severe.
+   For each chosen cluster, its entries ARE the Step-1 evidence — reconstruct one
+   representative exchange if the entries alone can't localize the boundary.
+3. **Run Steps 1–4 once per cluster**, then batch every plan into ONE operator gate —
+   presented together, approved severally. The shotgun warning applies WITHIN a cluster
+   (one fix per bottleneck), never across clusters. One version bump ships all approved
+   fixes; the changelog cites the feedback entries each fix discharges.
+
+The fast loop (the orchestrator adapting briefs immediately) is not this skill's business —
+by the time a ledger reaches here, brief adaptation has already happened; you are fixing
+the skill text so fresh projects start right.
 
 ## Step 1 — Capture the failure from evidence
 

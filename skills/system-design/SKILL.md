@@ -38,7 +38,7 @@ Never DRAFT/REVIEWED/IN-PROGRESS. The question a status answers is *how much may
 
 ## The session (operator present; formats and a worked example: protocols.md#session-protocol)
 
-1. **Open mechanically, not by rereading:** `grep -rn "DOC-MARK\[BLIND\]\|DOC-MARK\[MISMATCH\]" design/` · run the marker census · read the pending checkpoint handover (if orchestrated) or collect what changed (solo). The agenda assembles itself from these three; organise it **by angle**.
+1. **Open mechanically, not by rereading:** `grep -rn "DOC-MARK\[BLIND\]\|DOC-MARK\[MISMATCH\]" design/` · run the marker census · read the pending checkpoint handover (if orchestrated) or, solo, collect the delta: the operator's stated concern + `git log` touching `design/` and the mapped code areas since the corpus's newest file. The agenda assembles itself from these three; organise it **by angle**.
 2. **Census before forks.** Measure what exists before proposing; a fork argued from memory is a fork argued from fiction.
 3. **Lettered forks, operator rules.** Each fork: options a/b/c with gains and sacrifices; the ruling becomes a D# (supersede protocol); an unruled fork becomes DEFERRED with an owner.
 4. **Never block development.** Your outputs act *forward* — through the next charters and through markers. If you find yourself writing "implementation must not start until…", stop: that is a marker and a charter note, not a gate. Conformance reports are advisory by construction.

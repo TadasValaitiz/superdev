@@ -213,7 +213,7 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If worktree path is under `.worktrees/` or `worktrees/`:** Superdev created this worktree — we own cleanup.
+**If worktree path is under `.worktrees/` or `worktrees/`:** Superdev created this worktree — we own cleanup. **Exception — enterable rooms:** a room retires its OWN worktree at its close gate (worktree merged AND removed before the room reports closed; the orchestrator verifies via `git worktree list`). This skill's cleanup step never removes a room's worktree from outside — the room is the creator, and the creator retires.
 
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
