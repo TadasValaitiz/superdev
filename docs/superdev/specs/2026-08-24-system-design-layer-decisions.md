@@ -244,3 +244,6 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 - `Execution: subagent-driven-parallel` **retired** as a plan mode: parallelism is a *phase inside an arc* (D37), not a plan shape; enum becomes `subagent-driven | inline`; parallel-execution.md is rewritten from that premise (quick-fix lanes, same worktree, reads always).
 - **No separate resume registry file**: RESUME metadata rows live in the SDD progress ledger (D32's "tracked in the progress ledger" upheld).
 - The same-subagent/fix-subagent contradiction resolves **continuation-first** (D32): message the original implementer; fresh dispatch + report only when resume fails.
+
+## Wave-2 build closure — 2026-08-25T07:34:37Z
+**Phase:** build. Shipped superdev 7.5.0: SDD arc model (D32/D36–D38/D40), parallel-execution rewritten (D37; `subagent-driven-parallel` retired), test-clearance.md (D16/D38), execution-shape elicitation + auto-start (D27–D29), brainstorm disposition (6b/§7b), glossary additions. All three tasks baseline→edit→GREEN (a6bf6/abbd5); plan-review errata folded; AH9 completes (SDD sweep clean), AH8/AH17/AH19 skill-text halves receipted. Remaining live receipts (AH2–AH8-live, AH11–AH15, AH16-live, AH17–AH19-live) land at rollout in ai-trading-calibration. The system-design layer is now FULLY SHIPPED at skill level: waves 1+2 complete, D1–D40.
