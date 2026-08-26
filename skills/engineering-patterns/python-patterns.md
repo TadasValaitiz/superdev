@@ -40,6 +40,16 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   nothing said which basis it carried. The value carries its basis; derived quantities
   are DERIVED, never re-passed as parameters. If a wrong pairing is representable, it
   will eventually be paired wrong.
+- **Teeth — the types law is machine-enforced, never aspirational:**
+  - the strict type-checker (mypy/pyright strict) runs IN the suite; its errors are red,
+    with a per-module strictness ratchet for legacy (modules only ever get stricter);
+  - a shared frozen base model (`ConfigDict(frozen=True, extra="forbid")`) is the ONLY
+    ancestor for seam models — grep-guard: no bare `BaseModel` on a seam;
+  - AST/grep guards ban `dict[str, Any]`, `**kwargs`, and bare `float`/`int` money-or-units
+    values in the signatures of L1/L2 public functions — guards run in the suite and each
+    has a NEGATIVE CONTROL proving it fires;
+  - a seam-inventory test enumerates every service entrypoint and asserts params/returns
+    are models — a new untyped entrypoint is a red test, not a review comment.
 - **Identity is an explicit value object, never a whole-object dump.** Where objects
   hash: `XxxIdentity` frozen model + a whitelist factory; hash = sha256 over canonical
   JSON (sorted keys, fixed separators) of the identity model only. Mandatory guards: a
@@ -90,6 +100,19 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
 - Intermediate models may carry their predecessor's fields plus their own verdict and
   evidence ids — provenance is structural, not disciplinary.
 - One public idiom per context; don't mix pipe/flow in one module without a reason.
+- **Concrete over clever (composition law):** no higher-order generic drivers — lambdas,
+  `partial()` bindings, wide `Callable` params, and `TypeVar` chains obscure the real call
+  graph from humans, IDEs, static analysis, AND coding agents reconstructing the system
+  from symbols. Pipelines are ordinary concrete Python: **named stage functions only**
+  (no lambdas in `flow`/`compose` calls — grep-guarded), each stage an atomic transition
+  consuming and producing immutable models. Removing a little loop duplication never
+  justifies making the call graph unrecoverable.
+- **Teeth:** mis-order is caught by the type-checker (that is the point of typed stages —
+  verify it stays true: one deliberate mis-ordering per pipeline family exists as a
+  type-check-must-fail fixture); a stage that raises instead of returning `Err` is caught
+  by a suite guard driving each public pipeline with a poisoned input; stage models are
+  append-only (predecessor's fields + own verdict) — a stage silently dropping upstream
+  fields is a red completeness test.
 
 ## 6. Command pattern for CLI — the web-server-tomorrow guarantee
 
@@ -104,6 +127,16 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   mechanical; agents author safely against uniform shapes.
 - Renames keep the old spelling as a hidden alias for a transition window; CLI
   reference docs are regenerated IN THE SAME COMMIT as any surface/help change.
+- **Output & exit contract (operator-experience law):**
+  - exit map: **0** success · **1** internal error (a bug — never intentional) · **2**
+    usage (framework-native) · **3** typed operational refusal, whose message names the
+    RUNNABLE remedy (the flag, the command, the format — never just "invalid");
+  - every command string emitted in hints, refusals, or `next:` blocks must EXIST on the
+    live surface — guarded by a test that greps emitted spellings against the registry;
+  - a command's capability limits are declared in its own `--help` (a `Limits:` block);
+  - no derived/annualized figure is shown without its basis — payload and human mode both;
+  - listings carry a provenance kernel: a row that shows an honesty tier also shows what
+    derived it; full reconstruction lives on the detail surface.
 
 ## 7. Logging & observability — reconstructability is the bar
 
@@ -158,7 +191,10 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   suites have shipped 100× render bugs and structurally-unreachable gates every unit
   test missed. Final sign-off = invoking the actual CLI/API end-to-end and checking
   outputs cohere — happy path AND refusal paths, with verbatim transcripts (command +
-  output + exit code). A row without its transcript counts as NOT RUN.
+  output + exit code). **Sweep matrices beat spot checks:** enumerate every touched
+  surface × human/JSON mode × error paths; a matrix row without its verbatim transcript
+  counts as NOT RUN. Where feasible a second pair of hands re-runs a sample and diffs
+  against the claimed output.
 
 ## 11. Reports, reviews, and session hygiene
 
@@ -171,6 +207,11 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   orphaned branches/worktrees, stale generated docs, armed watchers) is LANDED,
   CLEANED, or FILED as a self-contained ticket. An unfiled leftover is a future wrong
   conclusion waiting to happen.
+- End-of-session sweep checklist: `git status` on EVERY checkout touched (main + all
+  worktrees) · worktrees/branches/claims removed or explicitly handed off · generated
+  docs current (their `--check` runs green) · scratch dirs holding evidence
+  preserved-and-cited or deleted · ledgers/reports reflect final state, with visible
+  errata for anything corrected.
 
 ## 12. Policy seams — switchable logic is a named abstraction
 
