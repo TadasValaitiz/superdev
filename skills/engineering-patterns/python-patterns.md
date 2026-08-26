@@ -174,10 +174,12 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
 - Compat shims make moves cheap; deprecation windows make renames cheap. If a helper
   is copied once, it wanted to be a module.
 
-## 10. Testing — evidence, not vibes
+## 10. Test design — evidence, not vibes
 
-- TDD: failing test first; RED and GREEN evidence (commands + output) in any work
-  report.
+(The testing *process* — TDD evidence, the live-surface final bar, sweep matrices,
+reports-as-claims, session hygiene — is stack-agnostic law in `process-discipline.md`,
+which applies ALWAYS and is not overridden by a project's design canon.)
+
 - Numbers asserted in tests carry a provenance comment (measured / simulated /
   seed / derived); fixture seeds state their unit contracts (fractions vs percent —
   the classic 100× render scar).
@@ -188,35 +190,7 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   doesn't run is a hope.
 - Prefer real substrate in isolated per-test namespaces over hand-rolled fakes when
   the project supports it — no `Fake*Repo` drift to maintain.
-- Agent-harness note: long suite runs get explicit foreground timeouts — harnesses
-  auto-background long commands and strand the run.
-- **NEVER TRUST TESTS AS THE FINAL BAR — the real application surface is.** Green
-  suites have shipped 100× render bugs and structurally-unreachable gates every unit
-  test missed. Final sign-off = invoking the actual CLI/API end-to-end and checking
-  outputs cohere — happy path AND refusal paths, with verbatim transcripts (command +
-  output + exit code). **Sweep matrices beat spot checks:** enumerate every touched
-  surface × human/JSON mode × error paths; a matrix row without its verbatim transcript
-  counts as NOT RUN. Where feasible a second pair of hands re-runs a sample and diffs
-  against the claimed output.
-
-## 11. Reports, reviews, and session hygiene
-
-- A work report is a CLAIM until re-verified: reviewers reproduce load-bearing
-  numbers; "0 failed" without a transcript is refused. Plan text does not grade its
-  own work — plan-mandated defects are still findings.
-- Corrections are VISIBLE errata (a dated line naming what was wrong), never silent
-  edits.
-- Leave nothing behind, same session: every leftover (scratch files, stray writes,
-  orphaned branches/worktrees, stale generated docs, armed watchers) is LANDED,
-  CLEANED, or FILED as a self-contained ticket. An unfiled leftover is a future wrong
-  conclusion waiting to happen.
-- End-of-session sweep checklist: `git status` on EVERY checkout touched (main + all
-  worktrees) · worktrees/branches/claims removed or explicitly handed off · generated
-  docs current (their `--check` runs green) · scratch dirs holding evidence
-  preserved-and-cited or deleted · ledgers/reports reflect final state, with visible
-  errata for anything corrected.
-
-## 12. Policy seams — switchable logic is a named abstraction
+## 11. Policy seams — switchable logic is a named abstraction
 
 Wherever behavior could plausibly be switched by different policies, rules, or
 rankings — selection strategies, re-rankers, sampling, allocation, re-fit methods —

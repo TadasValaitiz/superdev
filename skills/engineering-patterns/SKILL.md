@@ -12,7 +12,8 @@ the rule for choosing which doc governs a project.
 
 ## The selection cascade (orchestrator runs this at plan time)
 
-1. **Declared — always wins.** The project's CLAUDE.md carries:
+0. **Process discipline applies ALWAYS** (`process-discipline.md` — stack-agnostic conduct law: live-surface final bar, sweep matrices, reports-as-claims, session hygiene). A declared project canon replaces the *design* doc only, never this file; projects may extend it.
+1. **Declared — always wins (design docs only).** The project's CLAUDE.md carries:
    `Engineering patterns: <path> (BINDING)`. Use THAT doc; the plugin's generic file is
    out entirely. (A project doc may itself say "extends python-patterns.md §…" — then a
    human adjudicated the layering; you never merge docs yourself.)
@@ -48,5 +49,7 @@ law); never write one speculatively for a stack no project uses.
 ## Library
 
 - `python-patterns.md` — services/CLI/persistence-shaped Python (Pydantic seams,
-  hand-rolled DI, Result seams, Command-pattern CLI). Generalized 2026-07-23.
+  hand-rolled DI, Result seams, Command-pattern CLI, output/exit contract). Generalized 2026-07-22, extended 2026-08-26.
+- `process-discipline.md` — stack-agnostic behavioral law (test process, live-surface bar, reports, session hygiene). NEVER overridden; consumed by every implementer/reviewer prompt alongside the design doc.
+- `guard-recipes.md` — copy-paste suite guards for the canon's teeth, each with its negative control.
 - `react-patterns.md` — NOT YET AUTHORED; deferred until a React project needs it.
