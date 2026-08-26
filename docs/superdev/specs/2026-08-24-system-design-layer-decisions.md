@@ -281,3 +281,6 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 **When:** 2026-08-26T04:56:41Z · **Phase:** brainstorm · **Status:** locked · **Decided by:** Tadas
 - (a) ratified: the orchestrator computes and proposes splits along existing map-row/bridge seams at the milestone co-plan; the operator ratifies; a cut with no corpus seam is a design gap (residue/session), never an improvised boundary. **Every split part must be deliverable and testable on its own** — able to run its applicable check passes and merge. **The architect is never involved in operational splitting** — it thinks holistically only.
 - **Item types acknowledged** (different tasks need different done-bars): e.g. an *architectural-foundation* item (creates the base others build on — often the unblocking kernel) vs a *surface* item (user-facing). Type determines which passes apply, never whether the item is testable at all.
+
+## Chartering closure — 2026-08-26T04:59:02Z
+**Phase:** build. D44/D45 shipped in superdev 7.8.0 (baseline a2a62 — all four axes absent → edits → GREEN af2e4, which walked the seven-item scenario with correct numbers: radius-4 split, kernel-first, 2-launch cap by operator attention, no-seam→residue, foundation done-bar exact). The chartering scatter this morning's question exposed is now one section + one reference file.

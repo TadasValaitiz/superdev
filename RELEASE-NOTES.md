@@ -1,5 +1,12 @@
 # Superdev Release Notes
 
+## v7.8.0 (2026-08-26)
+
+### Chartering — granularity and the best path (D44/D45)
+
+- **orchestrator** gains `chartering.md` + a SKILL section: the seven cutting principles (items cut from the map along corpus seams; every part independently deliverable and testable; floor/ceiling; write-surface separability; **dependencies are never parallelised — producer merges first, no contracts, no stubs**; the fan-out cap is the operator's attention) · the ticket taxonomy with per-type done-bars (foundation item — no checkride but must name the downstream item that exercises it live · surface item — checkride + scenario · ad-hoc · quick fix · backlog) · the best-path algorithm (DAG from map rows + bridges → blocking radius → split high-radius items so the **unblocking kernel** merges earliest → operator ratifies at co-plan → greedy unblocks-most-soonest scheduling within the attention budget → degenerate-kernel escape via early partial publish). The architect stays out of splitting; a cut with no corpus seam is a design gap, never an improvisation.
+- **system-design glossary** gains foundation item · surface item · blocking radius · unblocking kernel.
+
 ## v7.7.0 (2026-08-25)
 
 ### Operational scenarios — the checkride's reusable half (D42/D43)
