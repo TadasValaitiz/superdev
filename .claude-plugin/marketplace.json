@@ -1,9 +1,9 @@
 {
   "name": "superdev-dev",
-  "description": "Development marketplace for Superdev core skills library",
+  "description": "Marketplace for Superdev \u2014 the development-organisation toolchain (evolved fork of Superpowers)",
   "owner": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Tadas",
+    "email": "valaitis.t@gmail.com"
   },
   "plugins": [
     {
@@ -12,8 +12,8 @@
       "version": "7.9.0",
       "source": "./",
       "author": {
-        "name": "Jesse Vincent",
-        "email": "jesse@fsck.com"
+        "name": "Tadas (fork); original: Jesse Vincent",
+        "email": "valaitis.t@gmail.com"
       }
     }
   ]

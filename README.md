@@ -1,277 +1,45 @@
-# Superdev
+# Superdev — a development organisation for coding agents
 
-Superdev is a complete software development methodology for your coding agents, built on top of a set of composable skills and some initial instructions that make sure your agent uses them.
+A heavily evolved fork of [Superpowers by Jesse Vincent](https://github.com/obra/superpowers) (MIT — original LICENSE retained). The upstream methodology — brainstorm → spec → plan → subagent-driven build, with TDD, YAGNI and review gates — is still the engine. This fork grows it into a **development organisation**: persistent, enterable Claude sessions ("rooms") coordinated over a design corpus, built for long-running work on codebases undergoing real domain shifts.
 
+## The two layers
 
-## We're Hiring!
+**L1 — System design (boundless, human-driven).** A persistent ARCHITECT room owns the *corpus*: angle documents (deliberately partial views of the whole system), a current→target map (`KEEP / RESHAPE / REPLACE / DEFER`, with test verdicts), post-migration *vision* documents (so future design grounds on where you're going, not the legacy you're leaving), and a decision log. Nothing here ever blocks development — deferred architecture lives as greppable `MIG-MARK`/`DOC-MARK` markers until a later pass removes them.
 
-We're hiring someone to help out full time with Superdev community and code work. 
-You can read about the job at https://primeradiant.com/jobs/superdev-community-engineer/
-If this sounds like someone you know, definitely send them our way.
+**L2 — Execution (bounded, continuous).** An ORCHESTRATOR runs one milestone at a time: it cuts items from the map along corpus seams (never parallelising a dependency — parallelism is created by *splitting* blockers so their unblocking kernel merges first), charters item rooms that own their worktrees cradle-to-grave, collects design findings as *residue*, and hands the architect a clustered collection at *design checkpoints*. Item rooms always finish and merge. A FRONT DESK renders one queue for the operator, whose attention is the system's scarcest resource and is spent on exactly three things: design rulings, execution-shape agreements, and checkrides.
 
-## Quickstart
+Files are the law; messages are pointers to them. Every gate is enforced outside the node it binds.
 
-Give your agent Superdev: [Claude Code](#claude-code), [Antigravity](#antigravity), [Codex App](#codex-app), [Codex CLI](#codex-cli), [Cursor](#cursor), [Factory Droid](#factory-droid), [GitHub Copilot CLI](#github-copilot-cli), [Kimi Code](#kimi-code), [OpenCode](#opencode), [Pi](#pi).
-
-## How it works
-
-It starts from the moment you fire up your coding agent. As soon as it sees that you're building something, it *doesn't* just jump into trying to write code. Instead, it steps back and asks you what you're really trying to do. 
-
-Once it's teased a spec out of the conversation, it shows it to you in chunks short enough to actually read and digest. 
-
-After you've signed off on the design, your agent puts together an implementation plan that's clear enough for an enthusiastic junior engineer with poor taste, no judgement, no project context, and an aversion to testing to follow. It emphasizes true red/green TDD, YAGNI (You Aren't Gonna Need It), and DRY. 
-
-Next up, once you say "go", it launches a *subagent-driven-development* process, having agents work through each engineering task, inspecting and reviewing their work, and continuing forward. It's not uncommon for your agent to work autonomously for a couple hours at a time without deviating from the plan you put together.
-
-There's a bunch more to it, but that's the core of the system. And because the skills trigger automatically, you don't need to do anything special. Your coding agent just has Superdev.
-
-## Commercial Services
-
-If you're using Superdev in enterprise and could benefit from commercial support, additional tooling, or managed spending, please don't hesitate to drop us a line at sales@primeradiant.com.
-
-## Installation
-
-Installation differs by harness. If you use more than one, install Superdev separately for each one.
-
-### Claude Code
-
-Superdev is available via the [official Claude plugin marketplace](https://claude.com/plugins/superdev)
-
-#### Official Marketplace
-
-- Install the plugin from Anthropic's official marketplace:
-
-  ```bash
-  /plugin install superdev@claude-plugins-official
-  ```
-
-#### Superdev Marketplace
-
-The Superdev marketplace provides Superdev and some other related plugins for Claude Code.
-
-- Register the marketplace:
-
-  ```bash
-  /plugin marketplace add obra/superpowers-marketplace
-  ```
-
-- Install the plugin from this marketplace:
-
-  ```bash
-  /plugin install superdev@superdev-marketplace
-  ```
-
-### Antigravity
-
-Install Superdev as a plugin from this repository:
+## Install
 
 ```bash
-agy plugin install https://github.com/obra/superpowers
+claude plugin marketplace add <this-repo-or-local-path>
+claude plugin install superdev@superdev
+# in a session: /reload-plugins
 ```
 
-Antigravity runs the plugin's session-start hook, so Superdev is active from
-the first message. Reinstall with the same command to update.
+For live development, register the checkout as a directory marketplace instead — edits apply on `/reload-plugins`.
 
-### Codex App
+## Where to start
 
-Superdev is available via the [official Codex plugin marketplace](https://github.com/openai/plugins).
+- **New or existing project →** `/superdev:bootstrapping-dev-organisation` — verifies cross-session messaging, maps your existing conventions (adopt / bridge / discard, your ruling per convention), creates the corpus floor, seeds it in a design session, launches the rooms, reaches the first charter.
+- **Single task, no organisation →** just start working; the classic pipeline (brainstorming → writing-plans → subagent-driven-development) runs standalone, unchanged.
+- **Architecture-scale thinking →** `/superdev:system-design` — solo or as the architect room.
 
-- In the Codex app, click on Plugins in the sidebar.
-- You should see `Superdev` in the Coding section.
-- Click the `+` next to Superdev and follow the prompts.
+## Skill catalog
 
-### Codex CLI
+| Layer | Skills |
+|---|---|
+| Organisation | `bootstrapping-dev-organisation` · `orchestrator` (milestone machinery, chartering, checkpoints, rooms) · `system-design` (corpus, angles, markers, glossary — the shared vocabulary every skill links) |
+| Item pipeline | `brainstorming` (corpus-aware, angle-by-angle, test disposition) · `writing-plans` (execution-shape proposal → agreement auto-starts the build; plan checkpoints) · `subagent-driven-development` (broad role-carried arcs, one carrying implementer, resume-first fixes, Codex as the long-run worker) |
+| Quality gates | `cli-checkride` (executor drives the live surface; evaluator judges from the operator's seat; distills reusable scenario intents) · `test-driven-development` + `test-clearance` (what happens to tests under a domain shift: keep · regenerate · archive-then-rewrite · fix-in-place) · `verification-before-completion` · `requesting`/`receiving-code-review` · `finishing-a-development-branch` |
+| Law | `engineering-patterns` — two files with different override rules: `python-patterns.md` (per-stack **design law**, project-overridable) and `process-discipline.md` (stack-agnostic **conduct law**, never overridden), plus `guard-recipes.md` (the enforcement, copy-paste ready) |
+| Toolchain | `self-improvement` (single failures or an accumulated process-feedback ledger → operator-gated skill fixes) · `writing-skills` · `using-git-worktrees` · `systematic-debugging` · `dispatching-parallel-agents` · `executing-plans` · `self-brainstorming` |
 
-Superdev is available via the [official Codex plugin marketplace](https://github.com/openai/plugins).
+## Design record
 
-- Open the plugin search interface:
+The organisation's full design — 46+ logged decisions, the anchor spec, angle companions — lives in `docs/superdev/specs/2026-08-24-system-design-layer-design.md` and its decision log. Release history: `RELEASE-NOTES.md`.
 
-  ```bash
-  /plugins
-  ```
+## Credits & license
 
-- Search for Superdev:
-
-  ```bash
-  superdev
-  ```
-
-- Select `Install Plugin`.
-
-### Cursor
-
-- In Cursor Agent chat, install from marketplace:
-
-  ```text
-  /add-plugin superdev
-  ```
-
-- Or search for "superdev" in the plugin marketplace.
-
-### Factory Droid
-
-- Register the marketplace:
-
-  ```bash
-  droid plugin marketplace add https://github.com/obra/superpowers
-  ```
-
-- Install the plugin:
-
-  ```bash
-  droid plugin install superdev@superdev
-  ```
-
-### GitHub Copilot CLI
-
-- Register the marketplace:
-
-  ```bash
-  copilot plugin marketplace add obra/superpowers-marketplace
-  ```
-
-- Install the plugin:
-
-  ```bash
-  copilot plugin install superdev@superdev-marketplace
-  ```
-
-### Kimi Code
-
-Superdev is available in Kimi Code's plugin marketplace.
-
-- Open Kimi Code's plugin manager:
-
-  ```text
-  /plugins
-  ```
-
-- Go to `Marketplace` > `Superdev` and install it.
-
-- Or install directly from this repository:
-
-  ```text
-  /plugins install https://github.com/obra/superpowers
-  ```
-
-- Detailed docs: [docs/README.kimi.md](docs/README.kimi.md)
-
-### OpenCode
-
-OpenCode uses its own plugin install; install Superdev separately even if you
-already use it in another harness.
-
-- Tell OpenCode:
-
-  ```
-  Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
-  ```
-
-- Detailed docs: [docs/README.opencode.md](docs/README.opencode.md)
-
-### Pi
-
-Install Superdev as a Pi package from this repository:
-
-```bash
-pi install git:github.com/obra/superpowers
-```
-
-For local development, run Pi with this checkout loaded as a temporary package:
-
-```bash
-pi -e /path/to/superdev
-```
-
-The Pi package loads the Superdev skills and a small extension that injects the `using-superdev` bootstrap at session startup and again after compaction. Pi has native skills, so no compatibility `Skill` tool is required. Subagent and task-list tools remain optional Pi companion packages.
-
-## The Basic Workflow
-
-00. **bootstrapping-dev-organisation** - Activates when standing up the rooms, corpus and ledgers in a project before its first milestone; bridges existing conventions by operator ruling.
-
-0. **system-design** - Activates for architecture-scale work: the design corpus (angles, current→target map, visions, markers), operator-ruled sessions, and the shared glossary every other skill links. Item-level work consumes its corpus.
-
-1. **brainstorming** - Activates before writing code. Refines rough ideas through questions, explores alternatives, presents design in sections for validation. Saves design document.
-
-2. **using-git-worktrees** - Activates after design approval. Creates isolated workspace on new branch, runs project setup, verifies clean test baseline.
-
-3. **writing-plans** - Activates with approved design. Breaks work into bite-sized tasks (2-5 minutes each). Every task has exact file paths, complete code, verification steps.
-
-4. **subagent-driven-development** or **executing-plans** - Activates with plan. Dispatches fresh subagent per task with two-stage review (spec compliance, then code quality), or executes in batches with human checkpoints.
-
-5. **test-driven-development** - Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
-
-6. **requesting-code-review** - Activates between tasks. Reviews against plan, reports issues by severity. Critical issues block progress.
-
-7. **finishing-a-development-branch** - Activates when tasks complete. Verifies tests, presents options (merge/PR/keep/discard), cleans up worktree.
-
-**The agent checks for relevant skills before any task.** Mandatory workflows, not suggestions.
-
-## What's Inside
-
-### Skills Library
-
-**Testing**
-- **test-driven-development** - RED-GREEN-REFACTOR cycle (includes testing anti-patterns reference)
-
-**Debugging**
-- **systematic-debugging** - 4-phase root cause process (includes root-cause-tracing, defense-in-depth, condition-based-waiting techniques)
-- **verification-before-completion** - Ensure it's actually fixed
-
-**Collaboration** 
-- **brainstorming** - Socratic design refinement
-- **writing-plans** - Detailed implementation plans
-- **executing-plans** - Batch execution with checkpoints
-- **dispatching-parallel-agents** - Concurrent subagent workflows
-- **requesting-code-review** - Pre-review checklist
-- **receiving-code-review** - Responding to feedback
-- **using-git-worktrees** - Parallel development branches
-- **finishing-a-development-branch** - Merge/PR decision workflow
-- **subagent-driven-development** - Fast iteration with two-stage review (spec compliance, then code quality)
-
-**Meta**
-- **writing-skills** - Create new skills following best practices (includes testing methodology)
-- **using-superdev** - Introduction to the skills system
-
-## Philosophy
-
-- **Test-Driven Development** - Write tests first, always
-- **Systematic over ad-hoc** - Process over guessing
-- **Complexity reduction** - Simplicity as primary goal
-- **Evidence over claims** - Verify before declaring success
-
-Read [the original release announcement](https://blog.fsck.com/2025/10/09/superdev/).
-
-## Contributing
-
-The general contribution process for Superdev is below. Keep in mind that we don't generally accept contributions of new skills and that any updates to skills must work across all of the coding agents we support.
-
-1. Fork the repository
-2. Switch to the 'dev' branch
-3. Create a branch for your work
-4. Follow the `writing-skills` skill for creating and testing new and modified skills
-5. Submit a PR, being sure to fill in the pull request template.
-
-Skill-behavior tests use the drill eval harness from [superdev-evals](https://github.com/prime-radiant-inc/superpowers-evals/), cloned into `evals/` — see `evals/README.md` for setup. Plugin-infrastructure tests live at `tests/` and run via the relevant `run-*.sh` or `npm test`.
-
-See `skills/writing-skills/SKILL.md` for the complete guide.
-
-## Updating
-
-Superdev updates are somewhat coding-agent dependent, but are often automatic.
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Visual companion telemetry
-
-Because skills and plugins don't provide any feedback to creators, we have no idea how many of you are using Superdev. By default, the Prime Radiant logo on brainstorming's optional visual companion feature is loaded from our website. It includes the version of Superdev in use. It does not include any details about your project, prompt, or coding agent. We don't see your clicks or anything about what you're building. This helps us have a rough idea of how many folks are using Superdev and which version of Superdev they're using. It's 100% optional. To disable this, set the environment variable `SUPERDEV_DISABLE_TELEMETRY` to any true value. Superdev also honors Claude Code's `DISABLE_TELEMETRY` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` opt-outs.
-
-## Community
-
-Superdev is built by [Jesse Vincent](https://blog.fsck.com) and the rest of the folks at [Prime Radiant](https://primeradiant.com).
-
-- **Discord**: [Join us](https://discord.gg/35wsABTejz) for community support, questions, and sharing what you're building with Superdev
-- **Issues**: https://github.com/obra/superpowers/issues
-- **Release announcements**: [Sign up](https://primeradiant.com/superdev/) to get notified about new versions
+MIT. Built on Superpowers © 2025 Jesse Vincent (see `LICENSE`); the development-organisation layer, system-design corpus, chartering algorithm, checkride scenarios, and pattern canons are this fork's additions, operator-driven by Tadas.
