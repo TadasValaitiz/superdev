@@ -284,3 +284,8 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 
 ## Chartering closure — 2026-08-26T04:59:02Z
 **Phase:** build. D44/D45 shipped in superdev 7.8.0 (baseline a2a62 — all four axes absent → edits → GREEN af2e4, which walked the seven-item scenario with correct numbers: radius-4 split, kernel-first, 2-launch cap by operator attention, no-seam→residue, foundation done-bar exact). The chartering scatter this morning's question exposed is now one section + one reference file.
+
+## D46 — Documentation edits are verified by REVIEWS, not TDD-style baseline/GREEN pairs
+**When:** 2026-08-26T04:59:21Z · **Phase:** process · **Status:** locked · **Decided by:** Tadas (explicit override of the writing-skills baseline ritual for documentation work)
+- Skill-text and documentation edits in this stream no longer run the RED baseline → edit → GREEN compliance subagent cycle. Verification = a **fresh-eyes reviewer subagent** on the edited text (accuracy vs the ruled record, internal consistency, discoverability), fixed and re-reviewed once if blocking. The TDD-for-skills ritual remains available for *behavioural* skill changes where an observed failure genuinely calibrates the wording; the operator decides, defaulting to review.
+- **Why:** the baseline/GREEN pairs cost two subagent runs per edit and were confirming transcription accuracy, not discovering behaviour — reviews cover that cheaper.
