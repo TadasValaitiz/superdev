@@ -34,6 +34,7 @@ grep -rn "dict\[str, Any\]\|\*\*kwargs" src/*/service.py src/*/domain.py && exit
 
 ## Lambda ban in pipelines (canon §5)
 ```bash
+# in a suite test via subprocess; negative-control fixture: a file containing flow(lambda x: x)
 grep -rnE "(flow|compose|and_then)\(\s*lambda" src/ && exit 1 || exit 0
 ```
 
