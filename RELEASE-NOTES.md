@@ -1,5 +1,11 @@
 # Superdev Release Notes
 
+## v7.8.2 (2026-08-26)
+
+### Engineering-patterns canon — harvested from the calibration project's ratified law
+
+`python-patterns.md` gains: the **CLI output & exit contract** (exit map 0/1/2/3 with typed refusals naming the runnable remedy; emitted spellings guarded against the live surface; `Limits:` in --help; no derived figure without its basis; provenance kernel on listings) · **concrete-over-clever composition** (no higher-order generic drivers; named stages only, lambda ban grep-guarded across flow/compose/.and_then; typed policy-seam Protocols expressly exempt) · **typing + pipeline TEETH** — every rule names its runner: strict type-checker in-suite with per-module ratchet, AST/grep guards with negative controls, seam-inventory test, poisoned-input pipeline guards, type-check-must-fail fixtures in an excluded dir asserted by a harness test · **sweep matrices** (surface × mode × error paths; a row without its transcript is NOT RUN) · the **end-of-session sweep checklist**.
+
 ## v7.8.1 (2026-08-26)
 
 ### Holistic graph & communication audit (Fable review) — fixes

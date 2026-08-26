@@ -1,7 +1,7 @@
 # Python Engineering Patterns (generic canon)
 
 The plugin's generic design law for Python projects with a service/CLI/persistence
-shape. Generalized from an operator-ratified production canon (2026-07-23); a project's
+shape. Generalized from an operator-ratified production canon (2026-07-22); a project's
 own declared patterns doc ALWAYS supersedes this file (see SKILL.md cascade).
 
 Every section is checkable: the rule, the reasoning, and what a violation looks like.
@@ -45,7 +45,7 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
     with a per-module strictness ratchet for legacy (modules only ever get stricter);
   - a shared frozen base model (`ConfigDict(frozen=True, extra="forbid")`) is the ONLY
     ancestor for seam models — grep-guard: no bare `BaseModel` on a seam;
-  - AST/grep guards ban `dict[str, Any]`, `**kwargs`, and bare `float`/`int` money-or-units
+  - AST/grep guards ban `dict[str, Any]`, `**kwargs`, and bare unit-bearing `float`/`int`
     values in the signatures of L1/L2 public functions — guards run in the suite and each
     has a NEGATIVE CONTROL proving it fires;
   - a seam-inventory test enumerates every service entrypoint and asserts params/returns
@@ -101,15 +101,18 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   evidence ids — provenance is structural, not disciplinary.
 - One public idiom per context; don't mix pipe/flow in one module without a reason.
 - **Concrete over clever (composition law):** no higher-order generic drivers — lambdas,
-  `partial()` bindings, wide `Callable` params, and `TypeVar` chains obscure the real call
+  `partial()` bindings, wide or unparameterized `Callable` params, and `TypeVar` chains obscure the real call
   graph from humans, IDEs, static analysis, AND coding agents reconstructing the system
   from symbols. Pipelines are ordinary concrete Python: **named stage functions only**
-  (no lambdas in `flow`/`compose` calls — grep-guarded), each stage an atomic transition
+  (no lambdas passed to `flow`/`compose`/`.and_then` — grep-guarded; a named step handed
+  to `.and_then` is the idiom, an anonymous one is the violation), each stage an atomic transition
   consuming and producing immutable models. Removing a little loop duplication never
-  justifies making the call graph unrecoverable.
+  justifies making the call graph unrecoverable. (A typed policy-seam Protocol — §12 — is
+  CONCRETE, not a generic driver: its implementations are named, registered, navigable.)
 - **Teeth:** mis-order is caught by the type-checker (that is the point of typed stages —
   verify it stays true: one deliberate mis-ordering per pipeline family exists as a
-  type-check-must-fail fixture); a stage that raises instead of returning `Err` is caught
+  type-check-must-fail fixture, held in a directory EXCLUDED from the main strict run and
+  asserted by a harness test that the checker rejects it — a fixture nobody runs is a hope); a stage that raises instead of returning `Err` is caught
   by a suite guard driving each public pipeline with a poisoned input; stage models are
   append-only (predecessor's fields + own verdict) — a stage silently dropping upstream
   fields is a red completeness test.
@@ -134,7 +137,7 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   - every command string emitted in hints, refusals, or `next:` blocks must EXIST on the
     live surface — guarded by a test that greps emitted spellings against the registry;
   - a command's capability limits are declared in its own `--help` (a `Limits:` block);
-  - no derived/annualized figure is shown without its basis — payload and human mode both;
+  - no derived figure is shown without its basis — payload and human mode both;
   - listings carry a provenance kernel: a row that shows an honesty tier also shows what
     derived it; full reconstruction lives on the detail surface.
 

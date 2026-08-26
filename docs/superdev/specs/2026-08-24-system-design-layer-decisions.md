@@ -292,3 +292,6 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 
 ## Holistic-audit closure — 2026-08-26T05:09:42Z
 **Phase:** build. Fable whole-system review (acd18): verdict SOUND — graph coherent/closed, one master per node, every decision point single-owner; item↔architect batching judged a priced trade, not a bottleneck. 2 blocking + drift fixed (review a8fa3, round 2 folded): GREEN-LIGHT/DECIDE in the brief template, architect-only corpus carve, residue/PF row schemas, decision-queue naming, scenario ledger row, worktree-path correction. Shipped superdev 7.8.1 + room-graph 2.3.1.
+
+## Patterns-harvest closure — 2026-08-26T06:40:30Z
+**Phase:** build. Calibration's ratified engineering-patterns law harvested into the generic canon (operator selected: command/pipelines/results/typing/composition/hygiene — found already present; the true delta shipped: exit contract, concrete-over-clever, teeth, sweep matrices, session checklist). Review a666e: leakage clean, one blocking (fixture vs strict run) + advisories folded. superdev 7.8.2.
