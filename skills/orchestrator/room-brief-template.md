@@ -98,7 +98,7 @@ DECIDE — you need a human decision: question in the operator's words · what b
 next move if guessing · wrong-vs-redone · touched-world yes/no. The ORCHESTRATOR classifies
 (BLOCK / PROCEED-MARKED / FYI); you are blocked on that thread until CLASS arrives. The
 ANSWER reaches you by the operator attaching to YOUR room (the desk points them here; it
-never relays) or by the orchestrator relaying a RULED — either way, record RULED upward.
+never relays) or by the orchestrator relaying a RULED — record RULED upward (when the operator ruled in your room).
 R5 CLOSE — summary · residual dispositions · proposed cursor text.
 (Vocabulary mapping, if your project also reads the generic room-communication skill:
 R1 ≙ A1 READY · R3 ≙ HB; STOP-SCOPED / CORRECTION / PEER / HALT are available as defined

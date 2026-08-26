@@ -185,6 +185,7 @@ The mechanical form of "ledgers are truth; messages are pointers" (R21): every c
 | room lifecycle (execution started · green light · failed plan checkpoint) | room's reports + cursor rows | room says; orchestrator records | events to desk |
 | desk queue | `frontdesk/digest.md` | FRONT DESK | — (it IS the view) |
 | marker census | generated `design/marker-census.md` | script (either room may run; output overwritten, never hand-edited) | attached to handovers |
+| scenario intent docs | `design/scenarios/<date>-<item>-<slug>.md` (append-only, date-stamped) | item rooms, via the checkride distill step | battery re-drives at milestone close |
 | process feedback | `orchestration/process-feedback.jsonl` (append-only) | any room, own ID block; ORCHESTRATOR owns measured-facts rows and disposition | pointer per entry; consumed by `/superdev:improve` |
 
 No payload travels only in a message; when a message and its ledger disagree, the ledger wins.

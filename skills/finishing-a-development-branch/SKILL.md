@@ -213,7 +213,7 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If worktree path is under `.worktrees/`, `worktrees/`, or `.claude/worktrees/`:** Superdev created this worktree — we own cleanup. **Exception — enterable rooms:** a room retires its OWN worktree at its close gate (worktree merged AND removed before the room reports closed; the orchestrator verifies via `git worktree list`). This skill's cleanup step never removes a room's worktree from outside — the room is the creator, and the creator retires.
+**If worktree path is under `.worktrees/` or `worktrees/`:** Superdev created this worktree — we own cleanup. **Exception — enterable rooms:** a room retires its OWN worktree at its close gate (worktree merged AND removed before the room reports closed; the orchestrator verifies via `git worktree list`). This skill's cleanup step never removes a room's worktree from outside — the room is the creator, and the creator retires.
 
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
@@ -222,7 +222,7 @@ git worktree remove "$WORKTREE_PATH"
 git worktree prune  # Self-healing: clean up any stale registrations
 ```
 
-**Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
+**Otherwise** (including `.claude/worktrees/` — the harness/native path; enterable rooms live here and retire themselves at their close gate via the native exit): The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
 ## Quick Reference
 

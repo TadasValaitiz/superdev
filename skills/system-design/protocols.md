@@ -10,7 +10,7 @@ Every protocol: a ledger with one writer (or ID blocks), plus a pointer message.
 disposition live in the checkpoint handover's cluster list, which cites row ids — that
 document IS the disposition record.
 
-`orchestration/process-feedback.jsonl` — same shape discipline:
+`orchestration/process-feedback.jsonl` — same shape discipline (rooms write their own rows in their ID blocks; the ORCHESTRATOR alone writes `measured` rows and owns disposition):
 `{"id": "PF-<ROOM|ORCH>-<n>", "date": "...", "kind": "brief-gap|friction|measured", "skill": "<implicated skill or null>", "summary": "...", "values": {<measured facts>|null}}`
 
 ## The design-checkpoint handover (orchestrator → architect) {#checkpoint-handover}
