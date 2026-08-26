@@ -36,6 +36,10 @@ One table, one meaning per word, across every skill that touches the development
 | **harvest file** | the business requirements extracted from tests BEFORE archiving; reviewer-signed; the source for rewrite-territory requirement tests |
 | **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like) in `design/scenarios/` — distilled from a checkride, re-driven by the battery; never a replayable script |
 | **battery** | the milestone-close ad-hoc room that walks every scenario intent against the current surface |
+| **foundation item** | an item building the base others consume (often an unblocking kernel); testable and mergeable but usually surface-less — no checkride, but its charter names the downstream item that will exercise it live |
+| **surface item** | an item changing what the operator sees/touches — checkride + scenario capture in its done-bar |
+| **blocking radius** | an item's transitive dependents in the milestone DAG — the number it holds hostage |
+| **unblocking kernel** | the minimal foundation part of a high-radius item that, merged first, releases its dependents |
 | **gate receipt** | the evidence line a plan checkpoint or the close gate records: tests run, marker delta, map rows claimed |
 
 ## Kept unchanged

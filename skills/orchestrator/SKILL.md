@@ -112,6 +112,17 @@ intents, never scripts), an evaluator judges each against its what-good-looks-li
 verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
 milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
 
+## Chartering — granularity and the best path
+
+Cutting the milestone into items and finding the launch order is an ALGORITHM, not a feel
+(D44/D45): items are cut from the map along corpus seams into independently deliverable,
+testable units; **dependencies are never parallelised — the producer merges first**;
+parallelism is created by SPLITTING high-blocking items so their unblocking kernel merges
+earliest; scheduling is greedy on "unblocks the most work soonest", capped by the operator's
+attention. Types (foundation · surface · ad-hoc · quick fix · backlog) carry different
+done-bars. Full taxonomy, principles and the algorithm: [chartering.md](chartering.md);
+the operator ratifies the graph + splits at the co-plan.
+
 ## The system-design layer (binds whenever the project has a `design/` corpus)
 
 When a design corpus exists (see superdev:system-design — the glossary there is the shared
