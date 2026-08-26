@@ -2,6 +2,17 @@
 
 Every protocol: a ledger with one writer (or ID blocks), plus a pointer message. When a message and its ledger disagree, the ledger wins.
 
+## Residue rows and process-feedback rows — the schemas {#row-schemas}
+
+`design/residue/residue.jsonl` — append-only; any room, own ID block; ONE JSON object per line:
+`{"id": "R-<ROOM>-<n>", "date": "YYYY-MM-DD", "room": "...", "kind": "discrepancy|insight|duplicate-risk|design-gap", "ref": "<map row / angle / file:line>", "summary": "<one line>", "marker": "<MIG-MARK id or null>"}`
+**Disposition never edits the jsonl** (it is append-only): the orchestrator's clustering and
+disposition live in the checkpoint handover's cluster list, which cites row ids — that
+document IS the disposition record.
+
+`orchestration/process-feedback.jsonl` — same shape discipline:
+`{"id": "PF-<ROOM|ORCH>-<n>", "date": "...", "kind": "brief-gap|friction|measured", "skill": "<implicated skill or null>", "summary": "...", "values": {<measured facts>|null}}`
+
 ## The design-checkpoint handover (orchestrator → architect) {#checkpoint-handover}
 
 `design/residue-collections/<date>-checkpoint-<n>.md`, orchestrator single-writer. Declared from **rule + green lights + feel**. Three parts and a question:

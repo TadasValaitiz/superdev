@@ -82,7 +82,7 @@ sub-agents inherit the HOME paragraph verbatim; heartbeat every commit-batch / ~
 
 REPORTING (to "⟨orchestrator session name⟩" via SendMessage):
 R0 START — after grounding: what you read · worktree state · first move.
-R1 DESIGN-READY — doc path + rulings needed → ⟨SELF: WAIT for relayed ratification;
+R1 DESIGN-READY — doc path + rulings needed → ⟨SELF: WAIT at the ratification gate as a desk DECIDE (answer arrives per the DECIDE rule below);
    HYBRID: keep flowing on details; HIL: send as a record — the human ruled in-session⟩.
 R2 PLAN — plan summary before implementation (tasks · cutover scope · removal list).
 PRE-SPAWN — before dispatching your own subagents: what and why.
@@ -92,7 +92,17 @@ R-H HOLISTIC CHECKPOINT (hybrid) — the HOLISTIC-PROVISIONAL batch + current sh
    it grows; keep flowing, never wait on R-H.
 R4 PRE-PUBLISH — gate output + diff stat + checkride verdict + deviation/acceptance AUDIT
    verdict (an unlogged deviation blocks publish) → then self-publish + confirm.
+GREEN-LIGHT — you have nothing more to contribute to the CURRENT arc (not a close; you
+stay open for fixes/reviews): which arc · why exhausted. A checkpoint input.
+DECIDE — you need a human decision: question in the operator's words · what blocks · your
+next move if guessing · wrong-vs-redone · touched-world yes/no. The ORCHESTRATOR classifies
+(BLOCK / PROCEED-MARKED / FYI); you are blocked on that thread until CLASS arrives. The
+ANSWER reaches you by the operator attaching to YOUR room (the desk points them here; it
+never relays) or by the orchestrator relaying a RULED — either way, record RULED upward.
 R5 CLOSE — summary · residual dispositions · proposed cursor text.
+(Vocabulary mapping, if your project also reads the generic room-communication skill:
+R1 ≙ A1 READY · R3 ≙ HB; STOP-SCOPED / CORRECTION / PEER / HALT are available as defined
+there and mean the same here.)
 STOP (immediately): contradiction with a human lock · gate red you can't triage in scope ·
 anything touching outside your worktree.
 ```

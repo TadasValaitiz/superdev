@@ -130,7 +130,7 @@ The bounded world-keeper: charters, collects, checkpoints, pauses, closes.
 The only place code changes; bounded, finishing, honest about what it deferred.
 
 - **Design:** the operator's arc inside the room is fixed (D29): brainstorm → plan → execution-shape **agreement — the trigger and the mode flip**: the room is HIL from brainstorm through agreement, autonomous after; execution auto-starts on the agreement whether or not the operator stays to watch (writing-plans hands off; subagent-driven-development auto-enters). Chartered with the operator away → `self-brainstorming` to its ratification gate, waiting there as a desk DECIDE (D30). Plan checkpoints are cleared by the room's reviewer role; only a failed one emits an event. Chartered per item; owns its worktree end to end (create → SDD → FF-CAS merge → retire — D7, the close gate). Reads the corpus at brainstorm (grounds on **visions** where the map says change — D12); resolves arch-vs-code discrepancies **locally** (it knows the present best — D5), planting `MIG-MARK`s where the clean fix belongs to a later pass (D3), filing residue rows for anything design-class (never resolving L1 forks locally — R13). Test disposition per D16 is a mandatory brainstorm output. Always finishes and merges (R8). Internals (role-split implementer/reviewer/follow-up, wider tasks, corpus-awareness vs planning) are D10/D16's follow-on deep-dive (R22) — this design fixes only the room's *contract*.
-- **Interface / contract:** in — a charter (map rows, test disposition, probe ref, bridges); out — merged code, removed worktree, MIG-MARKs, residue rows, process-feedback rows, the item spec + item angles + item decision log, the archived-test manifest + harvest file, RESUME metadata in every subagent report, and an R5 debrief with a green-light line. Nothing else crosses its boundary. (The resume registry itself is room-internal SDD machinery at `.superdev/sdd/` — deliberately outside §5.10, which scopes cross-room ledgers only.)
+- **Interface / contract:** in — a charter (map rows, test disposition, probe ref, bridges); out — merged code, removed worktree, MIG-MARKs, residue rows, process-feedback rows, the item spec + item angles + item decision log, the archived-test manifest + harvest file, RESUME metadata in every subagent report, the date-stamped scenario intent doc for changed surfaces (D43), and an R5 debrief with a green-light line. Nothing else crosses its boundary. (The resume registry itself is room-internal SDD machinery at `.superdev/sdd/` — deliberately outside §5.10, which scopes cross-room ledgers only.)
 - **Serves:** R7, R8, R13, R20, R22, R25–R28 · **Governed by:** D3, D5, D7, D10, D16, D26–D32 · **Realizes:** UC3, UC8, UC9, UC11
 
 ### 5.6 The marker system
@@ -176,12 +176,12 @@ The mechanical form of "ledgers are truth; messages are pointers" (R21): every c
 | Protocol | Ledger path | Writer | Message |
 |---|---|---|---|
 | design authority | `design/angles/` · `design/visions/` · `design/map.md` · `design/decisions.md` | ARCHITECT only | pointer on change |
-| residue | `design/residue/residue.jsonl` (append-only) | any room, own ID block; orchestrator owns disposition column | pointer per row |
+| residue | `design/residue/residue.jsonl` (append-only; row schema in system-design `protocols.md#row-schemas`) | any room, own ID block; disposition lives in the handover's cluster list (the jsonl is never edited) | pointer per row |
 | design-checkpoint handover | `design/residue-collections/<date>-checkpoint-<n>.md` | ORCHESTRATOR | pointer to architect |
 | checkpoint response + agenda | `…-checkpoint-<n>-response.md` | ARCHITECT | pointer back |
 | conformance report | `design/conformance/<item>.md` | ARCHITECT | pointer to orchestrator (advisory) |
 | milestone handoff | `design/handoffs/<milestone>.md` | ORCHESTRATOR + ARCHITECT (two sections, one writer each) | pointer to operator via desk |
-| cursor · charters · pause events | `orchestration/…` | ORCHESTRATOR | events to desk |
+| cursor · charters · pause events · decision queue (`orchestration/decision_queue.md` — its one canonical name) | `orchestration/…` | ORCHESTRATOR | events to desk; the desk re-renders on each event and at cycle phases (no polling needed, none forbidden) |
 | room lifecycle (execution started · green light · failed plan checkpoint) | room's reports + cursor rows | room says; orchestrator records | events to desk |
 | desk queue | `frontdesk/digest.md` | FRONT DESK | — (it IS the view) |
 | marker census | generated `design/marker-census.md` | script (either room may run; output overwritten, never hand-edited) | attached to handovers |
