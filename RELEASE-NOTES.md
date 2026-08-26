@@ -1,5 +1,11 @@
 # Superdev Release Notes
 
+## v7.8.1 (2026-08-26)
+
+### Holistic graph & communication audit (Fable review) — fixes
+
+Brief template gains GREEN-LIGHT and DECIDE (with the classification/answer return path and the cross-plugin vocabulary mapping) — rooms can now green-light an arc and raise decisions in superdev vocabulary alone. Residue and process-feedback **row schemas** defined (`system-design/protocols.md#row-schemas`); disposition lives in the handover's cluster list, never edits the append-only jsonl. Decision queue gets one canonical name and the desk's re-render trigger. Anchor §5.5/§5.10 carry the scenario doc output and its ledger row. Finishing keeps `.claude/worktrees/` harness-owned (rooms retire at their own close gate). Companion room-graph-orchestration 2.3.1: architect-only corpus paths carved in the dev-organisation template; DESIGN column's three entry kinds; GREEN-LIGHT/CORRECTION in the description roll-call.
+
 ## v7.8.0 (2026-08-26)
 
 ### Chartering — granularity and the best path (D44/D45)
