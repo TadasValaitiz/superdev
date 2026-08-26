@@ -36,13 +36,13 @@ Subagent (general-purpose):
 
     ## The output & exit contract is part of your rubric
 
-Where the project's governing patterns doc carries the CLI output & exit contract (the
-generic canon §6 does), judge against it explicitly: exit codes match the map (0/1/2/3);
-every refusal names a RUNNABLE remedy; command strings in hints/refusals exist on the live
-surface; limits declared in --help; no derived figure without its basis; listings carry the
-provenance kernel. A contract violation is a finding, not a style note.
+    Where the project's governing patterns doc carries the CLI output & exit contract (the
+    generic canon §6 does), judge against it explicitly: exit codes match the map (0/1/2/3);
+    every refusal names a RUNNABLE remedy; command strings in hints/refusals exist on the live
+    surface; limits declared in --help; no derived figure without its basis; listings carry the
+    provenance kernel. A contract violation is a finding, not a style note.
 
-## Verdict
+    ## Verdict
 
     **PASS** only when you would hand this surface to the operator as-is. Otherwise file
     findings — each: what (command + evidence from the transcript) · why it matters TO THE

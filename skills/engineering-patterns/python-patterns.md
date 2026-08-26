@@ -107,7 +107,7 @@ L4  shell              CLI leaves, wiring, runtimes        deps: everything; ZER
   (no lambdas passed to `flow`/`compose`/`.and_then` — grep-guarded; a named step handed
   to `.and_then` is the idiom, an anonymous one is the violation), each stage an atomic transition
   consuming and producing immutable models. Removing a little loop duplication never
-  justifies making the call graph unrecoverable. (A typed policy-seam Protocol — §12 — is
+  justifies making the call graph unrecoverable. (A typed policy-seam Protocol — §11 — is
   CONCRETE, not a generic driver: its implementations are named, registered, navigable.)
 - **Teeth:** mis-order is caught by the type-checker (that is the point of typed stages —
   verify it stays true: one deliberate mis-ordering per pipeline family exists as a
@@ -190,6 +190,7 @@ which applies ALWAYS and is not overridden by a project's design canon.)
   doesn't run is a hope.
 - Prefer real substrate in isolated per-test namespaces over hand-rolled fakes when
   the project supports it — no `Fake*Repo` drift to maintain.
+
 ## 11. Policy seams — switchable logic is a named abstraction
 
 Wherever behavior could plausibly be switched by different policies, rules, or

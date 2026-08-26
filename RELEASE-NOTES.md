@@ -1,5 +1,11 @@
 # Superdev Release Notes
 
+## v7.9.0 (2026-08-26)
+
+### Design law vs process discipline — the split
+
+`engineering-patterns` now holds two laws with different override rules: `python-patterns.md` (per-stack DESIGN law — a project's declared canon replaces it) and **`process-discipline.md`** (stack-agnostic CONDUCT law — TDD evidence, the live-surface final bar + sweep matrices, reports-as-claims, session hygiene — **never overridden**, wired into writing-plans' Global Constraints, both SDD prompts, the code reviewer, and room briefs). New `guard-recipes.md`: copy-paste suite guards for the canon's teeth, each with a negative control. The cli-checkride evaluator's rubric now cites the output & exit contract explicitly.
+
 ## v7.8.2 (2026-08-26)
 
 ### Engineering-patterns canon — harvested from the calibration project's ratified law

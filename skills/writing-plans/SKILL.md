@@ -102,7 +102,7 @@ slow tier is NEVER one invocation — it lives in the scheduled sweep.
 
 **Engineering patterns** (REQUIRED line — resolved via the engineering-patterns
 skill's cascade: project CLAUDE.md declaration > stack detection > none):
-`<path to governing doc>` (BINDING) — or "none declared/detected". Implementers
+`<path to governing doc>` (BINDING) — or "none declared/detected" — **plus `engineering-patterns/process-discipline.md` (ALWAYS; never overridden by a project canon)**. Implementers
 read it before coding; knowing departures are reportable deviations. Task
 Read-first lines cite the specific sections a task lives in.
 

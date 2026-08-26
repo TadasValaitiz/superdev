@@ -33,9 +33,9 @@ un-adjudicated contradictions paralyze implementers or make them pick randomly.
 
 | Stage | Mechanism |
 |---|---|
-| writing-plans | Global Constraints carries the REQUIRED `Engineering patterns:` line (resolved path + BINDING/none). Task Read-first lines cite the *specific sections* a task lives in. |
-| Implementer subagent | The prompt's BINDING line: read the doc before coding; code follows it; a knowing departure is a reportable deviation (→ decision log → deviation audit). |
-| Task reviewer | Conformance check: diff the code against the declared doc's sections — the doc is the quality bar, not reviewer taste. |
+| writing-plans | Global Constraints carries the REQUIRED `Engineering patterns:` line (resolved design doc + BINDING/none) **plus `process-discipline.md` (ALWAYS)**. Task Read-first lines cite the *specific sections* a task lives in. |
+| Implementer subagent | The prompt's BINDING line: read the design doc AND `process-discipline.md` before coding; code follows both; a knowing departure is a reportable deviation (→ decision log → deviation audit). |
+| Task reviewer | Conformance check: diff the code against the declared design doc's sections and the conduct against `process-discipline.md` — the docs are the quality bar, not reviewer taste. |
 | Final code reviewer | Same conformance check at whole-branch scope. |
 
 ## Adding a stack

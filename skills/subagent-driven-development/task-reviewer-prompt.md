@@ -93,8 +93,9 @@ Subagent (general-purpose):
     ## Part 2: Code Quality
 
     **Code quality:**
-    - Conforms to the governing engineering-patterns doc (path in the plan's
-      Global Constraints)? Check the diff against its sections and cite the
+    - Conforms to the governing engineering-patterns design doc (path in the plan's
+      Global Constraints) AND to `engineering-patterns/process-discipline.md` (conduct:
+      evidence, transcripts, leftovers)? Check the diff against its sections and cite the
       violated section in any finding — the doc is the quality bar, not taste.
     - Clean separation of concerns?
     - Proper error handling?

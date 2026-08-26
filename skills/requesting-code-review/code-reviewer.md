@@ -53,7 +53,7 @@ Subagent (general-purpose):
     - Is all planned functionality present?
 
     **Code quality:**
-    - Whole branch conforms to the governing engineering-patterns doc (path in
+    - Whole branch conforms to the governing engineering-patterns design doc (and process-discipline.md for conduct) (path in
       the plan's Global Constraints)? Cite the violated section per finding.
     - Clean separation of concerns?
     - Proper error handling?

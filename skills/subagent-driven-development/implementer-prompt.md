@@ -38,7 +38,7 @@ Subagent (general-purpose):
     [The governing patterns doc from the plan's Global Constraints — path +
     "read §X, §Y before coding" for the sections this task lives in. Omit the
     block entirely only when the plan says none declared/detected.]
-    Your code FOLLOWS the doc. A knowing departure is a reportable deviation:
+    Also read `engineering-patterns/process-discipline.md` — it applies ALWAYS, even when no design doc governs. Your code FOLLOWS the doc(s). A knowing departure is a reportable deviation:
     name it and why in your report — it must reach the decision log.
 
     ## Before You Begin

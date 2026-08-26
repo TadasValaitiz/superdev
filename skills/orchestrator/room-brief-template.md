@@ -30,7 +30,7 @@ writing-plans → subagent-driven-development (TDD; gate = ⟨fast-suite command
 finishing-a-development-branch (fast + area-slow tests → checkride if the surface changed →
 human-approved merge to main).
 
-RULES: never invent a number; divergence from a design decision = surface it to me; follow
+RULES: `engineering-patterns/process-discipline.md` binds this room (evidence, transcripts, session sweep); never invent a number; divergence from a design decision = surface it to me; follow
 the governing engineering-patterns doc.
 ```
 

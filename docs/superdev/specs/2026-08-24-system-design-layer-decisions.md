@@ -295,3 +295,6 @@ Appended, not rewritten (the log is append-only). These are the arbitration trig
 
 ## Patterns-harvest closure — 2026-08-26T06:40:30Z
 **Phase:** build. Calibration's ratified engineering-patterns law harvested into the generic canon (operator selected: command/pipelines/results/typing/composition/hygiene — found already present; the true delta shipped: exit contract, concrete-over-clever, teeth, sweep matrices, session checklist). Review a666e: leakage clean, one blocking (fixture vs strict run) + advisories folded. superdev 7.8.2.
+
+## Canon-split closure — 2026-08-26T07:17:01Z
+**Phase:** build. Operator ruling: procedural/behavioral elements split from design patterns. Shipped 7.9.0: python-patterns (design only, §10 test design, §11 policy seams) · process-discipline (never overridden; wired into every consumer prompt — the review caught it reaching none) · guard-recipes (turnkey teeth) · evaluator rubric cites the exit contract. Review aae12: split integrity verbatim-clean; four blockers folded (dangling §12, stale checkride pointer, unwired process file, YAML-breaking indent).

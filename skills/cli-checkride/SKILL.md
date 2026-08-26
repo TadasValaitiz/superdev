@@ -6,7 +6,7 @@ description: Use as the validation gate for any branch/area that changed a user-
 # CLI Checkride — driven live, judged from the operator's seat
 
 A green suite has shipped 100× render bugs and structurally-unreachable gates. The checkride
-is the *active* form of "the real surface is the final bar" (engineering-patterns §10): not
+is the *active* form of "the real surface is the final bar" (engineering-patterns `process-discipline.md` §2): not
 "is there a receipt?" but "drive it, watch it, judge it as the operator would."
 
 ## When
