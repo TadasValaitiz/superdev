@@ -39,7 +39,7 @@ Close gate reads directly off this table: every in-milestone row `done/ruled`, e
 row `filed` (with its ticket reference). A row without routing is un-triaged work — the
 table must never hold one at close.
 
-## 4. The ratification queue (human-facing)
+## 4. The decision queue (`orchestration/decision_queue.md`) (human-facing)
 
 Everything awaiting the human, in one place, so an altitude touchpoint is a ruling session
 over an organized queue, not archaeology: pending self-room design docs · R-H holistic
