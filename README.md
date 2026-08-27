@@ -12,13 +12,33 @@ Files are the law; messages are pointers to them. Every gate is enforced outside
 
 ## Install
 
+From GitHub (any machine):
+
 ```bash
-claude plugin marketplace add <this-repo-or-local-path>
-claude plugin install superdev@superdev
-# in a session: /reload-plugins
+claude plugin marketplace add TadasValaitiz/superdev
+claude plugin install superdev@superdev-dev
+claude plugin details superdev        # → 7.9.x, skill inventory
+# then, inside any running session:  /reload-plugins
 ```
 
-For live development, register the checkout as a directory marketplace instead — edits apply on `/reload-plugins`.
+(The marketplace name comes from `.claude-plugin/marketplace.json` — `superdev-dev`; if `claude plugin install` suggests a different `<plugin>@<marketplace>` id, use the one it prints.)
+
+From a local checkout (live development — edits apply on `/reload-plugins`, no reinstall):
+
+```bash
+git clone https://github.com/TadasValaitiz/superdev ~/Projects/superdev
+claude plugin marketplace add ~/Projects/superdev
+claude plugin install superdev@superdev-dev
+```
+
+To update after new commits land:
+
+```bash
+claude plugin marketplace update superdev-dev
+claude plugin update superdev@superdev-dev
+```
+
+**Prerequisite for the room layer** (orchestrator / architect / item rooms): `~/.claude/settings.json` must contain `"crossSessionInbound": "accept"` — without it rooms launch, look healthy, and their messages are silently held. The bootstrap skill checks this for you. Requirements otherwise: the `claude` CLI, git, python3. No other plugins needed — superdev is standalone.
 
 ## Where to start
 
