@@ -163,7 +163,7 @@ The status result includes:
 ```json
 {
   "status": "ready",
-  "service_version": "7.11.0",
+  "service_version": "8.1.0",
   "pid": 12345,
   "app_server_pid": 12346,
   "listener": "ws://127.0.0.1:4500",

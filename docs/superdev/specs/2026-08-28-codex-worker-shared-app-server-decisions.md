@@ -452,3 +452,59 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** implementation file map, task ordering, compatibility shims, structural tests.
 - **Revisit-when:** the package adopts Pydantic for an independently justified feature or the
   strict dataclass machinery can be replaced without coupling to a topology migration.
+
+## D19 — Reconcile the split 8.0.0 release baseline, then ship this feature as 8.1.0
+**When:** 2026-08-28T18:35:00Z · **Phase:** plan · **Status:** provisional (autonomous release decision)
+**Decided by:** author after the plan reviewer measured divergent version authorities
+
+- **Trigger:** the approved design originally illustrated 7.11.0, but current main has the
+  Claude plugin and marketplace at 8.0.0 while six other declared authorities, including the
+  UV tool, remain 7.10.0. Treating 7.11.0 as an advance would downgrade the shipping plugin.
+- **Options weighed:**
+  - A: ship 7.11.0 everywhere — gains the old plan target / sacrifices monotonic plugin versioning.
+  - B: ship 8.0.1 — gains a patch increment / understates a public architecture and CLI migration.
+  - C: first reconcile every lower declaration to the already-shipping 8.0.0 baseline, verify
+    the coupled check/audit, then advance all eight together to 8.1.0 — gains monotonic truthful
+    identity / costs one explicit baseline-reconciliation commit.
+- **Decided:** C. The reconciliation commit changes only the six lower declarations and any
+  generated public version line; the feature release then uses the ordinary atomic bump to 8.1.0.
+  No install occurs between those two commits.
+- **Rests on:** measured 2026-08-28 manifest values; global-install exact-version contract;
+  non-editable UV package identity.
+- **Affects:** plan release task, version tests, release notes, install/checkride provenance.
+- **Revisit-when:** main changes any declared version again before the release task begins; remeasure
+  and choose the next monotonic minor from the highest shipping authority.
+
+## D20 — Migrate callback state as a pre-readiness idempotent transaction
+**When:** 2026-08-28T18:35:00Z · **Phase:** plan · **Status:** provisional (autonomous persistence detail)
+**Decided by:** author after the plan reviewer exposed the callback/outbox/artifact gap
+
+- **Trigger:** legacy callback stores include immutable bindings, pending/written outbox entries,
+  legacy `WorkerView.instance` fields, and terminal-reference payloads pointing at absolute
+  per-instance artifacts. Importing only the registry would strand callbacks; independently
+  replacing several files cannot be one filesystem-atomic operation.
+- **Options weighed:**
+  - A: migrate bindings only — gains simplicity / loses pending terminal delivery and artifacts.
+  - B: leave callbacks in legacy directories and route by source — preserves bytes / keeps the
+    removed instance namespace alive and makes source retirement impossible.
+  - C: validate and canonicalize the complete merge before readiness; publish verified artifacts,
+    then registry, callback store and a completion ledger in an idempotent ordered transaction;
+    a crash reruns from untouched sources before serving — preserves semantics and removes routing
+    dependence on legacy roots / costs explicit compatibility readers and canonical rewrite.
+- **Decided:** C. Only callbacks for imported/deduplicated worker sessions migrate. Bindings keyed
+  by session ID and outbox entries keyed by event ID deduplicate only when canonical bytes match;
+  a mismatch quarantines the associated worker candidate. Pending events are upgraded to the new
+  global worker projection. Referenced artifacts must be owner-only regular files beneath their
+  declared legacy artifact root and match stored digest/size; they are parsed, projected without
+  instance routing, and republished content-addressed under the global artifact root. Written
+  entries retain their attempt history and no event body. All sources remain untouched.
+- **Transaction order:** prevalidate every source and target collision; stage canonical artifacts;
+  insert-or-verify artifacts; atomically write+fsync global registry; atomically write+fsync global
+  callback store; atomically write+fsync the migration completion ledger last. The service is not
+  ready during migration. Missing/incomplete ledger on restart reruns the same plan idempotently,
+  repairing any prefix before clients can observe it.
+- **Rests on:** D14 no-delete migration, callback store insert-or-verify behavior, global service
+  pre-readiness gate, process-discipline reconstructability law.
+- **Affects:** `ServicePaths`, legacy compatibility models, migration planner/commit order, callback
+  store import API, artifact evidence and AH7/AH9.
+- **Revisit-when:** callbacks move into one transactional database with registry/migration state.

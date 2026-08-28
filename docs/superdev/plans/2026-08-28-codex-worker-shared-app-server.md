@@ -17,7 +17,7 @@
 - Angle companions: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-angle-01-service-ownership.md`; `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-angle-02-shared-control.md`; `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-angle-03-identity-and-cli.md`; `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-angle-04-lifecycle-and-migration.md`
 - Census: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-census.md`
 - Domain model: design §5.3
-- CLI surface: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-cli-surface.md`
+- CLI surfaces: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-cli-surface.md`; inherited raw contract `docs/superdev/specs/2026-08-18-codex-worker-server-cli-surface.md`; `docs/superdev/specs/2026-08-19-codex-worker-command-ergonomics-cli-surface.md`; `docs/superdev/specs/2026-08-20-codex-worker-claude-callbacks-cli-surface.md`; `docs/superdev/specs/2026-08-28-codex-worker-global-install-cli-surface.md`
 - Prior art: `docs/superdev/specs/2026-08-28-codex-worker-global-install-design.md`; `docs/superdev/plans/2026-08-28-codex-worker-global-install.md`; `docs/superdev/specs/2026-08-20-codex-worker-claude-callbacks-design.md`; `docs/superdev/specs/2026-08-19-codex-worker-command-ergonomics-design.md`; `docs/superdev/specs/2026-08-18-codex-worker-server-design.md`
 
 ## Global Constraints
@@ -30,21 +30,21 @@
 - Legacy instance data is read-only input: unique records import, identical records deduplicate, divergent names quarantine, and no source is deleted.
 - Python floor is 3.9. The isolated PEP 621 tool adds only `websockets>=15,<16`; the plugin itself remains dependency-free outside that tool environment.
 - Existing strict one-JSON-object stdout, stderr, exit-code, security, callback, model-selection, raw proxy, durability, and exact-version contracts remain unless the CLI companion explicitly changes them.
-- Release target is `7.11.0`, advanced atomically across all eight declared authorities only after the fresh checkride passes.
+- Release target is `8.1.0` under D19: first reconcile the six measured 7.10.0 declarations to the already-shipping 8.0.0 baseline without installation, then advance all eight authorities atomically only after the fresh checkride passes.
 
-**Test lanes:** fast (the gate): `python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py'` plus focused repository shell/package tests touched by the commit · slow-by-area (separate killable commands): `python3 tests/codex-worker/live_broker_check.py --scenario <name>`, `python3 tests/codex-worker/live_uv_tool_check.py --scenario <name>`, `bash tests/codex-worker/live_claude_check.sh`, real two-client Codex/TUI protocol probe, and CLI checkride executor/evaluator · scheduled sweep: none declared. Every commit gate runs the warning-strict fast suite; slow scenarios run separately only at their owning checkpoint and finishing gate.
+**Test lanes:** fast (the gate): `python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py'` plus focused repository shell/package tests touched by the commit · slow-by-area (separate killable commands): the six exact `live_broker_check.py --scenario` names in Task 5, `python3 tests/codex-worker/live_uv_tool_check.py --scenario package-independence`, `bash tests/codex-worker/live_claude_check.sh`, the common-attach real two-client Codex/TUI probe, and CLI checkride executor/evaluator · scheduled sweep: none declared. Every commit gate runs the warning-strict fast suite; slow scenarios run separately only at their owning checkpoint and finishing gate.
 
 **Engineering patterns:** `skills/engineering-patterns/python-patterns.md` (BINDING by stack detection), with the bounded D18 strict-dataclass exception, plus `skills/engineering-patterns/process-discipline.md` (ALWAYS). Implementers read the cited sections before coding and report every knowing departure.
 
 ## The Through-Line
 
-The registry and identity arc is load-bearing: it removes session-derived infrastructure and creates one truthful global durable root before transport or CLI code can rely on it. The transport arc then replaces stdio with a private initialized WebSocket client and a transparent public gateway, sharing one maintenance gate across worker and TUI mutations. Once those two interfaces exist, the orchestration arc can reconcile TUI-originated events, inventory every active upstream thread, and preserve callback behavior. The public-surface arc finally rewires lifecycle, faults, RPC and CLI around the singleton without leaking transport mechanics. The last arc teaches and packages the finished behavior, proves it through real Codex/Claude/checkride lanes, bumps 7.11.0, installs the UV tool, and deliberately leaves the global service running.
+The registry and identity arc is load-bearing: it removes session-derived infrastructure and creates one truthful global durable root before transport or CLI code can rely on it. The transport arc then replaces stdio with a private initialized WebSocket client and a transparent public gateway, sharing one maintenance gate across worker and TUI mutations. Once those two interfaces exist, the orchestration arc can reconcile TUI-originated events, inventory every active upstream thread, and preserve callback behavior. The public-surface arc finally rewires lifecycle, faults, RPC and CLI around the singleton without leaking transport mechanics. The experience arc teaches and acceptance-gates the finished behavior through real Codex, Claude and checkride lanes. Only then does the release arc reconcile the measured split baseline, bump 8.1.0, install the UV tool, and deliberately leave the global service running.
 
-Tasks 1 and 2 are LOAD-BEARING because every later task consumes their exact paths, models, connection and maintenance interfaces. Tasks 3 and 4 are the behavioral composition: neither may invent a second state authority or bypass the gate. Task 5 is a release gate, not a place to repair architecture silently. If reality breaks an interface, follow the decision log's revisit hook, append a build-phase D#, update downstream Consumes/Produces, and keep locked D1–D11 intact.
+Tasks 1 and 2 are LOAD-BEARING because every later task consumes their exact paths, models, connection and maintenance interfaces. Tasks 3 and 4 are the behavioral composition: neither may invent a second state authority or bypass the gate. Task 5 acceptance-gates the behavior; Task 6 releases exactly that judged candidate and is not a place to repair architecture silently. If reality breaks an interface, follow the decision log's revisit hook, append a build-phase D#, update downstream Consumes/Produces, and keep locked D1–D11 intact.
 
 ## Acceptance (anchored — do not restate here)
 
-This plan discharges design UC1–UC10 and AH1–AH12. Each checkpoint writes rerunnable receipts into the anchor §9 cells for its owned hints. C1 owns AH5/AH7/AH11 foundations; C2 owns AH1/AH3/AH4/AH6/AH8/AH9 foundations; C3 owns every live receipt and AH2/AH10/AH12. No hint may be marked by a plan assertion alone.
+This plan discharges design UC1–UC10 and AH1–AH12. Each checkpoint writes rerunnable receipts into the anchor §9 cells for its owned hints. C1 owns AH5/AH7/AH11 foundations; C2 owns AH1/AH3/AH4/AH6/AH8/AH9 foundations; C3 owns every live receipt and AH2/AH10/AH12; C4 verifies the installed candidate without changing those judgments. No hint may be marked by a plan assertion alone.
 
 | Anchor item | Producing task and receipt |
 |---|---|
@@ -56,10 +56,10 @@ This plan discharges design UC1–UC10 and AH1–AH12. Each checkpoint writes re
 | UC6 / AH6 | Tasks 2–4 produce drain/inventory/version replacement; Task 5 records idle and active lanes. |
 | UC7 / AH7 | Task 1 produces migration; Tasks 1 and 5 record fixture and live-sanitized receipts. |
 | UC8 / AH8 | Tasks 2–4 produce guarded maintenance; Task 5 checkride records help/refusal/full impact. |
-| UC9 / AH9 | Tasks 1 and 3 preserve callback independence; Task 5 records cross-session delivery plus TUI control. |
-| UC10 / AH10 | Tasks 2 and 4 preserve the full command surface; Task 5 records Python 3.9 UV and unrelated-cwd use. |
+| UC9 / AH9 | Tasks 1 and 3 preserve callback independence; Task 5 records one composed same-worker callback-plus-TUI-control journey. |
+| UC10 / AH10 | Tasks 2 and 4 preserve the full command surface; Task 5 records every common/raw family from an unrelated cwd under an isolated Python 3.9 UV install. |
 | AH11 | Tasks 1–2 define/bind public listeners; Task 5 records exact override and honest exposure/auth projection. |
-| AH12 | Task 5 produces the fresh executor transcript and independent evaluator PASS. |
+| AH12 | Task 5 produces the fresh executor transcript and independent evaluator PASS; Task 6 verifies the installed bytes match that candidate. |
 
 ## Operational strategy
 
@@ -75,9 +75,9 @@ One process can load/migrate the global registry, start one private Codex WebSoc
 
 ### Task 1: Global service domain, paths, and lossless migration
 
-**Role in the build:** Establish the singleton identity and durable truth consumed by every later arc, implementing R1/R4/R6/R9 and D6/D7/D11/D14/D18.
+**Role in the build:** Establish the singleton identity and durable truth consumed by every later arc, implementing R1/R4/R6/R9 and D6/D7/D11/D14/D18/D20.
 
-**Read first:** spec §5.1 and §5.3; decisions D6–D7/D11/D14/D18; CLI §1/§4; Angles 1, 3 and 4 “Concrete journey” plus “cannot do”; Python patterns §§1–4/8–10; process discipline §§1/3.
+**Read first:** spec §5.1 and §5.3; decisions D6–D7/D11/D14/D18/D20; shared CLI §1/§4 and callback CLI §2–§5; Angles 1, 3 and 4 “Concrete journey”, “What … cannot do”, and “Visible collisions”; Python patterns §§1–4/8–10; process discipline §§1/3.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/service_domain.py`
@@ -89,14 +89,16 @@ One process can load/migrate the global registry, start one private Codex WebSoc
 - Test: `tests/codex-worker/test_service_domain.py`
 - Test: `tests/codex-worker/test_migration.py`
 - Modify tests: `test_commands.py`, `test_models_registry.py`, `test_instance.py`, `test_callback_store.py`
+- Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
+- Create checkpoint report: `docs/superdev/reviews/2026-08-28-codex-worker-shared-app-server-c1.md`
 
 **Interfaces:**
-- Consumes: platform state/temp roots; verified owner-only path helpers; legacy `instances/<hash>/instance.json`, `registry.json`, and callback stores; existing `SessionRecord`.
-- Produces: `ServicePaths`, `ServiceConfig`, `AttachView`, `LegacyCandidate`, `LegacyConflict`, `MigrationStatusView`, `derive_service_paths(platform, state_home, temp_root, uid) -> ServicePaths`, `validate_public_listener(value) -> str`, and `LegacyMigrator.scan_and_apply() -> MigrationStatusView` / `resolve(name, thread_id, as_name) -> SessionRecord`.
+- Consumes: platform state/temp roots; verified owner-only path helpers; legacy `instances/{sha256}/instance.json`, `registry.json`, and callback stores; existing `SessionRecord`.
+- Produces: `ServicePaths` including `callback_path` and `callback_artifact_dir`; `ServiceConfig`, `AttachView`, `LegacyCandidate`, `LegacyConflict`, `MigrationStatusView`, `derive_service_paths(platform, state_home, temp_root, uid) -> ServicePaths`, `validate_public_listener(value) -> str`, and `LegacyMigrator.scan_and_apply() -> MigrationStatusView` / `resolve(name, thread_id, as_name) -> SessionRecord`.
 
 - [ ] **Step 1: RED — freeze singleton and migration laws**
 
-  Add strict round-trip/extra-field tests for the new models and table-driven listener tests. Add real-temp registry fixtures covering unique import, byte-equivalent deduplication, divergent same-name quarantine, repeat idempotence, crash-safe ledger fsync, unsafe/symlink source refusal, callback preservation, and no source writes/deletes. Characterize the measured duplicate `status-checker-abc` legacy records as a sanitized fixture, with distinct session/thread identities.
+  Add strict round-trip/extra-field tests for the new models and table-driven listener tests. Add real-temp registry fixtures covering unique import, byte-equivalent deduplication, divergent same-name quarantine, repeat idempotence, crash-safe ledger fsync, unsafe/symlink source refusal, and no source writes/deletes. Callback fixtures cover enabled/disabled/unavailable bindings, pending/written outbox, equal and conflicting event IDs, legacy `WorkerView.instance`, terminal-reference artifacts, unsafe absolute/path-escape artifacts, digest/size mismatch, and crashes after each D20 commit stage. Characterize the measured duplicate `status-checker-abc` legacy records as a sanitized fixture, with distinct session/thread identities.
 
   ```python
   paths = derive_service_paths("darwin", state_home, temp_root, uid=501)
@@ -126,6 +128,8 @@ One process can load/migrate the global registry, start one private Codex WebSoc
       config_path: Path
       migration_path: Path
       log_path: Path
+      callback_path: Path
+      callback_artifact_dir: Path
 
   @dataclass(frozen=True)
   class ServiceConfig(StrictModel):
@@ -134,17 +138,17 @@ One process can load/migrate the global registry, start one private Codex WebSoc
       generation_id: str
   ```
 
-  Leave compatibility re-exports for safe path helpers needed by existing tests, but remove instance selection from any new service API.
+  Implement D20 exactly: only imported/deduplicated sessions contribute callbacks; canonical-equal binding/event IDs deduplicate and mismatches quarantine the worker candidate; pending events and referenced completion artifacts are upgraded to the global worker projection; artifacts must be owner-only beneath the source artifact root and are republished insert-or-verify. Prevalidate all inputs, then publish artifacts, registry, callback store, and completion ledger in that order with fsync. The service remains not-ready until the ledger is complete; restart repairs any prefix idempotently from untouched sources. Leave compatibility re-exports for safe path helpers needed by existing tests, but remove instance selection from any new service API.
 
 - [ ] **Step 3: Verify, adversarial review, and commit**
 
-  Run focused tests, warning-strict fast gate, `python3 -m compileall`, and `git diff --check`. A fresh reviewer must add negative controls for conflicting migrations, source mutation, unsafe paths, malformed listeners, callback-secret projection, and session-env independence. Fold findings, rerun, fill AH7 foundation receipt, and commit `feat(codex-worker): add global service state and migration`.
+  Run focused tests, warning-strict fast gate, the exact AST import-arrow and seam-inventory guards in `test_service_domain.py`, `python3 -m compileall`, and `git diff --check`. A fresh reviewer must add negative controls for conflicting migrations, every D20 crash boundary, source mutation, unsafe paths, artifact rewriting, malformed listeners, callback-secret projection, and session-env independence. Track rerunnable commands/results in the C1 report, fill AH7's foundation receipt with that path, fold findings, rerun, and commit `feat(codex-worker): add global service state and migration`.
 
 ### Task 2: Private WebSocket connection, public gateway, and maintenance gate
 
 **Role in the build:** Create one Codex authority that worker and TUI clients can share while making stop/restart exclusion real, implementing R2/R3/R7/R10–R12 and D1/D3–D5/D9/D12–D13/D16–D18.
 
-**Read first:** spec §5.1–§5.2 and §5.4; decisions D1/D3–D5/D9/D12–D13/D16–D18; census transport/schema evidence; Angles 1/2/4; Python patterns §§1–5/7/9–10; process discipline §§1–3.
+**Read first:** spec §5.1–§5.2 and §5.4; decisions D1/D3–D5/D9/D12–D13/D16–D18; census transport/schema evidence; Angles 1/2/4 “What … cannot do” and “Visible collisions”; Python patterns §§1–5/7/9–10; process discipline §§1–3.
 
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/codex_worker/websocket_transport.py`
@@ -157,10 +161,12 @@ One process can load/migrate the global registry, start one private Codex WebSoc
 - Test: `tests/codex-worker/test_websocket_gateway.py`
 - Test: `tests/codex-worker/test_service.py`
 - Modify tests: `test_app_server_runtime.py`, `test_runtime.py`, `test_tool_package.py`
+- Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
+- Modify checkpoint report: `docs/superdev/reviews/2026-08-28-codex-worker-shared-app-server-c1.md`
 
 **Interfaces:**
 - Consumes: Task 1 `ServicePaths`/`ServiceConfig`; existing Codex method adapter and notification/approval callbacks.
-- Produces: `CodexConnection(endpoint, on_notification, approval_handler, deps)`, `call(method, params, timeout)`, `close()`; `ServiceMaintenanceGate.mutation(method)` and `drain()` contexts; `WebSocketGateway.start()/close()/ready`; `GlobalWorkerService.start()/status()/stop(force)/restart(force)`; private Codex argv `codex app-server --listen unix://<owner-only-path>`.
+- Produces: `CodexConnection(endpoint, on_notification, approval_handler, deps)`, `call(method, params, timeout)`, `close()`; `ServiceMaintenanceGate.mutation(method)` and `drain() -> ContextManager[DrainLease]`; `WebSocketGateway.start()/close()/ready`; `GlobalWorkerService.start()/status()` and private `terminate_owned(lease: DrainLease)` that verifies the lease belongs to its gate; private Codex argv `codex app-server --listen unix://{private_codex_socket}`. Public guarded stop/restart are deliberately deferred to Task 3 after authoritative inventory exists.
 
 - [ ] **Step 1: RED — prove frame, handshake, overload, and drain contracts**
 
@@ -174,28 +180,26 @@ One process can load/migrate the global registry, start one private Codex WebSoc
       self.assertEqual(inventory.active, ())
   ```
 
-  Drive drain classification exhaustively: known reads and interrupts pass; client responses to server-initiated requests pass; known mutations and unknown request methods receive a typed busy response; already-forwarded mutations settle before inventory. Bind tests prove fixed collision preservation and no port fallback.
+  Generate current request schemas into a private `mktemp -d` directory with `codex app-server generate-json-schema --out "$SCHEMA_DIR"` and derive a checked-in test fixture containing every 0.150.1 client-request method. Drive drain classification exhaustively: a small explicit read/interrupt allowlist passes; client responses to server-initiated requests pass; every other current request method and every unknown request method receives typed busy; already-forwarded mutations settle before inventory. A set-equality test fails when an upstream request method is unclassified. Bind tests prove fixed collision preservation and no port fallback.
 
 - [ ] **Step 2: GREEN — implement the initialized connection and transparent gateway**
 
   Move protocol-independent upstream methods behind `CodexConnection.call`; keep `app_server.py` as a compatibility adapter/re-export during the transition. Use lazy imports from `websockets.sync.client` and `.server`. One frontend gets one backend; the gateway never rewrites successful Codex frames and inspects only JSON-RPC direction/method/id for gating.
 
   ```python
-  MUTATING = frozenset({"thread/start", "thread/resume", "turn/start", "turn/steer"})
   DRAIN_ALLOWED_REQUESTS = frozenset({"thread/list", "thread/read", "turn/interrupt"})
 
   def classify_frontend_frame(value: object) -> FrameClass:
       if is_client_response(value): return FrameClass.RESPONSE
       if method in DRAIN_ALLOWED_REQUESTS: return FrameClass.ALLOWED
-      if method in MUTATING or is_unknown_request(value): return FrameClass.BLOCKED
-      return FrameClass.ALLOWED
+      return FrameClass.BLOCKED  # all other requests, including future/unknown methods
   ```
 
-  `GlobalWorkerService` binds the gateway before reporting ready, spawns Codex only on the private socket, stamps its loaded version once, and shuts down owned resources in reverse order only through guarded lifecycle.
+  `GlobalWorkerService` binds the gateway before reporting ready, spawns Codex only on the private socket, stamps its loaded version once, and exposes termination only through an internal authorization value constructed by Task 3 after a closed-gate inventory. Task 2 must not implement a public stop/restart path.
 
 - [ ] **Step 3: Verify C1, review, and commit**
 
-  Run focused tests warning-strict; isolated UV Python 3.9 install/import of sync client/server; real bind/collision fixture; package wheel allowlist; full fast suite. The checkpoint reviewer attacks unknown-method drain, queued approvals, malformed frames, frontend disconnects, private socket ownership, public collision, non-loopback projection, mutation replay, and resource leaks. Fill AH5/AH11 foundation receipts and commit `feat(codex-worker): add shared WebSocket service`.
+  Run focused tests warning-strict; the schema-method set-equality and AST/seam guards; isolated UV Python 3.9 install/import of sync client/server; real bind/collision fixture; package wheel allowlist; full fast suite. The checkpoint reviewer attacks every generated request method, unknown-method drain, queued approvals, malformed frames, frontend disconnects, private socket ownership, public collision, non-loopback projection, mutation replay, and resource leaks. Append exact commands/results to the C1 report, fill AH5/AH11 foundation receipts with that tracked path, and commit `feat(codex-worker): add shared WebSocket service`.
 
 ## Checkpoint C2: Global service is the complete public worker implementation
 
@@ -207,7 +211,7 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 
 **Role in the build:** Make TUI-originated actions and worker actions converge through Codex rather than local ownership, implementing R3/R5–R8/R12 and D2/D4/D7/D10/D17.
 
-**Read first:** spec §5.3–§5.6; decisions D2/D4/D7/D10/D17; Angle 2 entire file and Angle 4 maintenance journey; Python patterns §§2–5/9–10; process discipline §§1–2.
+**Read first:** spec §5.3–§5.6; decisions D2/D4/D7/D10/D17; Angle 2 entire file and Angle 4 “Concrete journey”, “What lifecycle management cannot do”, and “Visible collisions”; Python patterns §§2–5/9–10; process discipline §§1–2.
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/broker.py`
@@ -219,10 +223,12 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 - Test: `tests/codex-worker/test_runtime.py`
 - Test: `tests/codex-worker/test_projection.py`
 - Test: `tests/codex-worker/test_callback_dispatcher.py`
+- Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
+- Create checkpoint report: `docs/superdev/reviews/2026-08-28-codex-worker-shared-app-server-c2.md`
 
 **Interfaces:**
 - Consumes: Task 1 global registry/conflicts; Task 2 `CodexConnection` and `ServiceMaintenanceGate`.
-- Produces: `WorkerBroker(..., gate, listener)` with every mutating method gated; `list_active_threads() -> ActiveInventory`; `RuntimeStore` reconciliation for subscribed TUI changes; `AttachView` on worker projections/faults; exact expected-turn controls.
+- Produces: `WorkerBroker(..., gate, listener)` with every mutating method gated; `list_active_threads() -> ActiveInventory`; `MaintenanceCoordinator.stop(force) -> MaintenanceResult` / `restart(listener, force) -> MaintenanceResult`, which hold Task 2's `DrainLease`, inventory immediately, and pass the still-live lease to `terminate_owned`; `RuntimeStore` reconciliation for subscribed TUI changes; `AttachView` on worker projections/faults; exact expected-turn controls.
 
 - [ ] **Step 1: RED — characterize cross-client state and complete inventory**
 
@@ -246,17 +252,24 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 
   def list_active_threads(self) -> ActiveInventory:
       return collect_active_threads(self.codex, self.registry)
+
+  def stop(self, force: bool) -> MaintenanceResult:
+      with self.gate.drain() as lease:
+          inventory = self.broker.list_active_threads()
+          if inventory.items and not force:
+              return MaintenanceResult.refused(inventory)
+          return self.service.terminate_owned(lease)
   ```
 
 - [ ] **Step 3: Verify, review, and commit**
 
-  Run focused broker/runtime/callback tests warning-strict and the full fast gate. A fresh reviewer adds delayed/out-of-order event, cursor-loop, unmapped-thread, successor-turn, callback-duplication and partial-fault identity tests. Commit `feat(codex-worker): reconcile shared Codex control`.
+  Run focused broker/runtime/callback tests warning-strict, AST/seam guards, and the full fast gate. A fresh reviewer adds delayed/out-of-order event, cursor-loop, inventory-error, mutation-during-drain, unmapped-thread, successor-turn, callback-duplication and partial-fault identity tests. Append commands/results to the C2 report, fill AH6/AH8/AH9 foundations, and commit `feat(codex-worker): reconcile shared Codex control`.
 
 ### Task 4: Global lifecycle, façade, RPC, and exhaustive CLI migration
 
 **Role in the build:** Make the approved singleton behavior the only ordinary public path while retaining explicit raw sockets, implementing R1–R11 and D2–D3/D5–D11/D14–D15/D17.
 
-**Read first:** CLI surface §§1–9; spec §5.1/§5.3/§5.5–§5.6; decisions D2–D3/D5–D11/D14–D15/D17; Angles 1/3/4; Python patterns §§3–4/6–10; process discipline §§1–3.
+**Read first:** shared CLI §§1–9 plus every inherited CLI companion in the Context pack, especially server CLI raw §§2–8; spec §5.1/§5.3/§5.5–§5.6; decisions D2–D3/D5–D11/D14–D15/D17; Angles 1/3/4 “What … cannot do” and “Visible collisions”; Python patterns §§3–4/6–10; process discipline §§1–3.
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/codex_worker/commands.py`
@@ -270,6 +283,8 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 - Test: `tests/codex-worker/test_facade.py`
 - Test: `tests/codex-worker/test_facade_integration.py`
 - Test: `tests/codex-worker/test_rpc_cli.py`
+- Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
+- Modify checkpoint report: `docs/superdev/reviews/2026-08-28-codex-worker-shared-app-server-c2.md`
 
 **Interfaces:**
 - Consumes: Tasks 1–3 global paths/config/migration/service/broker/inventory/attach projection.
@@ -303,26 +318,25 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 
 - [ ] **Step 3: Verify C2, review, and commit**
 
-  Run focused command/manager/facade/RPC tests, warning-strict full gate, Python 3.9 compile, and a five-client process convergence fixture. Reviewer attacks local-validation precedence, config races, bind substitution, raw bypass, unsafe socket replacement, malformed service status, active inventory failure, force impact completeness, shell quoting, IDs on partial failures, and secret absence. Fill C2 foundation receipts and commit `feat(codex-worker): expose global shared service CLI`.
+  Run focused command/manager/facade/RPC tests, exact AST import-arrow and seam-inventory guards, warning-strict full gate, Python 3.9 compile, and a five-client process convergence fixture. Reviewer attacks local-validation precedence, config races, bind substitution, raw bypass, unsafe socket replacement, malformed service status, active inventory failure, force impact completeness, shell quoting, IDs on partial failures, and secret absence. Append exact commands/results to the C2 report, fill AH1/AH3/AH4 foundations with that tracked path, and commit `feat(codex-worker): expose global shared service CLI`.
 
-## Checkpoint C3: Installed operator experience is proven and immediately usable
+## Checkpoint C3: Operator behavior is proven before release
 
-The skill uses the global command safely, real Codex and Claude share/control threads, migration and lifecycle refusals are reconstructed by checkride, 7.11.0 is installed, and the global service remains running.
+The skill uses the global command safely, real Codex and Claude share/control threads, all common/raw families run through an isolated installed tool, and migration/lifecycle refusals are reconstructable in a fresh PASS checkride.
 
-**Checkpoint gate:** fresh executor/evaluator PASS; independent whole-branch review with no Critical/Important; all AH1–AH12 receipts filled; warning-strict/package/version/sync gates green; installed command and service verified from unrelated cwd; clean integration state.
+**Checkpoint gate:** frozen behavioral candidate; fresh executor/evaluator PASS; all AH1–AH12 receipts filled from tracked artifacts; warning-strict/package/live gates green; no version bump, global install, or production-service mutation yet.
 
-### Task 5: Skill behavior, live harness, checkride, release, and installation
+### Task 5: Skill behavior, live evidence, and CLI checkride
 
-**Role in the build:** Convert the implementation into the low-friction Claude/human workflow and prove every anchored use case before shipping 7.11.0, implementing R1–R12 and D1–D18.
+**Role in the build:** Convert Tasks 1–4 into the low-friction Claude/human workflow and prove every anchored use case before release, implementing R1–R12 and D1–D18/D20.
 
-**Read first:** full context pack; CLI §8–§10; design §5.7/§9; decisions D8/D10/D13/D16–D18; all angle “Reconciled outcome” sections; `skills/writing-skills/SKILL.md`; `skills/cli-checkride/SKILL.md`; Python patterns §§6–10; process discipline §§1–3.
+**Read first:** full context pack with every inherited CLI companion; shared CLI §8–§10; design §5.7/§9; decisions D8/D10/D13/D16–D18/D20; every angle's “What … cannot do”, “Visible collisions”, and “Reconciled outcome”; `skills/writing-skills/SKILL.md`; `skills/cli-checkride/SKILL.md`; Python patterns §§6–10; process discipline §§1–3.
 
 **Files:**
 - Modify: `skills/subagent-driven-development/SKILL.md`
 - Modify: `skills/subagent-driven-development/codex-worker.md`
 - Modify: `skills/subagent-driven-development/codex-model-selection.md`
 - Modify: `skills/subagent-driven-development/scripts/install-codex-worker`
-- Modify: `skills/subagent-driven-development/scripts/pyproject.toml`
 - Modify: `tests/codex-worker/live_broker_check.py`
 - Modify: `tests/codex-worker/live_claude_check.sh`
 - Modify: `tests/codex-worker/live_uv_tool_check.py`
@@ -331,23 +345,35 @@ The skill uses the global command safely, real Codex and Claude share/control th
 - Modify: `tests/codex-worker/test_skill_integration.py`
 - Modify: `tests/codex-worker/test_tool_preflight.py`
 - Modify: `tests/codex-worker/test_tool_package.py`
-- Modify: version authorities listed in `.version-bump.json`
 - Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-checkride.md`
 - Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/executor-transcript.md`
 - Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/evaluator-verdict.md`
-- Modify: `CHANGELOG.md`, relevant README/index/release docs, anchor §9 receipts
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/preflight-package/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/preflight-package/transcript.jsonl`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/common-attach/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/common-attach/transcript.jsonl`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/exactly-five/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/exactly-five/transcript.jsonl`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/lifecycle/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/lifecycle/transcript.jsonl`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/migration-callback-shared-control/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/migration-callback-shared-control/transcript.jsonl`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/recovery/summary.json`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/recovery/transcript.jsonl`
+- Create ignored raw run roots under `.superdev/codex-worker-live/`, named by the recorder as UTC timestamp, process ID, and one of the six exact scenario names above
+- Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
 
 **Interfaces:**
 - Consumes: complete Tasks 1–4 public command and package.
-- Produces: zero-friction skill preflight/use guidance; danger-gated maintenance prose; separate live scenario receipts; independently judged checkride; version 7.11.0 plugin/tool; current-user non-editable UV install; one running compatible global service at the fixed endpoint.
+- Produces: zero-friction skill preflight/use guidance; danger-gated maintenance prose; sanitized tracked live scenario receipts backed by ignored raw transcripts; independently judged PASS checkride; frozen behavior candidate consumed by Task 6.
 
 - [ ] **Step 1: RED/GREEN — teach only the approved workflow**
 
   Use writing-skills pressure probes before edits, then structural/semantic reviewer agents after the documentation checkpoint. The skill runs the trusted UV preflight once, uses collision-resistant global names, requires explicit initial cwd, reports returned session/thread/attach/resume metadata, and never uses `--instance`, routine stop, or direct WebSocket flags after creation. It states that stop/restart are machine-wide dangerous commands requiring explicit human supervision/agreement and never appear in cleanup.
 
   ```text
-  codex-worker start --name <role-random> --cwd <absolute-dir> --prompt <instructions>
-  codex-worker run --name <same-name> --prompt <follow-up>
+  codex-worker start --name review-a91c --cwd /absolute/project --prompt "Review the branch"
+  codex-worker run --name review-a91c --prompt "Summarize the remaining risks"
   # Report result.session_id, result.thread_id, result.attach.resume_command.
   # Never stop/restart as completion or cleanup.
   ```
@@ -362,21 +388,77 @@ The skill uses the global command safely, real Codex and Claude share/control th
   2. common/attach: start returns exact IDs/routes; second real initialized WebSocket client resumes same thread, follows up, steers and interrupts; both see authoritative events;
   3. exactly-five: five simultaneous global names from independent Claude-like environments, no crossed files/events/callbacks;
   4. lifecycle: occupied 4500 refusal, alternate connectable bind, idle version replacement, active worker and unmapped-TUI refusal, supervised force impact without source deletion;
-  5. migration/callback: real sanitized legacy fixtures import/dedup/quarantine/resolve while callback reaches the originally captured Claude room under cross-session lookup;
+  5. migration/callback/shared-control: one globally named worker imports or starts with its original Claude callback binding, a second TUI connection resumes and controls that same thread, then the same worker emits terminal/proactive delivery to the original room; the lane also exercises dedup/quarantine/resolve and proves lookup under different ambient Claude metadata;
   6. recovery: callers exit, service persists, exact thread resumes through worker and remote client, then status/history/control remain coherent.
 
-  Each scenario records command argv, cwd, environment allowlist (never secret values), stdout, stderr, exit, elapsed time, substrate label, PIDs/IDs, durable hashes, and cleanup outcome. Test cleanup stops only isolated fixture-owned services; the final installed service is not a cleanup target.
+  Run them as six separate killable commands:
+
+  ```bash
+  python3 tests/codex-worker/live_broker_check.py --scenario preflight-package
+  python3 tests/codex-worker/live_broker_check.py --scenario common-attach
+  python3 tests/codex-worker/live_broker_check.py --scenario exactly-five
+  python3 tests/codex-worker/live_broker_check.py --scenario lifecycle
+  python3 tests/codex-worker/live_broker_check.py --scenario migration-callback-shared-control
+  python3 tests/codex-worker/live_broker_check.py --scenario recovery
+  ```
+
+  Each scenario records command argv, cwd, environment allowlist (never secret values), stdout, stderr, exit, elapsed time, substrate label, PIDs/IDs, durable hashes, and cleanup outcome. Each isolated root contains a random `fixture-owner.json` token; cleanup may stop/delete a service/root only after exact token+PID+path verification and records that verification. Copy sanitized-but-verbatim records into the exact tracked scenario paths above; secret scans and record counts are tests. No globally installed service is a cleanup target.
 
 - [ ] **Step 3: Run a real Claude caller and the fresh CLI checkride**
 
-  Run Claude Code using only PATH `codex-worker` common commands. Then use `superdev:cli-checkride`: a fresh executor drives every changed family one command at a time, including successful prose/file starts, attach routes, cross-client control, global lookup, raw socket bypass, migration, listener/config/active refusals, dangerous maintenance help, unknown port peer preservation, and restart durability. A separate evaluator reads literal output and mechanism receipts. Iterate product/evidence until PASS; never edit the evaluator verdict from the implementation role.
+  Run Claude Code using only PATH `codex-worker` common commands. Under the isolated Python 3.9 UV install and an unrelated cwd, record at least one successful live invocation from every inherited family: `start`, `run`, `message`, `status`, `messages`, `history`, `steer`, `interrupt`, `goal set`, `goal show`, `limits`, `model list`, `session start/list/show/resume`, and `turn start/wait/status/events/steer/interrupt`; where a control requires active timing, drive a deliberate long turn and record the terminal state afterward. Also record explicit raw `--socket` diagnostics.
 
-- [ ] **Step 4: Release 7.11.0, install, verify, and leave running**
+  Then use `superdev:cli-checkride`: a fresh executor drives every changed family one command at a time, including successful prose/file starts, attach routes, the composed callback/shared-TUI journey, global lookup, every common/raw family above, migration, listener/config/active refusals, dangerous maintenance help, unknown port peer preservation, and restart durability. A separate evaluator reads literal output and mechanism receipts. Iterate product/evidence until PASS; never edit the evaluator verdict from the implementation role. Fill AH1–AH12 only with tracked paths/record IDs that the evaluator accepted.
 
-  After checkride PASS, run `scripts/bump-version.sh 7.11.0`, `--check`, and `--audit`; update all eight authorities atomically and add release notes. Run marketplace/archive/sync tests, warning-strict full gate, Python 3.9 compile/install, `bash -n`, `git diff --check`, and independent final whole-branch review. Fold all Critical/Important findings and rerun affected live/checkride lanes.
+- [ ] **Step 4: Freeze C3 and hand off the judged candidate**
 
-  Install the current source non-editably with the bundled trusted preflight/UV tool path. From an unrelated cwd verify `command -v codex-worker`, exact `7.11.0`, package provenance, `daemon status`, and a short read-only named worker. Ensure the final global service is `ready` on `ws://127.0.0.1:4500`, preserve its durable mapping, do not stop it, restore any temporarily changed plugin marketplace source after install, fill AH1–AH12 with tracked rerunnable receipts, and commit release/evidence in reviewable units.
+  Run warning-strict, package/archive/sync, Python 3.9 compile/import, every scenario separately, real Claude, secret scans, record-count guards, `git diff --check`, and the evaluator again. Commit skill changes, live receipts, checkride, evaluator verdict and anchor cells in reviewable commits. Record the exact behavioral candidate SHA in the checkride and prohibit Task 6 from changing Python/skill behavior without reopening the affected executor/evaluator lanes.
+
+## Checkpoint C4: The accepted candidate is released and left immediately usable
+
+The judged bytes are versioned monotonically as 8.1.0, installed through UV, verified from an unrelated cwd, and the compatible fixed-address global service remains running.
+
+**Checkpoint gate:** baseline reconciliation and 8.1.0 audit green; current-user non-editable UV install; installed bytes equal candidate; final whole-branch review has no Critical/Important; global service ready and deliberately not stopped.
+
+### Task 6: Version reconciliation, 8.1.0 release, installation, and integration
+
+**Role in the build:** Release exactly the C3-approved behavior monotonically and make it immediately usable, implementing R1/R7/R8/R10 and D8/D10/D19.
+
+**Read first:** decisions D8/D10/D19; design §5.1/§5.7/§9; global-install design §5.1–§5.4 and CLI §2–§3; Angle 1/4 “What … cannot do” and “Visible collisions”; process discipline §§2–3.
+
+**Files:**
+- Modify: `package.json`
+- Modify: `.claude-plugin/plugin.json`
+- Modify: `.cursor-plugin/plugin.json`
+- Modify: `.codex-plugin/plugin.json`
+- Modify: `.kimi-plugin/plugin.json`
+- Modify: `.claude-plugin/marketplace.json`
+- Modify: `gemini-extension.json`
+- Modify: `skills/subagent-driven-development/scripts/pyproject.toml`
+- Modify: `README.md`
+- Modify: `RELEASE-NOTES.md`
+- Modify: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-checkride.md`
+- Create: `docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/final-verification.md`
+- Modify receipt anchor only if installed evidence adds a receipt: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
+
+**Interfaces:**
+- Consumes: Task 5 behavioral candidate SHA, PASS evaluator, exact package directory, trusted installer, and service status contract.
+- Produces: reconciled 8.0.0 baseline commit; coupled 8.1.0 release; installed current-user UV command; byte-equality and unrelated-cwd verification; one running compatible service.
+
+- [ ] **Step 1: Reconcile the measured baseline without installation**
+
+  Re-run all eight reads. If the highest shipping authority remains 8.0.0, change only the six exact lower declarations listed above from 7.10.0 to 8.0.0, update the README public version line if required, and run `scripts/bump-version.sh --check` plus `--audit`. Commit `chore(release): reconcile superdev 8.0.0 authorities`. Do not install or alter service state. If any authority is now above 8.0.0, follow D19's revisit hook and append a new decision before proceeding.
+
+- [ ] **Step 2: Advance all authorities to 8.1.0 and verify the artifact**
+
+  Run `scripts/bump-version.sh 8.1.0`, update `RELEASE-NOTES.md`, then run `--check`, `--audit`, marketplace tests, Codex archive/package allowlist, sync test, Python 3.9 wheel/install/import, warning-strict full gate, `bash -n` for installer/version scripts, and `git diff --check`. Commit the release without changing behavior.
+
+- [ ] **Step 3: Install, verify, review, and leave the service running**
+
+  Install the current source non-editably through `skills/subagent-driven-development/scripts/install-codex-worker`. From an unrelated temp cwd record `command -v codex-worker`, `codex-worker --version` = 8.1.0, UV ownership, package import provenance, and installed/source byte equality for every changed module. Run a short read-only globally named worker, verify exact IDs/attach route and `daemon status` ready at `ws://127.0.0.1:4500`, then leave it running and preserve the mapping. Restore any temporarily changed plugin marketplace source and verify the installed plugin/tool manifests.
+
+  A very-smart whole-branch reviewer reads the behavioral diff, tracked checkride, D19 receipts and installed verification. Fold findings; any behavior fix reopens Task 5's affected live/checkride lane. Commit `final-verification.md` and any receipt additions only after review reports no Critical/Important.
 
 ## Finishing gate
 
-Run the warning-strict suite fresh, all touched shell/package gates, `scripts/bump-version.sh --check`, `scripts/bump-version.sh --audit`, Python 3.9 compile/import, each live scenario separately, real Claude caller, and the final checkride evaluator. Generate a whole-branch review package from the design base, obtain a very-smart independent code review, and fix/re-review until no Critical/Important remains. Run the autonomous deviation/acceptance audit: every D1–D18 is either built exactly or logged with a permitted revisit trigger; every UC1–UC10/AH1–AH12 has a real receipt. Integrate per `superdev:finishing-a-development-branch`, reinstall the integrated bytes, verify the fixed gateway and global worker from an unrelated directory, leave the service running, and report exact version, listener, service/app-server PIDs, worker count, and attach command without exposing secrets.
+Run the warning-strict suite fresh, exact AST/seam guards, all touched shell/package gates, `scripts/bump-version.sh --check`, `scripts/bump-version.sh --audit`, Python 3.9 compile/import, each live scenario separately, real Claude caller, and the final checkride evaluator. Generate a whole-branch review package from the design base, obtain a very-smart independent code review, and fix/re-review until no Critical/Important remains. Run the autonomous deviation/acceptance audit: every D1–D20 is either built exactly or logged with a permitted revisit trigger; every UC1–UC10/AH1–AH12 has a real tracked receipt. Integrate per `superdev:finishing-a-development-branch`, reinstall the integrated 8.1.0 bytes, verify the fixed gateway and global worker from an unrelated directory, leave the service running, and report exact version, listener, service/app-server PIDs, worker count, and attach command without exposing secrets.

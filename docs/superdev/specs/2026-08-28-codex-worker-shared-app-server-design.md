@@ -106,6 +106,8 @@ codex-worker CLI ── protected Unix RPC ── GlobalWorkerService
 
 - Global durable root: platform state home `/superdev/codex-worker/service/`.
 - Global runtime root: owner-only temp path with one RPC socket/lock and service metadata.
+- Global durable paths include the registry, callback store, callback artifact directory,
+  service config and migration ledger; none is derived from Claude session identity.
 - Any managed client command probes exact service identity/version, then reuses or starts.
 - Readiness requires verified child PID, private listener health, initialized worker WebSocket,
   public gateway health, global RPC socket, matching version, and durable registry availability.
@@ -256,6 +258,12 @@ classDiagram
 - Divergent duplicates cannot be looked up until explicit resolution; no timestamp path
   exists in the resolver.
 - Legacy source files are read-only inputs and never deletion targets.
+- Callback migration follows D20: prevalidate the complete canonical merge, then publish
+  verified artifacts, registry, callback store and completion ledger in that order. The
+  service cannot become ready until the ledger is complete; restart repairs an incomplete
+  prefix idempotently from untouched sources. Binding/outbox key conflicts quarantine the
+  associated worker candidate rather than choosing by time, and legacy absolute artifact
+  references are verified then republished beneath the global artifact root.
 
 #### 5.3.5 CLI ↔ domain mapping
 
@@ -270,7 +278,7 @@ classDiagram
 | callback commands | existing strict models | `WorkerRecord.callback` only; never identity |
 
 **Depends on:** registry/callback persistence; §5.1 paths.
-**Serves:** R4, R5, R6, R9 · **Governed by:** D7, D11, D14, D18 · **Realizes:** UC1, UC3, UC7, UC9.
+**Serves:** R4, R5, R6, R9 · **Governed by:** D7, D11, D14, D18, D20 · **Realizes:** UC1, UC3, UC7, UC9.
 
 ### 5.4 Shared control and authoritative reconciliation
 
@@ -376,7 +384,7 @@ thread; exactly five simultaneous named workers; listener collision; idle upgrad
 active refusal; legacy migration; real Claude common-command caller; and CLI checkride.
 
 **Depends on:** all prior areas.
-**Serves:** R10, R11, R12 · **Governed by:** D10, D12, D13, D16, D17, D18 · **Realizes:** UC2, UC3, UC6, UC10.
+**Serves:** R10, R11, R12 · **Governed by:** D10, D12, D13, D16, D17, D18, D19 · **Realizes:** UC2, UC3, UC6, UC10.
 
 ## 6. Decisions
 
@@ -405,6 +413,10 @@ active refusal; legacy migration; real Claude common-command caller; and CLI che
   app-server and closes the TUI turn race; revisit on atomic upstream drain support.
 - **D18 (provisional):** evolve the existing strict dataclass seams in place while splitting
   new service responsibilities into focused modules; revisit on an independent Pydantic migration.
+- **D19 (provisional):** reconcile the measured split 8.0.0 baseline, then advance every declared
+  plugin/tool authority together to 8.1.0; revisit if main's highest version changes before release.
+- **D20 (provisional):** migrate callback bindings/outbox/artifacts as an idempotent pre-readiness
+  transaction and leave every legacy source untouched; revisit on a unified transactional store.
 
 Full alternatives, sacrifices, evidence, and extension laws remain in the decision log.
 
