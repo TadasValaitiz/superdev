@@ -1,7 +1,7 @@
 # Angle 2 — The checkpoint seam
 
 **Purpose:** understand what crosses between orchestrator and architect — and what freshness each side promises — without reading either skill.
-**Formal anchors:** D52, D58–D60; spec §5.1–§5.3 (R5, R9, R10).
+**Formal anchors:** D52, D58–D60, D62; spec §5.1–§5.3 (R5, R9, R10).
 **Series:** 2 of 4.
 
 > **Status guide:** LOCKED · FLEXIBLE · DEFERRED · MISMATCH.

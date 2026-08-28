@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-28 · **Status:** draft
 **Mode:** human-in-loop
-**Decision log:** ./2026-08-28-architect-freshness-decisions.md (D47–D64; continues the system-design stream)
-**Companions:** angle-01-spaces-and-ownership · angle-02-checkpoint-seam · angle-03-architecture-into-rooms · angle-04-execution-shaping (same date-prefix); no CLI/domain companions
+**Decision log:** ./2026-08-28-architect-freshness-decisions.md (D47–D65; continues the system-design stream)
+**Companions:** angle-01-spaces-and-ownership · angle-02-checkpoint-seam · angle-03-architecture-into-rooms · angle-04-execution-shaping · brainstorming-flow-angle-01-operator-ruling-bandwidth · brainstorming-flow-angle-02-angle-lifecycle (same date-prefix); no CLI/domain companions
 **Origin:** brainstorm with the operator (angle-first flow, its own first live run)
 **Scope note (D64):** this spec governs SUPERDEV/ROOM-GRAPH SKILL TEXT ONLY. The calibration
 migration (D63) is a separate stream in that project's own flow and is NOT discharged here.
@@ -82,11 +82,13 @@ composition; nothing in it invents beyond the log.
 ### 5.1 system-design skill — the reconciled surface
 Rewrites the floor (R1/R2/R3): corpus at docs/system-design/, canon-vs-dated layers,
 milestone folders, single-writer law with the git-log audit line. map-and-markers.md
-rewritten for the positional grammar + census script (R6; script in the skill's scripts/).
+rewritten for the positional grammar + census script (R6; script in the skill's scripts/);
+the R6 sweep also strips the DOC-MARK mandate from brainstorming's design-doc-template §5
+status line and spec-document-reviewer-prompt.md (both still require the retired bracket).
 Advisory conformance: folded to a
 conformance-notes line in the checkpoint response block; one that genuinely needs length
 becomes `milestones/<slug>/conformance-<item>.md` (architect space, dated layer).
-Session protocol: mechanical open (census, stale-D# grep, agenda-as-questions), sitting,
+Census clarity: the milestone folder's census.md (charter-time grounding sweep) SURVIVES; only the RECURRING checkpoint marker census is ephemeral script output (D60). Session protocol: mechanical open (census, stale-D# grep, agenda-as-questions), sitting,
 reconciliation close + named commit (R5), response block format (R10), mode law section
 (R9). protocols.md worked examples rewritten to the two-artifact checkpoint.
 **Status:** FLEXIBLE — exact section wording lands at implementation · Serves R1–R6,R9,R10 · UC1–UC3.
@@ -126,7 +128,7 @@ using-git-worktrees/finishing: path fixes only. **Angle-lifecycle teeth (R15/D65
 brainstorming step 5 gains "companion written at angle close"; step 10's reviewer dispatch
 lists the companions as inputs with a cross-check row; step 11 hands the operator the
 angle files by link.
-**Status:** FLEXIBLE — exact wording lands at implementation · Serves R1,R4,R8,R11 · UC5,UC6.
+**Status:** FLEXIBLE — exact wording lands at implementation · Serves R1,R4,R8,R11,R15 · UC5,UC6.
 
 ### 5.5 glossary + bootstrapping
 The composition only holds if its words resolve and new projects can land on it — this
@@ -138,7 +140,7 @@ docs/orchestration skeletons.
 **Status:** FLEXIBLE · Serves R14 · all UCs indirectly.
 
 ## 6. Decisions
-Distilled in the log (D47–D64) — this spec's §5 cites them inline; no divergence between files.
+Distilled in the log (D47–D65) — this spec's §5 cites them inline; no divergence between files.
 
 ## 7. Assumptions & open questions
 
@@ -166,12 +168,12 @@ Distilled in the log (D47–D64) — this spec's §5 cites them inline; no diver
 | AH6 | A simulated mid-item contradiction walks the D61 flow end-to-end in the skill text (collect → pointer → relay → build-on → checkpoint net) | R11 | |
 | AH7 | Fresh-eyes reviews (D46) passed on every edited skill, blockers folded | all | |
 | AH8 | Angle-first brainstorming + Fork Standard live and used (this session ran under them post-fix) | R13 | commits d0a0e36+ ; this session |
-| AH14 | A brainstorm's spec-review dispatch demonstrably receives the angle companions and reports the cross-check; the operator receives them as openable files at the gate | R15 | |
 | AH9 | The skill text walks a full checkpoint: handover written, sitting held, response block + rulings landed, reconcile commit closes — with the milestone folder (incl. its decisions.md and INDEX D#-range line) named at every step | R2,R5,R10 | |
 | AH10 | A room's design-class finding demonstrably reaches the orchestrator's typed ledger from a report — the skill text names the row shape (kind tags) and the report seam, with no room-writable ledger anywhere | R4 | |
 | AH11 | The orchestrator text yields a complete execution proposal round: two opposed seat dispatches, collision reconciled under the five rules, operator ratification, charter graph derived | R7 | |
 | AH12 | The close-gate checklist as shipped contains the N−1 pruning line, and the pruning's keep-set (handoffs, conventions, improvement notes) is named | R12 (UC7) | |
 | AH13 | Every new term of this design resolves in the glossary, and the bootstrapping ruling table maps an existing-project convention onto each new space | R14 | |
+| AH14 | A brainstorm's spec-review dispatch demonstrably receives the angle companions and reports the cross-check; the operator receives them as openable files at the gate | R15 | |
 
 ## 10. Drift protocol
 Standard (§10 of the template): governing D# → revisit-when → log fork (phase: build) →

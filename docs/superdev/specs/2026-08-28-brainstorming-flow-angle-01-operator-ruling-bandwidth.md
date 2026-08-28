@@ -1,7 +1,7 @@
 # Brainstorming Angle 1 — The operator's ruling bandwidth
 
 **Purpose:** understand why brainstorming quality is bounded by what reaches the operator's eyes — without reading the skill.
-**Formal anchors:** D56, D57's evidence base (the O2 brief-anatomy lesson); the Standard amendment (re-ask in full).
+**Formal anchors:** D56, D57's evidence base (the calibration O-log's brief-anatomy lesson, ten live workers); the Standard amendment (re-ask in full).
 **Series:** 1 of 2.
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed · MISMATCH skill text behaves differently today.

@@ -1,7 +1,7 @@
 # Angle 1 — Spaces and ownership
 
 **Purpose:** understand who may write where, and why, without reading the whole spec.
-**Formal anchors:** D47–D51, D60 (decisions log); spec §5.1/§5.2 (R1–R4).
+**Formal anchors:** D47–D49, D51 (D50 superseded), D60 (decisions log); spec §5.1/§5.2 (R1–R4).
 **Series:** 1 of 4.
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
@@ -18,7 +18,7 @@ Four spaces, one writer each: `docs/system-design/` (ARCHITECT: map.md, visions/
 Canon vs dated inside the architect's space: map.md/visions rewritten in place, always reliable; milestones/ never rewritten — banners + status flips only. **LOCKED.**
 
 ## Visible collisions
-- **Multi-writer ledgers vs single-writer law:** three designs were tried live — shared append-only residue.jsonl (dies: worktrees make "shared" false — invisible until merge, tail-conflicts at rebase), per-room ledger files (rejected: multiplies roots), and the winner: rooms REPORT, orchestrator comprehends and tracks in his own ledger (D51). Messaging replaced the inbox era's reason to exist.
+- **Multi-writer ledgers vs single-writer law:** three designs were tried live — shared append-only residue.jsonl (dies: worktrees make "shared" false — invisible until merge, tail-conflicts at rebase), per-room ledger files (rejected: operator kept the working report-based model; the extra docs/ledgers/ root would have multiplied roots), and the winner: rooms REPORT, orchestrator comprehends and tracks in his own ledger (D51). Messaging replaced the inbox era's reason to exist.
 - **The two-writer handoff file** vs the law: split — orchestrator half in his space; architect half IS the next milestone folder's birth (D49).
 - **Decision-log placement:** global file vs milestone folder — milestone folder won (self-contained working set, D48), with D#s staying one global stream so any bare D# resolves to one folder.
 

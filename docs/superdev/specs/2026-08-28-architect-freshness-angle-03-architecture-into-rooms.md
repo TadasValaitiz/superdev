@@ -1,7 +1,7 @@
 # Angle 3 — Architecture into rooms, and back
 
 **Purpose:** understand how the corpus reaches an item room and how the room's discoveries return — without reading the brief template or SDD.
-**Formal anchors:** D53, D57, D61; spec §5.4 (R6, R8, R11).
+**Formal anchors:** D53, D57, D61; spec §5.1 (R6) and §5.4 (R8, R11).
 **Series:** 3 of 4.
 
 > **Status guide:** LOCKED · FLEXIBLE · DEFERRED · MISMATCH.
