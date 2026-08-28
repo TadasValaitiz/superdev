@@ -71,8 +71,10 @@ surface (D49/D51) — their discoveries travel as pointer-relayed reports (D61),
 architecture context arrives as a five-part brief (D57), and the seam between altitudes is
 exactly two artifacts per checkpoint (D58/D60). One mode law (D59) decides who rules at
 each gate; the execution proposal (D55) translates ruled architecture into a delivery
-hypothesis on the orchestrator's side of the line. The skill-text work below transcribes
-this composition; nothing in it invents beyond the log.
+hypothesis on the orchestrator's side of the line. The glossary and
+bootstrapping table are the composition's vocabulary and on-ramp — without them the words
+above don't resolve for a fresh reader. The skill-text work below transcribes this
+composition; nothing in it invents beyond the log.
 
 ## 5. Design
 
@@ -80,34 +82,51 @@ this composition; nothing in it invents beyond the log.
 Rewrites the floor (R1/R2/R3): corpus at docs/system-design/, canon-vs-dated layers,
 milestone folders, single-writer law with the git-log audit line. map-and-markers.md
 rewritten for the positional grammar + census script (R6; script in the skill's scripts/).
+Advisory conformance: folded to a
+conformance-notes line in the checkpoint response block; one that genuinely needs length
+becomes `milestones/<slug>/conformance-<item>.md` (architect space, dated layer).
 Session protocol: mechanical open (census, stale-D# grep, agenda-as-questions), sitting,
 reconciliation close + named commit (R5), response block format (R10), mode law section
 (R9). protocols.md worked examples rewritten to the two-artifact checkpoint.
-**Status:** `**Status:** FLEXIBLE — exact section wording lands at implementation` · Serves R1–R6,R9,R10 · UC1–UC3.
+**Status:** FLEXIBLE — exact section wording lands at implementation · Serves R1–R6,R9,R10 · UC1–UC3.
 
 ### 5.2 orchestrator skill — the operational surface
-System-design-layer section rewritten: spaces, typed-row ledgers from reports (R4),
-handover doc format (R10), pointer-relay duty (R11), execution-proposal section + two seat
-prompt sketches (R7), mode declaration at co-plan (R9), close gate + rolling-window
-pruning line (R12). room-brief-template.md gains the five-part architecture block (R8).
+The orchestrator's files carry the operational surface's whole contract. SKILL.md
+system-design-layer section rewritten: spaces, typed-row ledgers from reports (R4),
+pointer-relay duty (R11), execution-proposal section + two seat prompt sketches (R7), mode
+declaration at co-plan (R9), close gate + rolling-window pruning line (R12), and the D49
+handoff split (its SKILL.md still describes the killed two-section design/handoffs/ file —
+orchestrator half → docs/orchestration/handoffs/, architect half = next milestone folder's
+birth). **checkpoint-protocol.md is the file D60 changes most** — it currently writes the
+handover to design/residue-collections/ (the directory D60 kills): rewritten to the one
+handover doc at docs/orchestration/handovers/<milestone>-checkpoint-N.md + the response
+block format (R10). room-brief-template.md gains the five-part architecture block (R8).
 durable-state.md: ledgers under docs/orchestration/, OPERATIONAL RECORD stamp.
 **Status:** FLEXIBLE · Serves R3,R4,R7–R12 · UC2–UC7.
 
 ### 5.3 mode-law cross-wiring
-self-brainstorming: ratification gate resolves by mode (orchestrator ratifies in
+One law stated once — this area makes every gate cite the same text instead of growing
+three dialects. self-brainstorming: ratification gate resolves by mode (orchestrator ratifies in
 AUTONOMOUS, desk DECIDE in HUMAN) with reserved-fork carve-out. writing-plans Mode field
 text cites the unified law. All three skills cite ONE canonical statement (lives in
 system-design SKILL.md; others link).
 **Status:** FLEXIBLE · Serves R9 · UC4.
 
 ### 5.4 room-side text
-brainstorming step 1 grounding paths → docs/system-design/…; residue sentence → report-based
-(R4); deviation flow: collect → plan-time pointer → build on (R11). SDD/using-git-worktrees/
-finishing: path fixes only. cli-checkride distill path docs/superdev/scenarios/ (already true).
-**Status:** FLEXIBLE · Serves R1,R4,R8,R11 · UC5,UC6.
+The rooms are where the corpus meets code — this area rewires their skills to the new
+transport and paths. brainstorming step 1 grounding paths → docs/system-design/…; residue
+sentence → report-based (R4); deviation flow: collect → plan-time pointer → build on (R11).
+**SDD is NOT a path fix:** SKILL.md's launched-as-room paragraph encodes the retired
+mechanism verbatim ("appends a residue row (design/residue/residue.jsonl, own ID block)") —
+rewritten to the D51/D61 flow (collect in item files → plan-time pointer → orchestrator
+relay); this is where D61 lives for arcs. **cli-checkride writes `design/scenarios/` today**
+(SKILL.md §5b) and orchestrator SKILL.md reads it — both move to docs/superdev/scenarios/.
+using-git-worktrees/finishing: path fixes only.
+**Status:** FLEXIBLE — exact wording lands at implementation · Serves R1,R4,R8,R11 · UC5,UC6.
 
 ### 5.5 glossary + bootstrapping
-Glossary: reconciled/operational surface · reconcile commit · claim marker/section status ·
+The composition only holds if its words resolve and new projects can land on it — this
+area is the vocabulary and the on-ramp. Glossary: reconciled/operational surface · reconcile commit · claim marker/section status ·
 mode law · execution proposal · handover/response block · pruning window · pointer relay.
 Bootstrapping: preflight + ruling table rows for existing conventions (canon≙visions,
 per-decision files bridge, item-lane path override); floor creation = docs/system-design +
@@ -143,6 +162,11 @@ Distilled in the log (D47–D64) — this spec's §5 cites them inline; no diver
 | AH6 | A simulated mid-item contradiction walks the D61 flow end-to-end in the skill text (collect → pointer → relay → build-on → checkpoint net) | R11 | |
 | AH7 | Fresh-eyes reviews (D46) passed on every edited skill, blockers folded | all | |
 | AH8 | Angle-first brainstorming + Fork Standard live and used (this session ran under them post-fix) | R13 | commits d0a0e36+ ; this session |
+| AH9 | The skill text walks a full checkpoint: handover written, sitting held, response block + rulings landed, reconcile commit closes — with the milestone folder (incl. its decisions.md and INDEX D#-range line) named at every step | R2,R5,R10 | |
+| AH10 | A room's design-class finding demonstrably reaches the orchestrator's typed ledger from a report — the skill text names the row shape (kind tags) and the report seam, with no room-writable ledger anywhere | R4 | |
+| AH11 | The orchestrator text yields a complete execution proposal round: two opposed seat dispatches, collision reconciled under the five rules, operator ratification, charter graph derived | R7 | |
+| AH12 | The close-gate checklist as shipped contains the N−1 pruning line, and the pruning's keep-set (handoffs, conventions, improvement notes) is named | R12 (UC7) | |
+| AH13 | Every new term of this design resolves in the glossary, and the bootstrapping ruling table maps an existing-project convention onto each new space | R14 | |
 
 ## 10. Drift protocol
 Standard (§10 of the template): governing D# → revisit-when → log fork (phase: build) →
