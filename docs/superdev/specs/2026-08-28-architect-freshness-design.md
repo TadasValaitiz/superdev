@@ -44,6 +44,7 @@ text, reproduce the bench-quality corpus mechanics without any of the hand-inven
 | R12 | Close gate gains rolling-window pruning (delete N−1 operational sediment) | D62 | must | orchestrator close-gate list |
 | R13 | Angle-first brainstorming + Fork Presentation Standard (incl. re-ask-in-full); angle-guide movement protocol | D56 | must | ALREADY SHIPPED (d0a0e36 + follow-ups); receipt = commits |
 | R14 | Glossary + bootstrapping ruling table updated to all of the above | D47–D63 | must | glossary diff; bootstrapping adopt/bridge/discard rows |
+| R15 | Angle lifecycle teeth in brainstorming: companions written at angle CLOSE; spec reviewer receives + cross-checks them; user gate hands them over as files | D65 | must | SKILL.md steps + reviewer prompt carry all three |
 
 ## 3. Use cases   [ANCHOR]
 
@@ -121,7 +122,10 @@ mechanism verbatim ("appends a residue row (design/residue/residue.jsonl, own ID
 rewritten to the D51/D61 flow (collect in item files → plan-time pointer → orchestrator
 relay); this is where D61 lives for arcs. **cli-checkride writes `design/scenarios/` today**
 (SKILL.md §5b) and orchestrator SKILL.md reads it — both move to docs/superdev/scenarios/.
-using-git-worktrees/finishing: path fixes only.
+using-git-worktrees/finishing: path fixes only. **Angle-lifecycle teeth (R15/D65):**
+brainstorming step 5 gains "companion written at angle close"; step 10's reviewer dispatch
+lists the companions as inputs with a cross-check row; step 11 hands the operator the
+angle files by link.
 **Status:** FLEXIBLE — exact wording lands at implementation · Serves R1,R4,R8,R11 · UC5,UC6.
 
 ### 5.5 glossary + bootstrapping
@@ -162,6 +166,7 @@ Distilled in the log (D47–D64) — this spec's §5 cites them inline; no diver
 | AH6 | A simulated mid-item contradiction walks the D61 flow end-to-end in the skill text (collect → pointer → relay → build-on → checkpoint net) | R11 | |
 | AH7 | Fresh-eyes reviews (D46) passed on every edited skill, blockers folded | all | |
 | AH8 | Angle-first brainstorming + Fork Standard live and used (this session ran under them post-fix) | R13 | commits d0a0e36+ ; this session |
+| AH14 | A brainstorm's spec-review dispatch demonstrably receives the angle companions and reports the cross-check; the operator receives them as openable files at the gate | R15 | |
 | AH9 | The skill text walks a full checkpoint: handover written, sitting held, response block + rulings landed, reconcile commit closes — with the milestone folder (incl. its decisions.md and INDEX D#-range line) named at every step | R2,R5,R10 | |
 | AH10 | A room's design-class finding demonstrably reaches the orchestrator's typed ledger from a report — the skill text names the row shape (kind tags) and the report seam, with no room-writable ledger anywhere | R4 | |
 | AH11 | The orchestrator text yields a complete execution proposal round: two opposed seat dispatches, collision reconciled under the five rules, operator ratification, charter graph derived | R7 | |

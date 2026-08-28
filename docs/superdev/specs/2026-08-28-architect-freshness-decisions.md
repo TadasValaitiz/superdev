@@ -172,3 +172,10 @@ All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63
 - **Alternatives:** S1 skills-then-migrate (rejected as a bundle: ties the release to another project's milestone rhythm); S2 migrate-first (rejected: migration would run under old, un-governing skills); S3 interleave (rejected: two half-released plugin states). All three presumed one stream — the operator cut the premise instead.
 - **Consequence:** the shape fork (S1/S2/S3) dissolves — skills ship on their own clock; migration runs whenever calibration's flow reaches it, under the shipped skills.
 - **Revisit-when:** a skill edit turns out to REQUIRE a live migrated instance to be writable (then that edit alone waits for the migration, without merging the streams).
+
+## D65 — The angle lifecycle gets teeth: close-time authoring, reviewed with the spec, reconciled, handed to the operator   (phase: brainstorm, status: locked)
+
+- **Trigger:** operator, live (the skill's first run): angles were neither proposed nor written unprompted; the spec reviewer never saw them; no pass reconciled design doc ↔ angles ("you are not using, suggesting, or writing angles… no reconciliation pass between the design document and the angles").
+- **Decision:** (a) a collision-bearing angle's companion is written when the angle CLOSES (movement step, not a step-8 batch); (b) the spec-reviewer dispatch lists angle companions as required inputs and gains a cross-check row — companions contradict neither spec nor log, and every companion collision appears in the spec's areas or §8; (c) the user review gate hands the operator the angle files by file:// link beside the spec. Spec gains R15 covering this; the plan implements it in brainstorming SKILL.md + spec-document-reviewer-prompt.md.
+- **Why:** an unreviewed, unreconciled companion is a second source of truth — the exact disease the two-surface law kills in the corpus.
+- **Revisit-when:** companion-writing at close measurably breaks session flow (then: draft-at-close, polish-at-step-8).
