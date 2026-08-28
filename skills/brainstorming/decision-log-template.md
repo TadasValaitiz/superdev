@@ -26,6 +26,7 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
 # <Topic> — Decision log
 
 **Design doc:** ./YYYY-MM-DD-<topic>-design.md
+**Authority:** THE LAW of this work stream — rulings here outrank every other document's prose.
 Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 ---
@@ -33,7 +34,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 ## D<n> — <short title>
 **When:** <ISO-8601 UTC — the rule; the worked example below predates it and shows a local offset> ·
 **Phase:** brainstorm | spec | plan | build, plus an optional qualifier ("optimization brainstorm") ·
-**Status:** locked | provisional | superseded-by D<m>, plus an optional scope qualifier ("locked for MVP")
+**Status:** locked | provisional | superseded-by D<m>, plus an optional scope qualifier ("locked for MVP"). An AUTONOMOUS-mode pick (D59) is always `provisional (autonomous pick — flagged for operator review)` until the next human touchpoint confirms or overturns it
 **Decided by:** <who, AND the selection event: which variant they picked and any RIDER
 they attached — e.g. "operator (live, in-session; selected C with an explicit
 sampler-extensibility requirement)". A rider is the operator amending the offered menu;
@@ -48,7 +49,11 @@ fabricate an operator selection that did not happen.>
   - A: <option> — gains <…> / sacrifices <…>
   - B: <option> — gains <…> / sacrifices <…>
   <Each option's SACRIFICES live here; the COMPARATIVE reasoning that picked the winner
-  lives in Decided. Never duplicate the rejection argument across both.>
+  lives in Decided. Never duplicate the rejection argument across both. When an option
+  had SHAPE and was presented as a sketch (SKILL.md: "the option IS the sketch"), the
+  entry PRESERVES that sketch — condensed inline in a fence, or a link to the companion
+  section that carries it — so the ruling's audit trail shows what the operator actually
+  saw. A shape-bearing fork whose entry has no sketch receipt is a reviewer finding.>
 - **Decided:** <choice + rider> — <the reasoning, including evidence consulted (files
   read, probes run, measurements cited with their honesty tier)>.
 - **Not X:** <when the decided thing could be mistaken for a neighbouring concept, say
@@ -97,5 +102,6 @@ fabricate an operator selection that did not happen.>
 Notice what the example does that a minimal entry does not: the trigger names the
 ambiguity; the selection records the rider; the "Not X" kills the plausible confusion;
 the extension law governs descendants; the anti-patterns forbid the cheap escape by name;
-the lineage runs both directions. An entry with all slots honestly empty is fine — an
-entry whose slots were never considered is not.
+the lineage runs both directions. An entry whose OPTIONAL slots (Not-X, extension law, anti-patterns) are honestly empty is
+fine — an entry whose slots were never considered is not, and the mandatory slots
+(Trigger, Options, Decided-by, Decided, Rests-on, Affects, Revisit-when) are never empty.

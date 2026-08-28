@@ -10,8 +10,8 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
 **Model:** design reasoning is the `very smart` tier and runs in THIS (main) session,
-not a subagent — so no `model:` field governs it. It remains native Claude Code work on
-`opus`, never a Codex-worker dispatch. The required spec-reviewer dispatch pins the
+not a subagent — so no `model:` field governs it. It remains the HOST harness's native
+main-session work at its very-smart tier, never delegated to a worker dispatch. The required spec-reviewer dispatch pins the
 `very smart` tier in its own prompt template; see subagent-driven-development Model
 Selection.
 
@@ -43,12 +43,12 @@ You MUST create a task for each of these items and complete them in order:
    FLAGGED line is never silently promoted to evidence). Small sessions write a five-line
    census; the artifact scales in length, never in kind. **If a `docs/system-design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on the area's post-migration vision document (`YYYY-MM-DD-<area>-post-migration-domain.md`, not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is recorded in YOUR OWN item files and reported to the orchestrator with a pointer (D51/D61) — never a local ruling, never a write into anyone else's space
 2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
-3. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
+3. **Register the visual-companion rule (a STANDING rule — this step completes by reading it, no action now):** the companion is offered just-in-time, NOT upfront — the first time a question at ANY later step would genuinely be clearer shown than described, offer it then (its own message); if no visual question ever arises, never offer it. See the Visual Companion section below.
 4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
 5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled — and if the angle carried real
 collisions, WRITE its companion NOW, to `item-angle-template.md`'s teaching form
 (mental model, journey with `### LOCKED — claim` + "this means…", cannot-do, mismatch,
-collisions the journey didn't settle), and commit it before the next angle opens. The
+collisions the journey didn't settle), and commit it before the next angle opens. If the WRITING itself surfaces a new fork or collision (it regularly does — writing is the second thinking pass), that fork goes BACK to the operator and the log BEFORE the companion is committed; unruled design never enters a companion. The
 collision detail is hot exactly now; batching to session end produces cite-only
 indexes (measured: ~380 words vs the ~1,500+ the same angles carried when written hot). Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
 6. **Propose 2-3 whole-design approaches** — AFTER the angles are reconciled: how the rulings compose into a shape. This is a fork like any other — present it per the Fork Presentation Standard, never as bare labels
@@ -56,11 +56,13 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
 7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
 8. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** already written at each angle's close (step 5); this step only confirms the set is complete and named `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` — beside the spec, never in the system corpus. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
 8b. **Conditional companion artifacts** — work touches domain objects/fields/relationships → the design doc MUST carry a Domain model section per `skills/brainstorming/domain-design-template.md` (the discrepancy hunt: naming table, delta ledger, invariant enforcers). Work adds/renames/reworks CLI commands → write the separate CLI surface doc per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths). Both are downstream context: they enter the plan's Context pack and subagent Read-first lines.
-8c. **The in-session reconcile sweep** — the session's last writing act: re-check EVERY
+8c. **The in-session reconcile sweep** — after the spec is written: re-check EVERY
    produced document (census, companions, spec) against EVERY D# ruled this session; flip
    statuses that moved, banner anything superseded, fix any recommendation still reading
-   as pending after its fork resolved. One commit. A document set shipped without the
-   sweep contains its own contradictions.
+   as pending after its fork resolved. One commit. AND: the sweep RE-RUNS as a micro-pass
+   after every later mutation — reviewer folds (step 10) and operator-requested changes
+   (step 11) each end with their own re-sweep, so no edit ever ships unswept. A document
+   set shipped without its final sweep contains its own contradictions.
 9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log + census + EVERY angle companion, checks narrative continuity and traceability, and runs the angle experience probes (stranger test, LOCKED-without-consequence, bare "later"); fix blocking issues, re-dispatch once
 11. **User reviews the written set** — hand the operator EVERYTHING by file link: the spec, the decision log, the census, and every angle companion. The operator reviews documents, not a chat summary — approval means the written record is what got approved
@@ -117,28 +119,30 @@ attention on forks presented in full, not on many forks presented thinly.
 
 ```dot
 digraph brainstorming {
-    "Explore project context" [shape=box];
+    "Ground + commit census\n(MEASURED/READ/FLAGGED)" [shape=box];
     "Start decision log" [shape=box];
     "Identify angles,\npresent agenda\n(operator amends)" [shape=box];
-    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)" [shape=box];
+    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)" [shape=box];
     "Propose 2-3 whole-design\napproaches (per Standard)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
     "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [shape=box];
+    "Reconcile sweep\n(all docs vs all D#s;\nre-runs after every\nlater edit)" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
     "Dispatch spec reviewer\n(narrative + traceability)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
-    "Explore project context" -> "Start decision log";
+    "Ground + commit census\n(MEASURED/READ/FLAGGED)" -> "Start decision log";
     "Start decision log" -> "Identify angles,\npresent agenda\n(operator amends)";
-    "Identify angles,\npresent agenda\n(operator amends)" -> "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)";
-    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)" -> "Propose 2-3 whole-design\napproaches (per Standard)";
+    "Identify angles,\npresent agenda\n(operator amends)" -> "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)";
+    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)" -> "Propose 2-3 whole-design\napproaches (per Standard)";
     "Propose 2-3 whole-design\napproaches (per Standard)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [label="yes"];
-    "Write design doc\n(pass 1: shape,\npass 2: enrichment)" -> "Spec self-review\n(fix inline)";
+    "Write design doc\n(pass 1: shape,\npass 2: enrichment)" -> "Reconcile sweep\n(all docs vs all D#s;\nre-runs after every\nlater edit)";
+    "Reconcile sweep\n(all docs vs all D#s;\nre-runs after every\nlater edit)" -> "Spec self-review\n(fix inline)";
     "Spec self-review\n(fix inline)" -> "Dispatch spec reviewer\n(narrative + traceability)";
     "Dispatch spec reviewer\n(narrative + traceability)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [label="changes requested"];
@@ -197,8 +201,11 @@ build all write to the same file.
 
 - **Capture at the moment of decision.** When a dialogue fork resolves (the user picks an
   approach, rejects an option, states a constraint that closes a door), append the D#
-  entry THEN — trigger, options with gains/sacrifices, why, revisit-when. Do not batch
-  and reconstruct at the end; reconstructed reasoning is thinner than live reasoning.
+  entry THEN — per the full template contract: trigger (naming the ambiguity), options
+  with gains/sacrifices, the DECIDED-BY selection event (who picked, which variant, any
+  rider — and the option's sketch preserved when it had shape), Not-X / extension-law /
+  anti-pattern slots where they apply, Rests-on/Affects lineage, revisit-when. Do not
+  batch and reconstruct at the end; reconstructed reasoning is thinner than live reasoning.
 - **Rejected paths are entries too.** "We considered X and declined because Y" is
   precisely what someone needs months later when X gets re-proposed.
 - The spec's §5 Decisions section is the distilled subset of this log — same D-numbers,

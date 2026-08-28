@@ -2,8 +2,9 @@
 
 An item angle is a deliberately partial way to examine THIS item's design: it follows one
 question, journey, boundary, or tension far enough to expose consequences. It lives beside
-the item's spec (`YYYY-MM-DD-<topic>-angle-NN-<slug>.md`); no INDEX or sweep obligations at
-item scale. Repetition with system angles is expected. Full theory: superdev:system-design
+the item's spec (`YYYY-MM-DD-<topic>-angle-NN-<slug>.md`); no INDEX obligations and no standing corpus-sweep duty at item scale — but the
+SESSION's reconcile sweep (SKILL.md step 8c, re-run after every later edit) does apply
+to companions, including retro-filling `Series: N of ?`. Repetition with system angles is expected. Full theory: superdev:system-design
 `angle-guide.md`.
 
 **The depth bar (register law, D66):** an angle companion is a TEACHING document — a
@@ -56,7 +57,7 @@ demolished in a line. Every misreading met at the door.>
 <The heart. Walk one entity/scenario end to end. One `###` subsection per load-bearing
 ruling:>
 
-### LOCKED — <the claim, as a sentence>   <!-- FLEXIBLE/MISMATCH claims that are load-bearing to the walk get ### headings too: '### MISMATCH — …'; the status word leads either way -->
+### LOCKED — <the claim, as a sentence>   <!-- heading markers are the D70 third census-counted form. FLEXIBLE/MISMATCH claims that are load-bearing to the walk get ### headings too: '### MISMATCH — …'; the status word leads either way -->
 <The ruling explained in prose, with its shape shown where shape exists — a small frozen
 model, a formula, a file tree, a message flow, labeled with its epistemic weight
 ("FLEXIBLE sketch around locked laws"). Then ALWAYS the consequence: "This means…" —

@@ -220,3 +220,10 @@ All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63
 
 ## D69 — Affects extension (set review, 2026-08-28)
 The original Affects line named only angle-01 text; the set review measured the true blast radius: angles 01–04 all carried nested-path residue (brief-block reads, inputs/, conformance paths, milestone-folder phrasing) — all corrected at commit b6c7cc7. Lesson for future amendments: an Affects list is a claim to verify by grep, not to estimate.
+
+## D70 — Marker grammar gains the HEADING form; census must count all three   (phase: build, status: locked; amends D53)
+
+- **Trigger:** Codex independent review (review-experience-c41, gpt-5.6-sol, read-only): the angle template's `### LOCKED — <claim>` journey headings are a third status form D53 never named — census tooling built to D53's two forms would undercount load-bearing rulings. Ground truth: the bench corpus itself uses heading markers (angle-19's five `### LOCKED — …` subsections).
+- **Decision:** three recognized positional forms: (1) claim marker `**LOCKED:** …` line-initial; (2) section status `**Status:** LOCKED …`; (3) **heading marker** `### LOCKED — …` (any heading level; status word leads, em-dash separates). The census regex matches all three; everything else in D53 (plain vocabulary, flexible payload, MIG-MARK bracket in code) unchanged.
+- **Rests on:** D53; MEASURED — bench angle-19 headings. **Affects:** census script (Task 5a), map-and-markers.md, item-angle-template (already conformant).
+- **Revisit-when:** a fourth form emerges in practice (then: the census script's self-test corpus is the gate for admitting it).

@@ -13,7 +13,7 @@ An **angle** is a deliberately partial way to examine one shared architecture. I
 - **Purpose**, one reader-oriented sentence ("make X understandable without reading Y").
 - **Formal anchors** — the D#s and glossary entries it renders. *Angles are prose over rulings; the decision log owns the forks.*
 - **Series position** (`N of M`) and a row in `angles/INDEX.md` (number · purpose one-liner · anchors · last-updated · DOC-MARK counts).
-- **DOC-MARK statuses** throughout — LOCKED/FLEXIBLE/DEFERRED/BLIND/MISMATCH/SEED-ILLUSTRATIVE.
+- **Marker statuses** throughout — LOCKED/FLEXIBLE/DEFERRED/BLIND/MISMATCH/SEED-ILLUSTRATIVE, in the positional grammar (D53/D70: line-initial claim markers, Status lines, heading markers; the DOC-MARK bracket is retired — full rewrite lands at implementation Task 5).
 - **The five useful-angle properties:** one central question · explicit boundaries (where the journey starts, stops, and who owns what's outside) · concrete domain consequences (named states, model sketches, call sites) · **visible collisions** (where forces pull apart) · a reconciled outcome. Length is earned by domain complexity, never by angle number.
 
 ## The five kinds {#five-kinds}
@@ -60,4 +60,4 @@ Plain explanation first; models or short flows only where they improve understan
 
 ## Item angles {#item-angles}
 
-The same idea at item scale, written by `brainstorming`, living **beside the item's spec** (never in `design/angles/`), same five properties, no INDEX/sweep obligations. Repetition with system angles is expected and fine — system angles skip details deliberately; item angles are where details live. An item angle that contradicts a system angle is residue, not a local ruling.
+The same idea at item scale, written by `brainstorming`, living **beside the item's spec** (never in `design/angles/`), same five properties, no INDEX obligations (the brainstorm SESSION's reconcile sweep does apply to them; the corpus-level angle sweep does not). Repetition with system angles is expected and fine — system angles skip details deliberately; item angles are where details live. An item angle that contradicts a system angle is residue, not a local ruling.

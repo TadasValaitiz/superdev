@@ -41,10 +41,10 @@ one sentence naming its role in that story.
 ```markdown
 # <Topic> — Design (anchor)
 
-**Date:** YYYY-MM-DD · **Status:** draft | approved | superseded-by <path>
+**Date:** YYYY-MM-DD · **Status:** draft (governs nothing yet) | approved (the anchor — governs the build) | superseded-by <path>
 **Mode:** autonomous | human-in-loop   ← governs how anchor deviations route (see top)
 **Decision log:** ./YYYY-MM-DD-<topic>-decisions.md   ← full deliberation trail
-**Companions:** <-cli-surface.md if commands change; related specs, or "none">
+**Companions:** <EVERY angle companion by filename · -cli-surface.md if commands change · related specs — or "none"; a companion not listed here is undiscoverable from the anchor>
 **Origin:** brainstorm with <human> | self-brainstorm run <workflow run id>
 
 ## 1. Problem & intent   [ANCHOR]
@@ -98,7 +98,11 @@ One subsection per area. Each MUST open with its narrative link-sentence.
 
 ### 5.x <Area>
 
-<Link-sentence: the role this area plays in the §4 story.>
+<Link-sentence: the role this area plays in the §4 story. A SUBSTANTIAL area (one a
+reader could misread, or one carrying a domain shape) additionally opens with a
+compressed mental model — an orienting line plus the 1–3 likeliest wrong readings as
+"not X" clauses — and shows its shape as a small typed sketch labeled with its epistemic
+weight, never only prose about the shape.>
 **Status:** `LOCKED|FLEXIBLE|DEFERRED|BLIND|MISMATCH|SEED-ILLUSTRATIVE (D#|owner)` — epistemic, positional plain-word grammar per superdev:system-design `map-and-markers.md`; when a corpus exists, cite the governing map row / system-angle passage at file:line.
 
 - **Design:** the actual shape — structures, flow, behavior.
