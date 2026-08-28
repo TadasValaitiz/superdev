@@ -35,20 +35,50 @@ Every project goes through this process. A todo list, a single-function utility,
 
 You MUST create a task for each of these items and complete them in order:
 
-1. **Explore project context** — check files, docs, recent commits. **If a `design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on `design/visions/<area>.md` (not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is residue (`design/residue/residue.jsonl`, your ID block), never a local ruling
+1. **Ground and write the census** — explore files, docs, recent commits, and COMMIT the
+   findings as `docs/superdev/specs/YYYY-MM-DD-<topic>-census.md` before presenting the
+   agenda. Every claim carries its provenance tier: **MEASURED** (output of a command run
+   this session, command quoted) · **READ** (from source or a committed doc, file:line
+   given) · **FLAGGED** (noticed, unverified — "the work queue, not conclusions"; a
+   FLAGGED line is never silently promoted to evidence). Small sessions write a five-line
+   census; the artifact scales in length, never in kind. **If a `design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on `design/visions/<area>.md` (not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is residue (`design/residue/residue.jsonl`, your ID block), never a local ruling
 2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
 3. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
 4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
-5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled before moving to the next. Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
+5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled — and if the angle carried real
+collisions, WRITE its companion NOW, to `item-angle-template.md`'s teaching form
+(mental model, journey with `### LOCKED — claim` + "this means…", cannot-do, mismatch,
+collisions the journey didn't settle), and commit it before the next angle opens. The
+collision detail is hot exactly now; batching to session end produces cite-only
+indexes (measured: ~380 words vs the ~1,500+ the same angles carried when written hot). Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
 6. **Propose 2-3 whole-design approaches** — AFTER the angles are reconciled: how the rulings compose into a shape. This is a fork like any other — present it per the Fork Presentation Standard, never as bare labels
 7. **Present design** — in sections scaled to their complexity, get user approval after each section
 7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
 8. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** each angle that carried real collisions becomes `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` (template: `item-angle-template.md` in this skill) — beside the spec, never in `design/angles/`. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
 8b. **Conditional companion artifacts** — work touches domain objects/fields/relationships → the design doc MUST carry a Domain model section per `skills/brainstorming/domain-design-template.md` (the discrepancy hunt: naming table, delta ledger, invariant enforcers). Work adds/renames/reworks CLI commands → write the separate CLI surface doc per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths). Both are downstream context: they enter the plan's Context pack and subagent Read-first lines.
+8c. **The in-session reconcile sweep** — the session's last writing act: re-check EVERY
+   produced document (census, companions, spec) against EVERY D# ruled this session; flip
+   statuses that moved, banner anything superseded, fix any recommendation still reading
+   as pending after its fork resolved. One commit. A document set shipped without the
+   sweep contains its own contradictions.
 9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log and checks narrative continuity and traceability; fix blocking issues, re-dispatch once
 11. **User reviews written spec** — ask user to review the spec file before proceeding
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+
+## Presentation convention (all session output)
+
+- Plain explanation first; models or short flows only where they improve understanding.
+- Small typed sketches for domain shapes; explicit use cases for behavior; tables for
+  ownership, comparisons, and repeated mappings.
+- Visuals are optional and never bare — a diagram always rides an understandable text
+  explanation.
+- Label claims with the marker statuses; label invented quantities SEED-ILLUSTRATIVE and
+  cite measured ones with their source — the two must never be typographically identical.
+- Once a fork is resolved, the written record shows the SELECTED design and why. It never
+  preserves a recommendation as though the choice were still pending.
+- Register law: these rules govern DELIVERABLES (documents). Conversation stays terse —
+  and never the other way around.
 
 ## Fork Presentation Standard (what the operator rules on) {#fork-presentation-standard}
 
@@ -68,6 +98,16 @@ A/B labels are for REFERRING to options, never a substitute for presenting them.
 A fork awaiting a ruling is presented IN FULL at every asking — "as presented
 earlier" is never a substitute; the operator rules on what is in front of them
 now, not on scrollback.
+
+**Variants with shape arrive as sketches.** Where an option has structure — a type, a
+file layout, a message format, a command — the option IS the sketch: the thing itself,
+small and concrete, not prose about it. The operator's pattern-matching is the instrument
+doing the ruling; give it material.
+
+**The pick is an event.** Record the selection itself in the D# entry: who picked, which
+variant, and any RIDER the operator attached ("selected C with an explicit extensibility
+requirement"). A rider is the operator amending the offered menu; it enters the law with
+the same force as the variant. Options are never take-it-or-leave-it.
 Compression is for the trivial end only: if a fork honestly fits in three lines, it is
 probably not worth the operator's attention — decide it yourself, state the call in one
 sentence, and log it (the decision log records it either way). Spend the operator's
