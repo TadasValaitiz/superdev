@@ -3,7 +3,7 @@
 **Date:** 2026-08-28 · **Status:** draft
 **Mode:** human-in-loop
 **Decision log:** ./2026-08-28-architect-freshness-decisions.md (D47–D64; continues the system-design stream)
-**Companions:** none (no CLI changes; no domain objects)
+**Companions:** angle-01-spaces-and-ownership · angle-02-checkpoint-seam · angle-03-architecture-into-rooms · angle-04-execution-shaping (same date-prefix); no CLI/domain companions
 **Origin:** brainstorm with the operator (angle-first flow, its own first live run)
 **Scope note (D64):** this spec governs SUPERDEV/ROOM-GRAPH SKILL TEXT ONLY. The calibration
 migration (D63) is a separate stream in that project's own flow and is NOT discharged here.
