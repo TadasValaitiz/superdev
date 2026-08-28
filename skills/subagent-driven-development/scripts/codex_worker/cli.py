@@ -630,7 +630,7 @@ def _daemon_launcher():
     source_launcher = Path(__file__).resolve().parent.parent / "codex-worker"
     if source_launcher.is_file():
         return str(source_launcher)
-    return str(Path(sys.executable).resolve().with_name("codex-worker"))
+    return str(Path(sys.executable).with_name("codex-worker"))
 
 
 def _instance_manager(explicit_instance):

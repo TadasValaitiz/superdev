@@ -298,6 +298,34 @@ class ToolPreflightTests(unittest.TestCase):
         )
         self.assert_ready(completed)
 
+    def test_second_and_third_temp_allocation_failures_leave_no_residue(self):
+        for failure_at in (2, 3):
+            with self.subTest(failure_at=failure_at):
+                counter = self.root / ("mktemp-%s.count" % failure_at)
+                fake_mktemp = self.fake_bin / "mktemp"
+                fake_mktemp.write_text(
+                    "#!/bin/sh\n"
+                    "count=0\n"
+                    "[ ! -f \"$FAKE_MKTEMP_COUNTER\" ] || count=$(cat \"$FAKE_MKTEMP_COUNTER\")\n"
+                    "count=$((count + 1))\n"
+                    "printf '%s\\n' \"$count\" > \"$FAKE_MKTEMP_COUNTER\"\n"
+                    "[ \"$count\" -ne \"$FAKE_MKTEMP_FAIL_AT\" ] || exit 73\n"
+                    "exec /usr/bin/mktemp \"$@\"\n",
+                    encoding="utf-8",
+                )
+                fake_mktemp.chmod(0o755)
+                completed = self.run_preflight(self.env(
+                    FAKE_MKTEMP_COUNTER=counter,
+                    FAKE_MKTEMP_FAIL_AT=str(failure_at),
+                ))
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertEqual(
+                    list(self.runtime.glob("codex-worker-*.??????")),
+                    [],
+                )
+                self.assertIn("temporary", completed.stderr.lower())
+                fake_mktemp.unlink()
+
     def test_install_failure_preserves_prior_tool_and_durable_sentinel(self):
         worker = self._write_worker(self.uv_bin, "7.8.0")
         sentinel = self.root / "uv-tools" / "codex-worker" / "durable-sentinel"
@@ -356,6 +384,61 @@ class ToolPreflightTests(unittest.TestCase):
         self.assertEqual(payload["error"]["data"]["details"]["reason"], "codex_not_found")
         self.assertIn("codex", json.dumps(payload).lower())
         self.assertNotIn("Traceback", completed.stderr)
+
+    def test_symlinked_venv_python_spawns_lexical_sibling_launcher(self):
+        installed_root = self.root / "spawn-installed"
+        site_packages = installed_root / "site-packages"
+        shutil.copytree(SOURCE_PACKAGE / "codex_worker", site_packages / "codex_worker")
+        dist_info = site_packages / "codex_worker-7.9.0.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text(
+            "Metadata-Version: 2.1\nName: codex-worker\nVersion: 7.9.0\n",
+            encoding="utf-8",
+        )
+        installed_bin = installed_root / "bin"
+        installed_bin.mkdir(parents=True)
+        interpreter = installed_bin / "python"
+        interpreter.symlink_to(Path(sys.executable).resolve())
+        spawn_record = self.root / "spawn-argv.json"
+        launcher = installed_bin / "codex-worker"
+        launcher.write_text(
+            "#!%s\n"
+            "import json, os, sys\n"
+            "if 'daemon' in sys.argv and 'serve' in sys.argv:\n"
+            "    with open(os.environ['SPAWN_RECORD'], 'w', encoding='utf-8') as handle:\n"
+            "        json.dump(sys.argv, handle)\n"
+            "    raise SystemExit(23)\n"
+            "sys.path.insert(0, %r)\n"
+            "from codex_worker.cli import main\n"
+            "raise SystemExit(main())\n" % (interpreter, str(site_packages)),
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        codex_bin = self.root / "external-codex-bin"
+        codex_bin.mkdir()
+        codex = codex_bin / "codex"
+        codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        codex.chmod(0o755)
+        env = self.env([installed_bin, codex_bin, "/usr/bin", "/bin"])
+        env["SPAWN_RECORD"] = str(spawn_record)
+        completed = subprocess.run(
+            [str(launcher), "--instance", "symlinked-venv", "daemon", "start"],
+            cwd=self.root,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=10,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["error"]["data"]["details"]["reason"], "child_exited")
+        argv = json.loads(spawn_record.read_text(encoding="utf-8"))
+        self.assertEqual(Path(argv[0]).name, "codex-worker")
+        self.assertEqual(Path(argv[0]).parent.resolve(), installed_bin.resolve())
+        self.assertIn("daemon", argv)
+        self.assertIn("serve", argv)
 
 
 if __name__ == "__main__":

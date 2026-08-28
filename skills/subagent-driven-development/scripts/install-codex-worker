@@ -128,13 +128,21 @@ if [ -n "$CURRENT_COMMAND" ]; then
     "PATH shadowing: codex-worker resolves to $CURRENT_REAL, expected UV-owned $EXPECTED_REAL. Run 'uv tool update-shell', start a new shell, or repair this shell with: export PATH=\"$UV_BIN:\$PATH\""
 fi
 
-PROBE_STDOUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.out.XXXXXX")
-PROBE_STDERR=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.err.XXXXXX")
-INSTALL_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-install.out.XXXXXX")
+PROBE_STDOUT=
+PROBE_STDERR=
+INSTALL_OUTPUT=
 cleanup() {
-  rm -f "$PROBE_STDOUT" "$PROBE_STDERR" "$INSTALL_OUTPUT"
+  [ -z "$PROBE_STDOUT" ] || rm -f "$PROBE_STDOUT"
+  [ -z "$PROBE_STDERR" ] || rm -f "$PROBE_STDERR"
+  [ -z "$INSTALL_OUTPUT" ] || rm -f "$INSTALL_OUTPUT"
 }
 trap cleanup EXIT HUP INT TERM
+PROBE_STDOUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.out.XXXXXX") \
+  || fail "could not allocate temporary version-stdout file"
+PROBE_STDERR=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.err.XXXXXX") \
+  || fail "could not allocate temporary version-stderr file"
+INSTALL_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-install.out.XXXXXX") \
+  || fail "could not allocate temporary install-output file"
 
 probe_matches() {
   command_path=$1
