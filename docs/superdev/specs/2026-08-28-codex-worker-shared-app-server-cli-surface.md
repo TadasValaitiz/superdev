@@ -1,0 +1,332 @@
+# Codex Worker Shared App-Server — CLI Surface
+
+**Status:** FLEXIBLE exact surface under operator-locked global topology; D15 provisional pending review
+**Authority:** Public command and JSON contract for the design in
+[`2026-08-28-codex-worker-shared-app-server-design.md`](./2026-08-28-codex-worker-shared-app-server-design.md).
+The decision log remains authoritative for reasoning and drift arbitration.
+
+## 1. Global command grammar
+
+```text
+codex-worker [--pretty] [--socket ABSOLUTE_PATH] COMMAND ...
+```
+
+- `--instance` is removed. `CODEX_WORKER_INSTANCE` is ignored and diagnosed when present.
+- `--socket` remains an expert/testing bypass to an explicitly managed RPC endpoint. It
+  never selects or creates another public service and never implies an app-server address.
+- Without `--socket`, every operational command addresses one machine-local global service.
+- Every client invocation emits exactly one JSON object on stdout. Local usage errors exit 2;
+  typed operational refusals exit 1; success exits 0. `daemon serve` remains stdout-silent.
+- Local argument validation precedes service startup or network contact.
+
+The global service owns exactly one Codex app-server listener. Its default is:
+
+```text
+ws://127.0.0.1:4500
+```
+
+An explicit remotely attachable listener (`ws://`, `wss://`, `unix://`, or `unix://PATH`)
+is passed through unchanged to Codex. `stdio://` and `off` are rejected because no second
+client can attach. A live generation's listener is immutable: a different requested listener
+produces `service_config_conflict`, never a second service or silent restart.
+
+## 2. Common worker commands
+
+| Command | Purpose | Args (all) | Command model | Gate | Status |
+|---|---|---|---|---|---|
+| `start` | create worker + first turn | `--name NAME` required; exactly one of `--prompt TEXT` / `--prompt-file PATH`; `--cwd ABS_PATH` required; mutually exclusive `--tier medium\|very-smart` / `--model ID`; `--effort EFFORT` default `medium`; `--read-only`; `--goal TEXT`; `--token-budget POSITIVE_INT`; `--no-callback`; `--output-schema PATH`; `--timeout NONNEGATIVE_SECONDS`; `--app-server-listen ADDRESS` | `StartWorkerCommand` | RECORD | EXISTS-REWORK |
+| `run` | continue worker | `--name NAME` required; exactly one prompt input; `--output-schema PATH`; `--timeout NONNEGATIVE_SECONDS` | `RunWorkerCommand` | RECORD | EXISTS-KEEP |
+| `message` | proactive callback | `--name NAME` required; exactly one of `--message TEXT` / `--message-file PATH`; `--priority now\|next\|later` default `next`; `--cc-agent-name NAME` | `MessageWorkerCommand` | RECORD | EXISTS-KEEP |
+| `status` | inspect worker | `--name NAME` required | `StatusWorkerCommand` | READ | EXISTS-REWORK |
+| `messages` | recent messages | `--name NAME` required; `--tail POSITIVE_INT` default `1` | `MessagesWorkerCommand` | READ | EXISTS-KEEP |
+| `history` | recent turns | `--name NAME` required; `--tail POSITIVE_INT` default `1` | `HistoryWorkerCommand` | READ | EXISTS-KEEP |
+| `steer` | append active turn | `--name NAME` required; exactly one prompt input | `SteerWorkerCommand` | RECORD | EXISTS-REWORK |
+| `interrupt` | interrupt active turn | `--name NAME` required | `InterruptWorkerCommand` | RECORD | EXISTS-REWORK |
+| `goal set` | update native goal | `--name NAME` required; at least one of `--goal TEXT`, `--status active\|paused\|blocked\|usageLimited\|budgetLimited\|complete`, `--token-budget POSITIVE_INT` | `SetGoalCommand` | RECORD | EXISTS-KEEP |
+| `goal show` | inspect native goal | `--name NAME` required | `ShowGoalCommand` | READ | EXISTS-KEEP |
+| `limits` | inspect provider limits | no command args | `LimitsCommand` | READ | EXISTS-KEEP |
+
+### `start`
+
+```text
+codex-worker start --name NAME
+  (--prompt TEXT | --prompt-file PATH)
+  --cwd ABSOLUTE_PATH
+  [--tier very-smart|medium | --model MODEL]
+  [--effort EFFORT]
+  [--read-only]
+  [--goal TEXT]
+  [--token-budget INTEGER]
+  [--timeout SECONDS]
+  [--output-schema PATH]
+  [--no-callback]
+  [--app-server-listen ADDRESS]
+```
+
+`NAME` is globally unique, not scoped to a Claude session. The command ensures the global
+service, creates a worker mapping only when the name is absent, starts the first turn, waits
+for the configured observation outcome, and returns its complete projection. Reusing an
+existing name continues that worker only through `run`; `start` refuses the collision.
+
+`--cwd` remains explicit for the initial message. The Claude ambient working directory may
+be shown as a suggestion but is not silently substituted when the flag is absent. Claude
+environment values are callback metadata only; `CLAUDE_EFFORT` is never inherited.
+
+### `run`
+
+```text
+codex-worker run --name NAME
+  (--prompt TEXT | --prompt-file PATH)
+  [--timeout SECONDS]
+  [--output-schema PATH]
+```
+
+`run` continues the globally named worker and inherits its immutable cwd/model/effort/access,
+goal and callback binding. It may reattach a durable detached thread before starting a turn.
+
+### Observation and control
+
+```text
+codex-worker status --name NAME
+codex-worker messages --name NAME [--tail INTEGER]
+codex-worker history --name NAME [--tail INTEGER]
+codex-worker steer --name NAME (--prompt TEXT | --prompt-file PATH)
+codex-worker interrupt --name NAME
+codex-worker message --name NAME (--message TEXT | --message-file PATH)
+  [--priority now|next|later] [--cc-agent-name NAME]
+```
+
+These commands are globally routed by `NAME`. `steer` and `interrupt` bind the currently
+observed turn ID before the app-server call; a successor turn cannot be controlled by a stale
+request. Remote-TUI and worker operations have equal authority. Codex app-server responses
+are authoritative, and losing races receive typed active/not-active refusals.
+
+Goal and capacity commands retain their current arguments and semantics:
+
+```text
+codex-worker goal set --name NAME [--goal TEXT]
+  [--status active|paused|blocked|usageLimited|budgetLimited|complete]
+  [--token-budget INTEGER]
+codex-worker goal show --name NAME
+codex-worker limits
+```
+
+At least one update field is required for `goal set`.
+
+### 2b. Composition rationale
+
+The split between `start` and `run` remains because immutable policy, cwd, goal and callback
+capture belong only to creation; follow-ups deliberately stay short. Observation remains
+separate from control because reading state does not authorize mutation. D15 changes only the
+selector/topology fields required by D6–D11 and adds attach projection; it does not churn the
+mature worker, goal, limit or callback vocabulary.
+
+## 3. Service lifecycle commands
+
+| Command | Purpose | Args (all) | Command model | Gate | Status |
+|---|---|---|---|---|---|
+| `daemon start` | ensure global service | `--app-server-listen ADDRESS` optional, default `ws://127.0.0.1:4500` | `StartServiceCommand` | RECORD | EXISTS-REWORK |
+| `daemon status` | inspect without starting | no command args | `StatusServiceCommand` | READ | EXISTS-REWORK |
+| `daemon serve` | internal foreground server | `--state ABS_PATH` optional platform default; `--codex-bin PATH_OR_NAME` default `codex`; `--event-limit POSITIVE_INT` default `1000`; `--app-server-listen ADDRESS` optional fixed default | `ServeServiceCommand` | RECORD | EXISTS-REWORK |
+| `daemon restart` | supervised restart | `--app-server-listen ADDRESS` optional; `--force` | `RestartServiceCommand` | FILTER + RECORD | NEW |
+| `daemon stop` | supervised stop | `--force` | `StopServiceCommand` | FILTER + RECORD | EXISTS-REWORK |
+| `daemon shutdown` | old unguarded shutdown | none | — | — | REMOVED |
+
+### Start and inspect
+
+```text
+codex-worker daemon start [--app-server-listen ADDRESS]
+codex-worker daemon status
+codex-worker daemon serve [--app-server-listen ADDRESS]
+```
+
+`daemon start` is idempotent only when the live service is compatible and its listener equals
+the requested/default address. `daemon serve` is an internal foreground entry point used by
+the manager and packaging tests. `daemon status` never starts the service.
+
+The status result includes:
+
+```json
+{
+  "status": "ready",
+  "service_version": "7.11.0",
+  "pid": 12345,
+  "listener": "ws://127.0.0.1:4500",
+  "attach_command": "codex --remote ws://127.0.0.1:4500",
+  "worker_count": 2,
+  "active_turn_count": 0,
+  "migration": {"status": "complete", "conflict_count": 0},
+  "durable_state": "preserved"
+}
+```
+
+Numbers in this illustrative schema are **SEED-ILLUSTRATIVE**, not measurements.
+
+### Restart and stop — supervised maintenance only
+
+```text
+codex-worker daemon restart [--app-server-listen ADDRESS] [--force]
+codex-worker daemon stop [--force]
+```
+
+These commands are dangerous maintenance controls. Without `--force`, either refuses when
+any turn is active. With `--force`, the result enumerates every affected name/session/thread/
+turn before terminating the selected global runtime. The skill and normal automation MUST
+NOT invoke stop or restart as cleanup. A caller disconnect never stops the service.
+
+`daemon shutdown` is removed from the public grammar. The internal RPC shutdown method uses
+the same active-work guard and is not a shortcut around it.
+
+### Version replacement
+
+An installed-client/service-version mismatch follows one rule:
+
+1. zero active turns: the manager replaces the selected global runtime, preserves durable
+   mappings, and verifies the new immutable service version;
+2. one or more active turns: `service_busy` refuses replacement and identifies active work;
+3. no operation ever kills another process merely because it owns port 4500.
+
+## 4. Legacy migration commands
+
+| Command | Purpose | Args (all) | Command model | Gate | Status |
+|---|---|---|---|---|---|
+| `migration status` | inspect import/conflicts | no command args | `MigrationStatusCommand` | READ | NEW |
+| `migration resolve` | select/import a candidate | `--name NAME` required; `--thread THREAD_ID` required; `--as-name NEW_NAME` optional | `ResolveLegacyConflictCommand` | RECORD | NEW |
+
+```text
+codex-worker migration status
+codex-worker migration resolve --name NAME --thread THREAD_ID [--as-name NEW_NAME]
+```
+
+The first global-service start scans the known legacy instance registries. Unique names are
+imported. Byte-equivalent duplicate mappings are deduplicated. Divergent duplicate names are
+quarantined in a durable conflict ledger and cannot be addressed until explicitly resolved.
+
+Without `--as-name`, resolution selects one recorded thread for the conflicted global name.
+With `--as-name`, it imports that candidate under a new globally unique name while leaving the
+original conflict unresolved. Neither form deletes an unselected legacy record; the ledger
+records the choice and source identities. `migration status` is read-only and reports imported,
+deduplicated and conflicted counts plus resolution actions.
+
+## 5. Raw compatibility commands
+
+Existing raw families remain available for diagnostics and recovery:
+
+```text
+codex-worker model list
+codex-worker session start|list|resume ...
+codex-worker turn start|wait|status|events|steer|interrupt ...
+```
+
+Without `--socket`, they address the global service and must complete the same exact-ready
+version handshake before stateful RPC. With explicit `--socket`, they preserve the current
+expert bypass and do not auto-start or manage a daemon. Their detailed arguments and JSON
+models remain governed by the preceding Codex-worker CLI surface specification except where
+this document changes global selection and lifecycle.
+
+The inherited exhaustive raw contract is
+[`2026-08-18-codex-worker-server-cli-surface.md`](./2026-08-18-codex-worker-server-cli-surface.md).
+This work changes only endpoint selection: remove `--instance`, preserve top-level
+`--socket ABSOLUTE_PATH`, and require exact-ready global service status before managed RPC.
+
+### 5b. Composition rationale
+
+Raw families remain because they are the lossless recovery/debug boundary beneath ergonomic
+workers. They do not gain listener flags: service configuration is lifecycle state, not a
+property of a model/session/turn request. Explicit `--socket` remains the intentional escape
+hatch for tests and expert-owned endpoints (D15).
+
+## 6. Identity and attach projection
+
+Every successful common `start`, `run`, and `status` result includes this stable block:
+
+```json
+{
+  "name": "review-7f3a",
+  "session_id": "8e7f2c63-...",
+  "thread_id": "01a048d2-...",
+  "turn_id": "01a048d3-...",
+  "attach": {
+    "listener": "ws://127.0.0.1:4500",
+    "attach_command": "codex --remote ws://127.0.0.1:4500",
+    "resume_command": "codex --remote ws://127.0.0.1:4500 resume 01a048d2-..."
+  }
+}
+```
+
+Values are **SEED-ILLUSTRATIVE**. `session_id` is the Codex-worker durable mapping ID;
+`thread_id` is the Codex conversation ID accepted by `codex resume` and remote attach. The
+two are never presented as interchangeable. `turn_id` is nullable when no turn exists.
+
+## 7. Typed failures added by this surface
+
+| JSON-RPC code | kind | Meaning and required recovery detail |
+|---:|---|---|
+| `-32039` | `address_in_use` | Default/requested listener is occupied by an unverified peer; include listener and read-only inspection actions, never kill/fallback. |
+| `-32040` | `service_busy` | Stop/restart/version replacement would interrupt active work; include every active name/thread/turn and retry/status actions. |
+| `-32041` | `legacy_name_conflict` | Global name has divergent legacy mappings; include every source identity/thread and an exact `migration resolve` action. |
+| `-32042` | `service_config_conflict` | Live service listener differs from requested listener; include both addresses and status/maintenance guidance. |
+
+Existing typed faults retain their codes and one-object envelope. No traceback, credential,
+callback token, or raw auth value may cross stdout JSON.
+
+## 8. Operator journeys
+
+### Start, attach, and share control
+
+```text
+codex-worker start --name review-7f3a --cwd /repo --prompt "Review the branch"
+# Copy result.attach.resume_command into a terminal.
+codex --remote ws://127.0.0.1:4500 resume <thread_id>
+```
+
+The remote TUI and worker see the same app-server thread. Either can start a follow-up,
+steer, or interrupt; simultaneous conflicts are resolved by authoritative app-server replies.
+
+### Parallel Claude callers
+
+Independent callers use distinct globally unique names such as `audit-a91c`, `tests-41de`,
+and `docs-27b0`. They do not need shared Claude session IDs. Their shell processes may run
+concurrently and receive results in completion order.
+
+### Occupied port
+
+If another process owns `127.0.0.1:4500`, ordinary start returns `address_in_use`. The process
+is preserved and no alternate port is selected. An operator may deliberately choose another
+Codex-supported listener with `--app-server-listen` before the service generation starts.
+
+### Upgrade and maintenance
+
+An idle incompatible service is replaced automatically. Active work blocks replacement. An
+operator who explicitly accepts interruption may use `daemon restart --force`; the skill must
+never infer that permission from task completion, caller exit, or stale callback state.
+
+## 9. Compatibility boundary
+
+- Source-level Python APIs remain internal and may be refactored behind the public contract.
+- Old instance arguments are an intentional breaking removal; a local usage error points to
+  global names and migration status rather than silently honoring the old scope.
+- Legacy durable data is migrated or quarantined, never silently discarded.
+- `stdio://` remains an app-server transport capability, not a remotely attachable endpoint;
+  the shared-control product path is WebSocket.
+- Non-loopback or otherwise exposed listener security is the operator's responsibility for
+  this internal tool; status must label the exposure honestly.
+
+## 10. Docs to update in the same branch
+
+| Doc/surface | Required change |
+|---|---|
+| `skills/subagent-driven-development/SKILL.md` | global preflight/naming/attach handoff; forbid routine stop and instance use |
+| `skills/subagent-driven-development/references/codex-worker.md` | shared-control workflow, maintenance warning, migration |
+| `skills/subagent-driven-development/references/codex-tools.md` | installed command examples without instance routing |
+| `codex-worker --help` and family help | new/removed flags, migration/restart families, danger text |
+| live/checkride docs | permanent-service cleanup rules and shared-client scenarios |
+
+## 11. Delta summary
+
+The surface removes public multi-instance routing, makes one global WebSocket-backed service
+implicit, adds a listener option only at service creation/maintenance, returns exact remote
+attach/resume routes with every known Codex thread, adds explicit migration inspection and
+resolution, and replaces routine shutdown with guarded supervised stop/restart. Existing
+worker, goal, callback and raw diagnostic operations remain, now addressing the singleton
+service or an explicit expert `--socket`.
