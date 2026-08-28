@@ -26,8 +26,8 @@ Use `codex-worker model list` only to inspect the live catalog and each model's
 Use the product form, not raw session/turn commands, for normal dispatch:
 
 ```sh
-codex-worker start --name implement-a31 --prompt-file task.md --tier medium
-codex-worker start --name review-b32 --prompt-file review.md --tier very-smart --read-only
+codex-worker start --name implement-a31f --cwd /absolute/project --prompt-file task.md --tier medium
+codex-worker start --name review-b32e --cwd /absolute/project --prompt-file review.md --tier very-smart --read-only
 ```
 
 For the live catalog or a raw-model investigation, see the technical appendix in
