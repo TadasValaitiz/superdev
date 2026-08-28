@@ -777,6 +777,30 @@ class CliTests(unittest.TestCase):
         self.prompt_file.write_text("from file\n", encoding="utf-8")
         self.rpc_calls = []
 
+    def test_version_is_terminal_plain_text_and_never_touches_runtime(self):
+        forbidden = []
+        original_rpc_call = cli.rpc_call
+        original_instance_manager = cli._instance_manager
+        original_serve = cli._serve
+        cli.rpc_call = lambda *args, **kwargs: forbidden.append("rpc")
+        cli._instance_manager = lambda *args, **kwargs: forbidden.append("instance")
+        cli._serve = lambda *args, **kwargs: forbidden.append("serve")
+        try:
+            completed = self.run_cli(
+                ["--pretty", "--instance", "chosen", "--version"],
+                include_socket=False,
+            )
+        finally:
+            cli.rpc_call = original_rpc_call
+            cli._instance_manager = original_instance_manager
+            cli._serve = original_serve
+        self.assertEqual(completed.returncode, 0)
+        self.assertRegex(completed.stdout, r"^codex-worker \d+\.\d+\.\d+\n$")
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(forbidden, [])
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(completed.stdout)
+
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()
         args = parser.parse_args(["message", "--name", "build-1", "--message", "progress"])

@@ -24,6 +24,7 @@ from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowReq
                        WorkerMessagesRequest, WorkerStatusRequest)
 from .instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                        resolve_instance, validate_instance_id)
+from .version import distribution_version
 
 
 DOCUMENTED_CLIENT_METHODS = {
@@ -132,6 +133,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CodexWorkerArgumentParser(
         prog="codex-worker",
         description="Local Unix-socket broker for durable Codex worker sessions.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="codex-worker %s" % distribution_version(),
     )
     parser.add_argument("--socket", type=_absolute_path,
                         help="Unix socket path (default: SUPERDEV_CODEX_WORKER_SOCKET or user temp path)")

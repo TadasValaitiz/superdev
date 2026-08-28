@@ -40,10 +40,100 @@ write_json_field() {
   jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
+read_toml_field() {
+  local file="$1" field="$2"
+  if [[ "$field" != "project.version" ]]; then
+    echo "error: unsupported TOML field '$field' in $file" >&2
+    return 1
+  fi
+  python3 - "$file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+section = None
+matches = []
+for line in path.read_text(encoding="utf-8").splitlines():
+    stripped = line.strip()
+    header = re.fullmatch(r"\[([^]]+)\][ \t]*(?:#.*)?", stripped)
+    if header:
+        section = header.group(1)
+        continue
+    if section == "project":
+        match = re.fullmatch(r'version[ \t]*=[ \t]*"([^"\r\n]+)"[ \t]*(?:#.*)?', stripped)
+        if match:
+            matches.append(match.group(1))
+if len(matches) != 1:
+    print("error: expected exactly one project.version in %s; found %d" % (path, len(matches)), file=sys.stderr)
+    raise SystemExit(1)
+print(matches[0])
+PY
+}
+
+write_toml_field() {
+  local file="$1" field="$2" value="$3"
+  if [[ "$field" != "project.version" ]]; then
+    echo "error: unsupported TOML field '$field' in $file" >&2
+    return 1
+  fi
+  python3 - "$file" "$value" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+value = sys.argv[2].encode("utf-8")
+data = path.read_bytes()
+section = None
+matches = []
+offset = 0
+for line in data.splitlines(keepends=True):
+    body = line.rstrip(b"\r\n")
+    stripped = body.strip()
+    header = re.fullmatch(br"\[([^]]+)\][ \t]*(?:#.*)?", stripped)
+    if header:
+        section = header.group(1)
+    elif section == b"project":
+        match = re.fullmatch(br'([ \t]*version[ \t]*=[ \t]*")([^"\r\n]+)("[ \t]*(?:#.*)?)', body)
+        if match:
+            start = offset + match.start(2)
+            end = offset + match.end(2)
+            matches.append((start, end))
+    offset += len(line)
+if len(matches) != 1:
+    print("error: expected exactly one project.version in %s; found %d" % (path, len(matches)), file=sys.stderr)
+    raise SystemExit(1)
+start, end = matches[0]
+updated = data[:start] + value + data[end:]
+temporary = path.with_name(path.name + ".tmp")
+temporary.write_bytes(updated)
+temporary.replace(path)
+PY
+}
+
+read_field() {
+  local file="$1" field="$2" format="${3:-json}"
+  case "$format" in
+    json) read_json_field "$file" "$field" ;;
+    toml) read_toml_field "$file" "$field" ;;
+    *) echo "error: unsupported format '$format' for $file" >&2; return 1 ;;
+  esac
+}
+
+write_field() {
+  local file="$1" field="$2" value="$3" format="${4:-json}"
+  case "$format" in
+    json) write_json_field "$file" "$field" "$value" ;;
+    toml) write_toml_field "$file" "$field" "$value" ;;
+    *) echo "error: unsupported format '$format' for $file" >&2; return 1 ;;
+  esac
+}
+
 # Read the list of declared files from config.
-# Outputs lines of "path<TAB>field"
+# Outputs lines of "path<TAB>field<TAB>format". Format defaults to JSON.
 declared_files() {
-  jq -r '.files[] | "\(.path)\t\(.field)"' "$CONFIG"
+  jq -r '.files[] | [.path, .field, (.format // "json")] | @tsv' "$CONFIG"
 }
 
 # Read the audit exclude patterns from config.
@@ -60,7 +150,7 @@ cmd_check() {
   echo "Version check:"
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
       printf "  %-45s  MISSING\n" "$path ($field)"
@@ -68,7 +158,7 @@ cmd_check() {
       continue
     fi
     local ver
-    ver=$(read_json_field "$fullpath" "$field")
+    ver=$(read_field "$fullpath" "$field" "$format")
     printf "  %-45s  %s\n" "$path ($field)" "$ver"
     versions+=("$ver")
   done < <(declared_files)
@@ -99,9 +189,9 @@ cmd_audit() {
   # Determine the current version (most common across declared files)
   local current_version
   current_version=$(
-    while IFS=$'\t' read -r path field; do
+    while IFS=$'\t' read -r path field format; do
       local fullpath="$REPO_ROOT/$path"
-      [[ -f "$fullpath" ]] && read_json_field "$fullpath" "$field"
+      [[ -f "$fullpath" ]] && read_field "$fullpath" "$field" "$format"
     done < <(declared_files) | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'
   )
 
@@ -124,7 +214,7 @@ cmd_audit() {
 
   # Get list of declared paths for comparison
   local -a declared_paths=()
-  while IFS=$'\t' read -r path _field; do
+  while IFS=$'\t' read -r path _field _format; do
     declared_paths+=("$path")
   done < <(declared_files)
 
@@ -175,15 +265,15 @@ cmd_bump() {
   echo "Bumping all declared files to $new_version..."
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
       echo "  SKIP (missing): $path"
       continue
     fi
     local old_ver
-    old_ver=$(read_json_field "$fullpath" "$field")
-    write_json_field "$fullpath" "$field" "$new_version"
+    old_ver=$(read_field "$fullpath" "$field" "$format")
+    write_field "$fullpath" "$field" "$new_version" "$format"
     printf "  %-45s  %s -> %s\n" "$path ($field)" "$old_ver" "$new_version"
   done < <(declared_files)
 
