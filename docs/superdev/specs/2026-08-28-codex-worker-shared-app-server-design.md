@@ -1,6 +1,6 @@
 # Codex worker shared app-server — Design (anchor)
 
-**Date:** 2026-08-28 · **Status:** operator-ratified; pending independent spec review
+**Date:** 2026-08-28 · **Status:** approved (operator delegated autonomous build; independent spec review approved)
 **Mode:** human-in-loop through D11, then autonomous by explicit operator delegation
 **Decision log:** ./2026-08-28-codex-worker-shared-app-server-decisions.md
 **Companions:** ./2026-08-28-codex-worker-shared-app-server-cli-surface.md · ./2026-08-28-codex-worker-shared-app-server-angle-01-service-ownership.md · ./2026-08-28-codex-worker-shared-app-server-angle-02-shared-control.md · ./2026-08-28-codex-worker-shared-app-server-angle-03-identity-and-cli.md · ./2026-08-28-codex-worker-shared-app-server-angle-04-lifecycle-and-migration.md · ./2026-08-28-codex-worker-global-install-design.md
