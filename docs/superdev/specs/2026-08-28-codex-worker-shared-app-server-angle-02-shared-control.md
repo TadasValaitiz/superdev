@@ -83,11 +83,20 @@ transport.
 
 ### FLEXIBLE — the gateway closes the maintenance race
 
-The public gateway accepts `ws://IP:PORT`; the Codex child remains on a private Unix-WebSocket.
+The public gateway accepts `ws://HOST:PORT`; the Codex child remains on a private Unix-WebSocket.
 During maintenance it blocks new/unknown mutating requests, waits already-forwarded mutations,
 then pages `thread/list` across every source. Client responses needed by active approvals and
 interrupt/read operations still pass. **This means:** a TUI-created thread is included even
 without a worker record, and ordinary stop cannot race a new public turn.
+
+```text
+worker RPC ─ broker private WS ─┐
+                                ├─ private Codex app-server authority
+Codex TUI ─ public WS gateway ──┘
+
+drain: close mutation gate -> settle forwarded mutations
+       -> page all threads -> active? refuse : maintain service
+```
 
 ## What shared control cannot do
 
@@ -114,5 +123,5 @@ expected-turn checks, durable cursors and typed race faults; replace only the pr
 
 ## Reconciled outcome
 
-Two LOCKED control laws and three FLEXIBLE transport seams give the human and automation equal
+Three LOCKED control laws and three FLEXIBLE transport seams give the human and automation equal
 access while keeping Codex app-server state authoritative.

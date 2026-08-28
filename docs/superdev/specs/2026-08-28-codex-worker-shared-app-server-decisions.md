@@ -151,7 +151,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - A: loopback-only listener validation — gains a safe local boundary / sacrifices direct cross-machine binding.
   - B: authenticated `wss://` only for non-loopback — gains safe remote access / sacrifices initial simplicity and requires credential lifecycle design.
   - C: accept every address supported by `codex app-server --listen` — gains transparent capability and operator control / sacrifices worker-enforced network safety.
-- **Decided:** C. `--app-server-listen` is validated structurally and passed to Codex without a loopback restriction. The default remains `ws://127.0.0.1:4500`. Non-loopback exposure is represented explicitly in status/start output and documentation; the worker does not silently claim it is authenticated or safe.
+- **Decided:** C at the time: `--app-server-listen` was to be validated structurally and passed to Codex without a loopback restriction. D17 later supersedes the literal pass-through while preserving the operator's unrestricted-host intent: the service gateway binds the connectable address and the Codex child stays private. The default remains `ws://127.0.0.1:4500`. Non-loopback exposure is represented explicitly in status/start output and documentation; the worker does not silently claim it is authenticated or safe.
 - **Not implicit authorization:** accepting a listener does not configure firewall, TLS, token storage, or remote-client credentials.
 - **Extension law:** future authentication support must project its measured mode without printing secret material; absence of configured auth remains explicitly visible for non-loopback listeners.
 - **Anti-patterns:** no label such as `secure` inferred from `wss` alone; no token value in argv/status/logs; no rewriting the requested address to loopback.
@@ -336,8 +336,10 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
     serve this product.
   - C: loopback WebSocket only — gains minimal implementation / sacrifices the operator's
     explicit override choice.
-- **Decided:** B. Accept `ws://`, `wss://`, `unix://`, and `unix://PATH` when Codex accepts
-  them; reject `stdio://` and `off` locally. Default remains loopback WebSocket. Upstream
+- **Decided:** B at the time. D17 supersedes the listener-mode portion: the product now accepts
+  only a connectable public `ws://HOST:PORT`, while the Codex child uses a private Unix-WebSocket;
+  `wss://` termination belongs to an operator proxy. `stdio://`, `off`, and public Unix paths are
+  rejected. Default remains loopback WebSocket. Upstream
   WebSocket overload `-32001` receives bounded exponential-backoff-with-jitter retries for
   idempotent observation/handshake operations only; mutations return a typed busy result rather
   than risking replay. Non-loopback auth configuration remains an explicit operator-owned
@@ -377,7 +379,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - C: service-owned public WebSocket gateway to a private Codex Unix-WebSocket listener — gains
     a gate over every external mutation and preserves one app-server/thread authority / sacrifices
     literal listener pass-through and adds a bounded forwarding component.
-- **Decided:** C. The Python service owns the public `ws://IP:PORT` listener. Each external TUI
+- **Decided:** C. The Python service owns the public connectable `ws://HOST:PORT` listener. Each external TUI
   connection maps one-to-one to a private Unix-WebSocket app-server connection; the broker uses
   its own private initialized connection. A maintenance gate atomically blocks new worker
   mutations and gateway request forwarding, waits forwarded mutations to settle, then pages
@@ -397,7 +399,9 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Gateway request law:** while draining, client JSON-RPC requests are fail-closed except an
   explicit read/interrupt allowlist; client responses to server-initiated approvals/input and
   notifications continue so active turns can finish. Unknown request methods are blocked.
-- **Listener refinement:** the public override is `ws://IP:PORT`; `wss://` belongs at a TLS
+- **Listener refinement:** the public override is a connectable `ws://HOST:PORT`; port `0`,
+  wildcard/unspecified hosts, userinfo, path, query and fragment are rejected because the same
+  stored value must be a usable `codex --remote` address. `wss://` belongs at a TLS
   reverse proxy because Codex 0.150.1 does not accept it as a server listener. Unix and stdio
   remain private/internal transports, not public attach routes in this iteration.
 - **Not a second Codex state authority:** the gateway forwards frames and gates requests; it

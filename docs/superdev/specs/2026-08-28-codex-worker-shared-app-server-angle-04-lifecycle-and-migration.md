@@ -44,6 +44,17 @@ loud, human-supervised override and enumerates affected thread and known worker 
 else's work; the skill documents stop as dangerous; and the service remains immediately usable
 between Claude sessions.
 
+**FLEXIBLE maintenance sequence around the locked no-interruption law:**
+
+```text
+maintenance request
+  -> acquire worker + gateway mutation gate
+  -> wait already-forwarded mutations
+  -> page all-source authoritative thread statuses
+  -> active/error: release + refuse
+  -> empty: close clients, stop/restart child, preserve registry
+```
+
 ### LOCKED — version replacement is automatic only while idle
 
 The daemon stamps its loaded version once. A new client compares that immutable value. If no

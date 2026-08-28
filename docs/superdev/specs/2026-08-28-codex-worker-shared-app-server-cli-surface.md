@@ -21,13 +21,15 @@ codex-worker [--pretty] [--socket ABSOLUTE_PATH] COMMAND ...
   typed operational refusals exit 1; success exits 0. `daemon serve` remains stdout-silent.
 - Local argument validation precedes service startup or network contact.
 
-The global service owns exactly one Codex app-server listener. Its default is:
+The global service owns exactly one public Codex-TUI gateway listener. Its default is:
 
 ```text
 ws://127.0.0.1:4500
 ```
 
-An explicit public `ws://IP:PORT` listener is preserved unchanged by the service gateway.
+An explicit public `ws://HOST:PORT` listener is preserved unchanged by the service gateway.
+`HOST` must be connectable as written: wildcard/unspecified hosts (`0.0.0.0`, `::`, `[::]`)
+and port `0` are rejected. Port is `1..65535`; userinfo, path, query and fragment are absent.
 The Codex child itself listens on an owner-only Unix-WebSocket path. `wss://` belongs at an
 operator-owned TLS reverse proxy; `stdio://`, `off`, and public Unix paths are rejected for
 this human-attach surface. A live generation's public listener is immutable: a different
@@ -37,15 +39,15 @@ request produces `service_config_conflict`, never a second service or silent res
 
 | Command | Purpose | Args (all) | Command model | Gate | Status |
 |---|---|---|---|---|---|
-| `start` | create worker + first turn | `--name NAME` required (1–128 chars; no control/NUL/path separator); exactly one of `--prompt NONEMPTY_TEXT` / `--prompt-file READABLE_UTF8_PATH`; `--cwd EXISTING_ABS_DIR` required; mutually exclusive `--tier medium\|very-smart` (default `medium`) / `--model NONEMPTY_ID`; `--effort NONEMPTY_SUPPORTED_EFFORT` default `medium`; `--read-only` default false/full; `--goal NONEMPTY_TEXT<=4000` optional; `--token-budget POSITIVE_INT` optional and requires `--goal`; `--no-callback`; `--output-schema READABLE_JSON_OBJECT_PATH`; `--timeout FINITE_NONNEGATIVE_SECONDS` optional/no deadline; `--app-server-listen ws://IP:PORT` optional/fixed default; top-level `--pretty`; `--socket` invalid | `StartWorkerCommand` | RECORD | EXISTS-REWORK |
+| `start` | create worker + first turn | `--name NAME` required (1–128 chars; no control/NUL/path separator); exactly one of `--prompt NONEMPTY_TEXT` / `--prompt-file READABLE_UTF8_PATH`; `--cwd EXISTING_ABS_DIR` required; mutually exclusive `--tier medium\|very-smart` (default `medium`) / `--model NONEMPTY_ID`; `--effort NONEMPTY_SUPPORTED_EFFORT` default `medium`; `--read-only` default false/full; `--goal NONEMPTY_TEXT<=4000` optional; `--token-budget POSITIVE_INT` optional and requires `--goal`; `--no-callback`; `--output-schema READABLE_JSON_OBJECT_PATH`; `--timeout FINITE_NONNEGATIVE_SECONDS` optional/no deadline; `--app-server-listen ws://HOST:PORT` optional/fixed default; top-level `--pretty`; `--socket` invalid | `StartWorkerCommand` | RECORD | EXISTS-REWORK |
 | `run` | continue worker | `--name NAME` required; exactly one prompt input with the same validation; `--output-schema READABLE_JSON_OBJECT_PATH`; `--timeout FINITE_NONNEGATIVE_SECONDS` optional/no deadline; top-level `--pretty`; `--socket` invalid | `RunWorkerCommand` | RECORD | EXISTS-KEEP |
-| `message` | proactive callback | `--name NAME` required; exactly one of `--message TEXT` / `--message-file PATH`; `--priority now\|next\|later` default `next`; `--cc-agent-name NAME` | `MessageWorkerCommand` | RECORD | EXISTS-KEEP |
+| `message` | proactive callback | `--name NAME` required; exactly one of `--message NONEMPTY_TEXT` / `--message-file READABLE_NONEMPTY_UTF8_PATH`; `--priority now\|next\|later` default `next`; `--cc-agent-name NONEMPTY_NAME` optional | `MessageWorkerCommand` | RECORD | EXISTS-KEEP |
 | `status` | inspect worker | `--name NAME` required | `StatusWorkerCommand` | READ | EXISTS-REWORK |
 | `messages` | recent messages | `--name NAME` required; `--tail POSITIVE_INT` default `1` | `MessagesWorkerCommand` | READ | EXISTS-KEEP |
 | `history` | recent turns | `--name NAME` required; `--tail POSITIVE_INT` default `1` | `HistoryWorkerCommand` | READ | EXISTS-KEEP |
 | `steer` | append active turn | `--name NAME` required; exactly one prompt input | `SteerWorkerCommand` | RECORD | EXISTS-REWORK |
 | `interrupt` | interrupt active turn | `--name NAME` required | `InterruptWorkerCommand` | RECORD | EXISTS-REWORK |
-| `goal set` | update native goal | `--name NAME` required; at least one of `--goal TEXT`, `--status active\|paused\|blocked\|usageLimited\|budgetLimited\|complete`, `--token-budget POSITIVE_INT` | `SetGoalCommand` | RECORD | EXISTS-KEEP |
+| `goal set` | update native goal | `--name NAME` required; at least one of `--goal NONEMPTY_TEXT<=4000`, `--status active\|paused\|blocked\|usageLimited\|budgetLimited\|complete`, `--token-budget POSITIVE_INT` | `SetGoalCommand` | RECORD | EXISTS-KEEP |
 | `goal show` | inspect native goal | `--name NAME` required | `ShowGoalCommand` | READ | EXISTS-KEEP |
 | `limits` | inspect provider limits | no command args | `LimitsCommand` | READ | EXISTS-KEEP |
 
@@ -136,11 +138,12 @@ mature worker, goal, limit or callback vocabulary.
 
 | Command | Purpose | Args (all) | Command model | Gate | Status |
 |---|---|---|---|---|---|
-| `daemon start` | ensure global service | `--app-server-listen ADDRESS` optional, default `ws://127.0.0.1:4500` | `StartServiceCommand` | RECORD | EXISTS-REWORK |
-| `daemon status` | inspect without starting | no command args | `StatusServiceCommand` | READ | EXISTS-REWORK |
-| `daemon serve` | hidden internal foreground server | `--state ABS_PATH` optional platform default; `--codex-bin PATH_OR_NAME` default `codex`; `--event-limit POSITIVE_INT` default `1000`; `--app-server-listen ws://IP:PORT` optional fixed default | `ServeServiceCommand` | RECORD | INTERNAL (suppressed from public family help) |
-| `daemon restart` | supervised restart | `--app-server-listen ADDRESS` optional; `--force` | `RestartServiceCommand` | FILTER + RECORD | NEW |
-| `daemon stop` | supervised stop | `--force` | `StopServiceCommand` | FILTER + RECORD | EXISTS-REWORK |
+| `daemon start` | ensure global service | `--app-server-listen CONNECTABLE_ws://HOST:PORT` optional/fixed default; top-level `--pretty`; `--socket` invalid | `StartServiceCommand` | RECORD | EXISTS-REWORK |
+| `daemon status` | inspect managed service without starting | no command args; top-level `--pretty`; no `--socket` in this form | `StatusServiceCommand` | READ | EXISTS-REWORK |
+| `--socket ABS_PATH daemon status` | inspect explicit expert RPC endpoint | top-level absolute `--socket` required; `--pretty`; no command args | existing raw `daemon/status` | READ | EXISTS-KEEP raw |
+| `daemon serve` | hidden internal foreground server | `--state ABS_PATH` optional platform default; `--codex-bin PATH_OR_NAME` default `codex`; `--event-limit POSITIVE_INT` default `1000`; `--app-server-listen CONNECTABLE_ws://HOST:PORT` optional/fixed default; top-level `--socket ABS_PATH` optional internal RPC endpoint; `--pretty` invalid | `ServeServiceCommand` | RECORD | INTERNAL (suppressed from public family help) |
+| `daemon restart` | supervised restart | `--app-server-listen CONNECTABLE_ws://HOST:PORT` optional; `--force`; top-level `--pretty`; `--socket` invalid | `RestartServiceCommand` | FILTER + RECORD | NEW |
+| `daemon stop` | supervised stop | `--force`; top-level `--pretty`; `--socket` invalid | `StopServiceCommand` | FILTER + RECORD | EXISTS-REWORK |
 | `daemon shutdown` | old unguarded shutdown | none | — | — | REMOVED |
 
 ### Start and inspect
@@ -204,8 +207,8 @@ An installed-client/service-version mismatch follows one rule:
 
 | Command | Purpose | Args (all) | Command model | Gate | Status |
 |---|---|---|---|---|---|
-| `migration status` | inspect import/conflicts | no command args | `MigrationStatusCommand` | READ | NEW |
-| `migration resolve` | select/import a candidate | `--name NAME` required; `--thread THREAD_ID` required; `--as-name NEW_NAME` optional | `ResolveLegacyConflictCommand` | RECORD | NEW |
+| `migration status` | inspect import/conflicts | no command args; top-level `--pretty`; `--socket` invalid | `MigrationStatusCommand` | READ | NEW |
+| `migration resolve` | select/import a candidate | `--name NAME` required; `--thread NONEMPTY_THREAD_ID` required; `--as-name NEW_VALID_GLOBAL_NAME` optional; top-level `--pretty`; `--socket` invalid | `ResolveLegacyConflictCommand` | RECORD | NEW |
 
 ```text
 codex-worker migration status

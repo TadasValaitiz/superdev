@@ -48,11 +48,19 @@ listener for that live generation.
 ### LOCKED — the default address is deterministic, not opportunistic
 
 If the default port is occupied by an unverified peer, startup returns a typed
-`address_in_use` refusal. It neither kills the peer nor falls back to 4501. A deliberate
-listener override is passed through to Codex before this service generation starts.
+`address_in_use` refusal. It neither kills the peer nor falls back to 4501. A deliberate,
+connectable `ws://HOST:PORT` override is bound exactly by the service gateway before this
+generation starts; Codex stays on its private Unix-WebSocket.
 
 **This means:** the attach route printed to a human is stable, orchestration never has to
 discover a randomly selected port, and an occupied address is an operator-visible conflict.
+
+**FLEXIBLE shape around locked ownership:**
+
+```text
+Claude shells -> codex-worker Unix RPC -> GlobalWorkerService -> private Codex app-server
+Human TUI    -> ws://127.0.0.1:4500 gateway -> one private backend connection ────────┘
+```
 
 ### FLEXIBLE — supervision mechanics may vary without changing ownership
 

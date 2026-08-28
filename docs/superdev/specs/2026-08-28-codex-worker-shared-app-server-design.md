@@ -35,7 +35,7 @@ legacy name is ambiguous.
 | ID | Requirement | Source | Priority | Acceptance signal |
 |---|---|---|---|---|
 | R1 | One machine-local `codex-worker` service and one Codex app-server must outlive individual Claude/TUI clients and auto-start when absent. | operator | must | Separate clients exit; later commands reuse the same service and durable workers. |
-| R2 | The default human attach listener must be exactly `ws://127.0.0.1:4500`; an explicit `ws://IP:PORT` creation/maintenance override is preserved exactly; occupied default refuses without fallback or process killing. | operator + owned D17 safety refinement | must | Status and refusal show the exact address and no alternate bind occurs. |
+| R2 | The default human attach listener must be exactly `ws://127.0.0.1:4500`; an explicit connectable `ws://HOST:PORT` creation/maintenance override is preserved exactly; port zero and wildcard/unspecified hosts are invalid; occupied default refuses without fallback or process killing. | operator + owned D17 safety refinement | must | Status and refusal show the exact usable address and no alternate bind occurs. |
 | R3 | A remote Codex TUI and the worker connection must have full shared control of the same thread, with app-server responses/events authoritative. | operator + measured probe | must | Client B resumes A's thread, starts/steers/interrupts work, and both observe authoritative completion. |
 | R4 | Worker `name` must be globally unique and ambient Claude session identity must not filter lookup or select infrastructure. | operator | must | Two callers resolve the same name; duplicate creation refuses globally. |
 | R5 | Every creation, continuation, status, and partial failure must preserve known wrapper `session_id`, Codex `thread_id`, listener, and runnable attach/resume routes. | operator | must | Human receives a working `codex --remote … resume <thread_id>` route. |
@@ -44,7 +44,7 @@ legacy name is ambiguous.
 | R8 | Same-version clients reuse the service; version mismatch automatically restarts only at global zero-active-turn state and otherwise refuses busy. | operator | must | Idle upgrade preserves mappings; active upgrade does not terminate work. |
 | R9 | Legacy per-instance registries must migrate losslessly: unique records import, identical records deduplicate, divergent duplicate names remain explicit conflicts, and source directories are not deleted. | discovered | must | Migration ledger/digests and conflict recovery reproduce every known identity. |
 | R10 | Existing common worker functions—start/run/message/status/messages/history/control/goal/limits/model/session/turn—and Python 3.9 UV installation must remain available on the global service. | existing contract | must | Existing deterministic suite plus installed live journey pass after surface migration. |
-| R11 | Explicit public listener overrides may use any `ws://IP:PORT` accepted by the service gateway; non-loopback exposure/auth state must be honestly projected and never inferred safe. | operator, refined by D17 to preserve R7/R8 | should | Requested public address is preserved; status labels exposure/auth as measured/unknown. |
+| R11 | Explicit public listener overrides may use any connectable `ws://HOST:PORT` accepted by the service gateway; non-loopback exposure/auth state must be honestly projected and never inferred safe. | operator, refined by D17 to preserve R7/R8 | should | Requested public address is preserved; status labels exposure/auth as measured/unknown. |
 | R12 | At least five named workers plus an attached second WebSocket client must operate concurrently without crossed identity, notifications, callback routes, or files. | existing concurrency bar + operator | must | Live ride proves five simultaneous names and one shared human-style client. |
 
 ## 3. Use cases   [ANCHOR]
@@ -141,7 +141,7 @@ encodes one JSON-RPC object per WebSocket text frame. It initializes once with
 delivers notifications to `RuntimeStore`, bounds frames/queues, and closes all waiters
 with a typed transport fault. The maintained synchronous `websockets` client is isolated
 inside this module and installed only in the UV tool environment. The public gateway accepts
-`ws://IP:PORT`, maps each frontend connection to one private Unix-WebSocket connection, and
+`ws://HOST:PORT`, maps each frontend connection to one private Unix-WebSocket connection, and
 forwards Codex responses/events unchanged. It parses request metadata only to enforce the
 maintenance gate. Upstream overload retries are bounded to idempotent readiness/observation
 calls; mutation is never replayed.
@@ -230,7 +230,7 @@ classDiagram
 | Worker identity | name unique inside instance | name unique globally | D7 |
 | Codex resumable ID | `thread_id`, sometimes described casually as session | always `thread_id`; wrapper UUID remains `session_id` | D2 |
 | Claude session | infrastructure instance source plus callback metadata | callback metadata only | D7 |
-| Listener | private stdio child | durable `app_server_listener` service config | D1, D5 |
+| Human attach listener | none | durable `public_gateway_listener` service config; Codex child stays private Unix-WebSocket | D1, D5, D17 |
 
 #### 5.3.3 Delta ledger
 
@@ -276,7 +276,7 @@ classDiagram
 
 This area makes human/Claude co-control legible instead of layering an invented lease
 over Codex (R3, R12; D4; UC2, UC3, UC9).
-**Status:** `LOCKED (D4)`
+**Status:** `FLEXIBLE (D4 locked; D17 autonomous provisional)`
 
 Worker-created/resumed threads subscribe the broker connection. TUI `resume` subscribes
 its connection. Notifications are processed independently but describe the same
@@ -344,6 +344,10 @@ active and idle worker names/counts plus durable-state promise. Forced stop/rest
 accepted only from the explicit command model and is never emitted by a callback, skill,
 or retry action.
 
+Active threads without a `WorkerRecord` remain first-class impact rows with `worker: null`,
+their Codex `thread_id`, and `origin: "unmapped_tui"`; lack of wrapper metadata never removes
+them from the count or force report.
+
 The active inventory is app-server-wide, not registry-wide:
 
 ```text
@@ -396,7 +400,7 @@ active refusal; legacy migration; real Claude common-command caller; and CLI che
 - **D15 (provisional):** the public CLI removes instance routing, adds attach projection, guarded maintenance,
   and explicit migration resolution; revisit only when the topology itself changes.
 - **D16 (provisional, listener portion superseded by D17):** overload never replays mutation;
-  the public listener is now specifically gateway-owned `ws://IP:PORT`.
+  the public listener is now specifically gateway-owned `ws://HOST:PORT`.
 - **D17 (provisional):** a maintenance-aware public WebSocket gateway fronts the private
   app-server and closes the TUI turn race; revisit on atomic upstream drain support.
 
@@ -448,7 +452,7 @@ regressions that still govern the new topology.
 | AH8 | Stop/restart is absent from normal skill completion, refuses active work, and force reports every affected worker under supervised use. | UC8 / R7 | fast + checkride |  |
 | AH9 | Callback delivery still reaches the captured Claude room while global lookup and TUI control remain independent of Claude session identity. | UC9 / R6 | live |  |
 | AH10 | Installed Python 3.9 UV tool and all existing command families operate from unrelated directories through the global service. | UC10 / R10, R11 | package + live |  |
-| AH11 | Listener override is passed exactly to Codex and status honestly reports non-loopback/auth exposure without leaking credentials. | UC10 / R11 | fast + live fixture |  |
+| AH11 | The global service binds the exact connectable public listener override and status honestly reports non-loopback/auth exposure without leaking credentials. | UC10 / R11 | fast + live fixture |  |
 | AH12 | A fresh executor/evaluator checkride judges the whole changed CLI and lifecycle from the operator perspective. | UC1–UC10 / R1–R12 | live checkride |  |
 
 ## 10. Drift protocol
