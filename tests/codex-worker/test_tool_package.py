@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -55,6 +57,28 @@ class ToolPackageTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "codex-worker %s\n" % expected)
+        self.assertEqual(completed.stderr, "")
+
+    def test_source_cli_prefers_adjacent_pyproject_over_ambient_metadata(self):
+        expected = json.loads(CLAUDE_MANIFEST.read_text(encoding="utf-8"))["version"]
+        with tempfile.TemporaryDirectory() as temporary:
+            dist_info = Path(temporary) / "codex_worker-99.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.1\nName: codex-worker\nVersion: 99.0.0\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["PYTHONPATH"] = temporary + os.pathsep + env.get("PYTHONPATH", "")
+            completed = subprocess.run(
+                [sys.executable, str(SOURCE_LAUNCHER), "--version"],
+                text=True,
+                capture_output=True,
+                check=False,
+                env=env,
+            )
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stdout, "codex-worker %s\n" % expected)
         self.assertEqual(completed.stderr, "")

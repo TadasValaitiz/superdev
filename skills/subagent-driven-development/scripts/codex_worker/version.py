@@ -9,8 +9,7 @@ _SECTION = re.compile(r"^\[[^]]+\][ \t]*(?:#.*)?$")
 _VERSION = re.compile(r'^version[ \t]*=[ \t]*"([^"\r\n]+)"[ \t]*(?:#.*)?$')
 
 
-def _source_version() -> str:
-    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+def _source_version(pyproject: Path) -> str:
     in_project = False
     versions = []
     for line in pyproject.read_text(encoding="utf-8").splitlines():
@@ -31,8 +30,8 @@ def _source_version() -> str:
 
 
 def distribution_version() -> str:
-    """Return installed metadata identity, with a source-checkout fallback."""
-    try:
-        return metadata.version("codex-worker")
-    except metadata.PackageNotFoundError:
-        return _source_version()
+    """Return source identity when present, otherwise installed metadata identity."""
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    if pyproject.is_file():
+        return _source_version(pyproject)
+    return metadata.version("codex-worker")

@@ -40,76 +40,180 @@ write_json_field() {
   jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
-read_toml_field() {
-  local file="$1" field="$2"
+toml_field() {
+  local operation="$1" file="$2" field="$3" value="${4:-}"
   if [[ "$field" != "project.version" ]]; then
     echo "error: unsupported TOML field '$field' in $file" >&2
     return 1
   fi
-  python3 - "$file" <<'PY'
+  # Python 3.9 has no tomllib. Validate the repository-controlled package metadata
+  # subset fail-closed: bare tables/keys, scalar values, and single-line scalar arrays.
+  # This is deliberately not a general-purpose TOML parser.
+  python3 - "$operation" "$file" "$value" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
+operation = sys.argv[1]
+path = Path(sys.argv[2])
+new_value = sys.argv[3]
+text = path.read_text(encoding="utf-8")
 section = None
 matches = []
-for line in path.read_text(encoding="utf-8").splitlines():
-    stripped = line.strip()
-    header = re.fullmatch(r"\[([^]]+)\][ \t]*(?:#.*)?", stripped)
+seen_sections = set()
+seen_keys = set()
+offset = 0
+
+
+def invalid(line_number, reason):
+    print("error: invalid TOML in %s at line %d: %s" % (path, line_number, reason), file=sys.stderr)
+    raise SystemExit(1)
+
+
+def without_comment(line, line_number):
+    quote = None
+    escaped = False
+    for index, character in enumerate(line):
+        if quote == '"':
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif quote == "'":
+            if character == quote:
+                quote = None
+        elif character in ("'", '"'):
+            quote = character
+        elif character == "#":
+            return line[:index].rstrip()
+    if quote is not None:
+        invalid(line_number, "unterminated string")
+    return line.rstrip()
+
+
+def string_end(value, start, line_number):
+    quote = value[start]
+    escaped = False
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if quote == '"' and escaped:
+            escaped = False
+        elif quote == '"' and character == "\\":
+            escaped = True
+        elif character == quote:
+            return index + 1
+        index += 1
+    invalid(line_number, "unterminated string")
+
+
+def validate_scalar(value, line_number):
+    value = value.strip()
+    if not value:
+        invalid(line_number, "missing value")
+    if value[0] in ("'", '"'):
+        if string_end(value, 0, line_number) != len(value):
+            invalid(line_number, "characters after string value")
+        return
+    if value in ("true", "false"):
+        return
+    if re.fullmatch(r"[+-]?[0-9](?:_?[0-9])*(?:\.[0-9](?:_?[0-9])*)?", value):
+        return
+    invalid(line_number, "unsupported or malformed value")
+
+
+def validate_value(value, line_number):
+    value = value.strip()
+    if not value:
+        invalid(line_number, "missing value")
+    if not value.startswith("["):
+        validate_scalar(value, line_number)
+        return
+    if not value.endswith("]"):
+        invalid(line_number, "unterminated array")
+    inner = value[1:-1].strip()
+    if not inner:
+        return
+    items = []
+    start = 0
+    index = 0
+    while index < len(inner):
+        if inner[index] in ("'", '"'):
+            index = string_end(inner, index, line_number)
+            continue
+        if inner[index] in "[]{}":
+            invalid(line_number, "nested collections are outside the supported package metadata subset")
+        if inner[index] == ",":
+            items.append(inner[start:index])
+            start = index + 1
+        index += 1
+    items.append(inner[start:])
+    if not items[-1].strip():
+        items.pop()
+    for item in items:
+        validate_scalar(item, line_number)
+
+
+for line_number, line in enumerate(text.splitlines(keepends=True), 1):
+    body = line.rstrip("\r\n")
+    logical = without_comment(body, line_number).strip()
+    if not logical:
+        offset += len(line)
+        continue
+    header = re.fullmatch(r"\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]", logical)
     if header:
         section = header.group(1)
+        if section in seen_sections:
+            invalid(line_number, "duplicate table [%s]" % section)
+        seen_sections.add(section)
+        offset += len(line)
         continue
-    if section == "project":
-        match = re.fullmatch(r'version[ \t]*=[ \t]*"([^"\r\n]+)"[ \t]*(?:#.*)?', stripped)
-        if match:
-            matches.append(match.group(1))
+    assignment = re.fullmatch(
+        r"([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)[ \t]*=[ \t]*(.+)", logical
+    )
+    if not assignment:
+        invalid(line_number, "expected a complete table header or key/value assignment")
+    key = assignment.group(1)
+    validate_value(assignment.group(2), line_number)
+    identity = (section, key)
+    if identity in seen_keys and identity != ("project", "version"):
+        invalid(line_number, "duplicate key %s" % key)
+    seen_keys.add(identity)
+    if identity == ("project", "version"):
+        exact = re.fullmatch(
+            r'([ \t]*version[ \t]*=[ \t]*")([^"\r\n]+)("[ \t]*(?:#.*)?)', body
+        )
+        if not exact:
+            invalid(line_number, "project.version must be one exact double-quoted assignment")
+        matches.append((offset + exact.start(2), offset + exact.end(2), exact.group(2)))
+    offset += len(line)
+
 if len(matches) != 1:
     print("error: expected exactly one project.version in %s; found %d" % (path, len(matches)), file=sys.stderr)
     raise SystemExit(1)
-print(matches[0])
+start, end, current_value = matches[0]
+if operation == "read":
+    print(current_value)
+elif operation == "write":
+    updated = text[:start] + new_value + text[end:]
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(updated)
+    temporary.replace(path)
+else:
+    print("error: unsupported TOML operation '%s'" % operation, file=sys.stderr)
+    raise SystemExit(1)
 PY
 }
 
-write_toml_field() {
-  local file="$1" field="$2" value="$3"
-  if [[ "$field" != "project.version" ]]; then
-    echo "error: unsupported TOML field '$field' in $file" >&2
-    return 1
-  fi
-  python3 - "$file" "$value" <<'PY'
-import re
-import sys
-from pathlib import Path
+read_toml_field() {
+  toml_field read "$1" "$2"
+}
 
-path = Path(sys.argv[1])
-value = sys.argv[2].encode("utf-8")
-data = path.read_bytes()
-section = None
-matches = []
-offset = 0
-for line in data.splitlines(keepends=True):
-    body = line.rstrip(b"\r\n")
-    stripped = body.strip()
-    header = re.fullmatch(br"\[([^]]+)\][ \t]*(?:#.*)?", stripped)
-    if header:
-        section = header.group(1)
-    elif section == b"project":
-        match = re.fullmatch(br'([ \t]*version[ \t]*=[ \t]*")([^"\r\n]+)("[ \t]*(?:#.*)?)', body)
-        if match:
-            start = offset + match.start(2)
-            end = offset + match.end(2)
-            matches.append((start, end))
-    offset += len(line)
-if len(matches) != 1:
-    print("error: expected exactly one project.version in %s; found %d" % (path, len(matches)), file=sys.stderr)
-    raise SystemExit(1)
-start, end = matches[0]
-updated = data[:start] + value + data[end:]
-temporary = path.with_name(path.name + ".tmp")
-temporary.write_bytes(updated)
-temporary.replace(path)
-PY
+write_toml_field() {
+  toml_field write "$1" "$2" "$3"
 }
 
 read_field() {
@@ -257,7 +361,7 @@ cmd_bump() {
   local new_version="$1"
 
   # Validate semver-ish format
-  if ! echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+  if ! echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     echo "error: '$new_version' doesn't look like a version (expected X.Y.Z)" >&2
     exit 1
   fi
@@ -265,17 +369,61 @@ cmd_bump() {
   echo "Bumping all declared files to $new_version..."
   echo ""
 
+  local -a paths=() fields=() formats=() old_versions=()
+  local count=0
   while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
-      echo "  SKIP (missing): $path"
-      continue
+      echo "error: declared version file is missing: $path" >&2
+      return 1
     fi
     local old_ver
     old_ver=$(read_field "$fullpath" "$field" "$format")
-    write_field "$fullpath" "$field" "$new_version" "$format"
-    printf "  %-45s  %s -> %s\n" "$path ($field)" "$old_ver" "$new_version"
+    paths[$count]="$path"
+    fields[$count]="$field"
+    formats[$count]="$format"
+    old_versions[$count]="$old_ver"
+    count=$((count + 1))
   done < <(declared_files)
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "error: no declared version files found" >&2
+    return 1
+  fi
+
+  local stage_dir
+  stage_dir=$(mktemp -d "$REPO_ROOT/.version-bump.XXXXXX")
+  local i
+  for ((i = 0; i < count; i++)); do
+    local staged="$stage_dir/staged-$i"
+    local backup="$stage_dir/backup-$i"
+    cp -p "$REPO_ROOT/${paths[$i]}" "$staged"
+    cp -p "$REPO_ROOT/${paths[$i]}" "$backup"
+    if ! write_field "$staged" "${fields[$i]}" "$new_version" "${formats[$i]}"; then
+      find "$stage_dir" -depth -delete
+      return 1
+    fi
+  done
+
+  local committed=0
+  for ((i = 0; i < count; i++)); do
+    if ! mv -f "$stage_dir/staged-$i" "$REPO_ROOT/${paths[$i]}"; then
+      local rollback
+      for ((rollback = 0; rollback < committed; rollback++)); do
+        cp -p "$stage_dir/backup-$rollback" "$REPO_ROOT/${paths[$rollback]}" || true
+      done
+      echo "error: version update failed; restored previously written declarations" >&2
+      find "$stage_dir" -depth -delete
+      return 1
+    fi
+    committed=$((committed + 1))
+  done
+
+  for ((i = 0; i < count; i++)); do
+    printf "  %-45s  %s -> %s\n" \
+      "${paths[$i]} (${fields[$i]})" "${old_versions[$i]}" "$new_version"
+  done
+  find "$stage_dir" -depth -delete
 
   echo ""
   echo "Done. Running audit to check for missed files..."
