@@ -38,17 +38,37 @@ You MUST create a task for each of these items and complete them in order:
 1. **Explore project context** — check files, docs, recent commits. **If a `design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on `design/visions/<area>.md` (not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is residue (`design/residue/residue.jsonl`, your ID block), never a local ruling
 2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
 3. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
-4. **Evaluate the problem space, then plan the session** — before the first question: what kind of problem is this, which 3–5 candidate ANGLES look likely (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined
-5. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria; then brainstorm **angle by angle** with lettered forks per angle, adding emergent angles when the discussion hits a new boundary, journey, or tension. Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
-5. **Propose 2-3 approaches** — with trade-offs and your recommendation
-6. **Present design** — in sections scaled to their complexity, get user approval after each section
-6b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
-7. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** each angle that carried real collisions becomes `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` (template: `item-angle-template.md` in this skill) — beside the spec, never in `design/angles/`. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
-7b. **Conditional companion artifacts** — work touches domain objects/fields/relationships → the design doc MUST carry a Domain model section per `skills/brainstorming/domain-design-template.md` (the discrepancy hunt: naming table, delta ledger, invariant enforcers). Work adds/renames/reworks CLI commands → write the separate CLI surface doc per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths). Both are downstream context: they enter the plan's Context pack and subagent Read-first lines.
-8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-9. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log and checks narrative continuity and traceability; fix blocking issues, re-dispatch once
-10. **User reviews written spec** — ask user to review the spec file before proceeding
-11. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
+5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled before moving to the next. Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
+6. **Propose 2-3 whole-design approaches** — AFTER the angles are reconciled: how the rulings compose into a shape. This is a fork like any other — present it per the Fork Presentation Standard, never as bare labels
+7. **Present design** — in sections scaled to their complexity, get user approval after each section
+7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
+8. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** each angle that carried real collisions becomes `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` (template: `item-angle-template.md` in this skill) — beside the spec, never in `design/angles/`. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
+8b. **Conditional companion artifacts** — work touches domain objects/fields/relationships → the design doc MUST carry a Domain model section per `skills/brainstorming/domain-design-template.md` (the discrepancy hunt: naming table, delta ledger, invariant enforcers). Work adds/renames/reworks CLI commands → write the separate CLI surface doc per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths). Both are downstream context: they enter the plan's Context pack and subagent Read-first lines.
+9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log and checks narrative continuity and traceability; fix blocking issues, re-dispatch once
+11. **User reviews written spec** — ask user to review the spec file before proceeding
+12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+
+## Fork Presentation Standard (what the operator rules on) {#fork-presentation-standard}
+
+An option the operator cannot evaluate is not an option. Every fork presented for a
+ruling carries:
+
+1. **The situation** — what is being decided, and what breaks or diverges depending on
+   the answer: the failure modes, not just the topic.
+2. **Each option's mechanism** — how it actually works, not its label; include a worked
+   or concrete example whenever the option is abstract (a sample file line, a command, a
+   quoted sentence — something the operator can picture in THIS project).
+3. **Each option's consequences** — what it costs and what it buys, stated for this
+   project, not generically.
+4. **A recommendation with its reasoning** — evidence over taste where evidence exists.
+
+A/B labels are for REFERRING to options, never a substitute for presenting them.
+Compression is for the trivial end only: if a fork honestly fits in three lines, it is
+probably not worth the operator's attention — decide it yourself, state the call in one
+sentence, and log it (the decision log records it either way). Spend the operator's
+attention on forks presented in full, not on many forks presented thinly.
 
 ## Process Flow
 
@@ -56,8 +76,9 @@ You MUST create a task for each of these items and complete them in order:
 digraph brainstorming {
     "Explore project context" [shape=box];
     "Start decision log" [shape=box];
-    "Ask clarifying questions\n(log each resolved fork)" [shape=box];
-    "Propose 2-3 approaches" [shape=box];
+    "Identify angles,\npresent agenda\n(operator amends)" [shape=box];
+    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)" [shape=box];
+    "Propose 2-3 whole-design\napproaches (per Standard)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
     "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [shape=box];
@@ -67,9 +88,10 @@ digraph brainstorming {
     "Invoke writing-plans skill" [shape=doublecircle];
 
     "Explore project context" -> "Start decision log";
-    "Start decision log" -> "Ask clarifying questions\n(log each resolved fork)";
-    "Ask clarifying questions\n(log each resolved fork)" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
+    "Start decision log" -> "Identify angles,\npresent agenda\n(operator amends)";
+    "Identify angles,\npresent agenda\n(operator amends)" -> "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)";
+    "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling)" -> "Propose 2-3 whole-design\napproaches (per Standard)";
+    "Propose 2-3 whole-design\napproaches (per Standard)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc\n(pass 1: shape,\npass 2: enrichment)" [label="yes"];
@@ -91,14 +113,15 @@ digraph brainstorming {
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
-- Prefer multiple choice questions when possible, but open-ended is fine too
+- Multiple choice is fine for REFERRING to options — but every fork reaching the operator is presented per the Fork Presentation Standard (situation, mechanism with example, consequences, recommendation), never as bare labels
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
 **Exploring approaches:**
 
-- Propose 2-3 different approaches with trade-offs
-- Present options conversationally with your recommendation and reasoning
+- Propose 2-3 materially different approaches, each presented per the Fork Presentation
+  Standard: the situation and its failure modes, each option's mechanism with a concrete
+  example, its consequences for THIS project, and your recommendation with reasoning
 - Lead with your recommended option and explain why
 
 **Presenting the design:**
@@ -189,7 +212,8 @@ Wait for the user's response. If they request changes, make them and re-run the 
 ## Key Principles
 
 - **One question at a time** - Don't overwhelm with multiple questions
-- **Multiple choice preferred** - Easier to answer than open-ended when possible
+- **Angle agenda first** - Present the angle plan; the operator amends it before work starts
+- **Present forks in full** - Fork Presentation Standard always: situation, mechanism with example, consequences, recommendation. Labels refer; they never present. Trivial forks: decide yourself and log
 - **YAGNI ruthlessly** - Remove unnecessary features from all designs
 - **Explore alternatives** - Always propose 2-3 approaches before settling
 - **Incremental validation** - Present design, get approval before moving on

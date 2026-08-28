@@ -28,9 +28,29 @@ An **angle** is a deliberately partial way to examine one shared architecture. I
 
 Angles may carry **Pydantic invariant sketches** (FLEXIBLE by default — responsibilities and invariants, never final field names) and **functional-core / imperative-shell pseudo-code** walkthroughs.
 
-## When to create a new angle
+## When to create a new angle — and when NOT to
 
-A residue cluster that fits no existing angle · a distinct authority or package boundary appears · a journey nobody follows end to end · a collision two angles both touch but neither owns. Create it in the session; never fork an existing angle.
+**Create** when the discussion introduces: a residue cluster that fits no existing angle · a distinct authority or package boundary · a distinct state lifecycle · a complete journey nobody follows end to end · a parity question spanning multiple shells · a collision two angles both touch but neither owns · a tension that can change several downstream models or interfaces. Create it in the session; never fork an existing angle.
+
+**Keep it as a subsection of the current angle** when it is only: one field or naming choice · one refusal or edge case inside the same lifecycle · an implementation detail that doesn't change the domain contract · another example of an already-explained rule · a question resolvable without affecting another angle.
+
+**Reserve angles stay unnamed and unwritten** until a concern passes the create test — no empty documents or scope expansion merely because a number was available.
+
+## How an angle moves through a session {#angle-movement}
+
+1. **Frame it** — central question, current context, boundaries, in prose, before any option appears.
+2. **Explore one decision at a time** — present enough architecture and code context for the operator to reason without having written the implementation (this is the brainstorming skill's Fork Presentation Standard, at architecture scale).
+3. **Collide alternatives** — two or three materially different approaches with gains, sacrifices, and a recommendation.
+4. **Log every resolved fork immediately** — decision, rejected alternatives, reasoning, revisit-when; never batch-reconstruct.
+5. **Follow consequences** — check the ruling against the domain models, runtimes, journeys, and current code it touches.
+6. **Close the angle** — summarize what is LOCKED, FLEXIBLE, DEFERRED, MISMATCH — and name what remains BLIND (not yet examined — say so honestly); do NOT turn unresolved implementation work into guessed architecture.
+7. **Write at the checkpoint** — produce/update the readable companion and reconcile its rulings into the formal anchors before the reconcile commit (the architect's sitting-close, D52).
+
+**Revisit discipline:** a later angle may expose a real conflict in an earlier one — reopening requires a NEW decision entry and an explicit amendment. Overlap is never permission for silent drift.
+
+## Presentation convention {#angle-presentation}
+
+Plain explanation first; models or short flows only where they improve understanding. Small Pydantic examples for domain shapes; explicit use cases for behavior; tables for ownership, comparisons, and repeated mappings. Visuals are optional and must be accompanied by an understandable text explanation — never forced. Label claims with DOC-MARK statuses (`map-and-markers.md#doc-mark`); label illustrative quantities SEED-ILLUSTRATIVE (never present an example as measured). Once a fork is resolved, the written angle records the SELECTED architecture and why — it never preserves a recommendation as though the choice were still pending.
 
 ## Anti-loosening — how the set stays honest {#anti-loosening}
 

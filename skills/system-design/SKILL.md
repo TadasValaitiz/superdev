@@ -45,7 +45,7 @@ Never DRAFT/REVIEWED/IN-PROGRESS. The question a status answers is *how much may
 4. **Never block development.** Your outputs act *forward* — through the next charters and through markers. If you find yourself writing "implementation must not start until…", stop: that is a marker and a charter note, not a gate. Conformance reports are advisory by construction.
 5. **Close with the angle sweep — mandatory last act:** every angle whose anchors were touched is updated in this session, in place. Then update `angles/INDEX.md` and, if this is a design checkpoint, write the response document.
 
-## Angles (contract, kinds, anti-loosening: angle-guide.md)
+## Angles (contract, kinds, movement protocol, presentation, anti-loosening: angle-guide.md)
 
 An angle is a deliberately partial way to examine one shared architecture — never a module view, never a second source of truth. The map is the only angle allowed to look backward at code. Residue that fits no existing angle is the signal to create one.
 
