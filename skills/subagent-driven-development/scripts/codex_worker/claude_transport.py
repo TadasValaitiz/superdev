@@ -16,7 +16,7 @@ from .callback_store import CallbackBinding
 from .commands import (CallbackAttemptState, CallbackAttemptView, CallbackCapture,
                        CallbackState, FACADE_FAULT_KINDS, FacadeFault,
                        FacadeFaultCode)
-from .instance import _unsafe_ancestor
+from .path_security import unsafe_ancestor as _unsafe_ancestor
 
 
 MAX_USER_LINE_UTF16_UNITS = 1_048_576

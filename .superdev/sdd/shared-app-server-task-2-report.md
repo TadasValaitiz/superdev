@@ -195,3 +195,85 @@ No new decision was silently added by this executor.
 The correction pass is executor-complete. Independent C1 re-review remains required; this report
 does not claim approval. The only expected fast-lane failures remain the three D19 version tests
 owned by Task 5.
+
+## C1 second correction pass
+
+### Review resolution and implementation
+
+Re-review accepted both prior Task 2 technical pushbacks and withdrew the raw-protocol-model and
+internal-exception canon findings. The bounded D18 clarification is now recorded in the decision
+log and plan: the generated Codex JSON-RPC connection/gateway keep their approved raw wire seam
+and typed internal errors; strict frozen models continue to govern worker domain/public command
+seams, and Task 4 converts failures at the public RPC/CLI boundary.
+
+The last two Important findings are addressed:
+
+- `is_jsonrpc_response_envelope` is now the single response predicate in the transport/protocol
+  home. Both `CodexConnection._dispatch` and gateway classification require an integer/string
+  non-boolean ID, no method member, absent-or-exact-2.0 `jsonrpc`, exactly one result/error, and
+  object-shaped error. Malformed ID-bearing responses fail the connection and every waiter;
+  valid raw result dictionaries remain unchanged and successful gateway frames remain byte-for-
+  byte transparent.
+- `path_security.py` is now the single home for the pre-existing instance ancestor policy.
+  `instance.py` keeps only its compatibility alias, while Claude capture and service directory
+  creation import the shared implementation. Service creation refuses symlinks and every
+  non-sticky group/world-writable ancestor before creating children, while retaining owner-only
+  `0700` and root-owned sticky temporary-directory/platform-alias support.
+
+Files added or changed in this correction are `path_security.py`, `instance.py`,
+`claude_transport.py`, `service.py`, `websocket_transport.py`, `websocket_gateway.py`,
+`test_service.py`, `test_websocket_transport.py`, D18, the implementation plan, this report, and
+the accumulating C1 receipt. The unrelated `.superdev/sdd/progress.md` edit remains preserved and
+excluded.
+
+### Exact RED / GREEN
+
+The table-driven malformed-envelope test was watched RED before the predicate/dispatch change:
+the `method: null` and JSON-RPC 1.0 cases did not raise `CodexTransportError`; the both-result-
+and-error and string-error cases instead surfaced `CodexCallError(upstream_error)`. The new
+non-sticky `0777` ancestor test was watched RED with `PermissionError not raised`, and the
+external child directory existed. Production changed only after those failures were observed.
+
+Fresh warning-strict GREEN evidence:
+
+```text
+test_websocket_transport.py  16 tests  OK
+test_websocket_gateway.py    20 tests  OK
+test_service.py              14 tests  OK
+test_instance.py             36 tests  OK
+test_claude_transport.py     16 tests  OK
+combined focused lane       102 tests in 1.278s  OK
+```
+
+The focused controls include malformed response failure, byte-transparent valid responses,
+non-sticky `0777` refusal, intermediate-symlink refusal, owner-only `0700`, actual root-sticky
+`/tmp`, foreign sticky-parent policy, and the single-home compatibility alias.
+
+### Verification and self-review
+
+```text
+isolated Python: 3.9.6 / websockets 15.0.1 / malformed response failed transport /
+                 sync-client-server-ok / lazy-modules-ok
+real filesystem: nonsticky-0777-ancestor-refused-ok /
+                 owner-0700-root-sticky-controls-ok
+schema: codex-cli 0.150.1 / generated-request-methods=95 /
+        schema-fixture-production-set-equality-ok / lazy-import AST guards OK
+wheel: exact source-module allowlist files=23 / total files=27 /
+       wheel-websockets-metadata-ok
+compileall + diff-check: exit 0
+full warning-strict fast lane: 490 tests in 46.721s; exactly the three assigned D19 failures
+```
+
+Self-review confirmed that the predicate is shared rather than duplicated, correlation cannot
+precede validation, malformed envelopes wake existing waiters through transport failure, valid
+raw response results retain their approved contract, and the gateway still sends the original
+frame. The lifted path policy is behavior-identical for legacy instance/Claude callers and is
+applied before every service-path creation or chmod. No public lifecycle authority, replay,
+listener fallback, installed tool, global service, or default listener was introduced or
+mutated.
+
+No knowing engineering-pattern departure remains beyond the plan-approved D18 exception and its
+now-recorded raw protocol clarification. Concerns are limited to independent C1 re-review of
+these two corrections and the three Task 5-owned D19 failures. The shell package archive gate
+passed every committed-`HEAD` archive, metadata, source-module (including `path_security.py`),
+mode, reproducibility, and dirty-tree check.

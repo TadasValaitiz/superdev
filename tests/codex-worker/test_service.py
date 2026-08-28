@@ -17,7 +17,9 @@ from codex_worker.service import (
     GlobalWorkerServiceDeps,
     GlobalWorkerServiceStatus,
     ListenerExposure,
+    _ensure_owner_directory,
 )
+from codex_worker.path_security import unsafe_ancestor
 from codex_worker.service_domain import ServiceConfig, derive_service_paths
 from codex_worker.websocket_gateway import ServiceMaintenanceGate
 
@@ -254,6 +256,39 @@ class GlobalWorkerServiceTests(unittest.TestCase):
             service.start()
         self.assertFalse((external / "superdev").exists())
         self.assertEqual(harness.processes, [])
+
+    def test_non_sticky_world_writable_ancestor_is_refused_before_creation(self):
+        unsafe_state = Path(self.temporary.name) / "unsafe-state"
+        unsafe_state.mkdir(mode=0o700)
+        os.chmod(unsafe_state, 0o777)
+        paths = derive_service_paths(
+            "darwin", unsafe_state, Path(self.temporary.name) / "safe-runtime", os.getuid())
+        harness = ServiceHarness()
+        service = GlobalWorkerService(
+            paths, self.config, lambda _message: None, None, harness.deps(),
+            codex_argv=("/opt/bin/codex",),
+        )
+        self.addCleanup(lambda: self._terminate_if_ready(service))
+        with self.assertRaises(PermissionError):
+            service.start()
+        self.assertFalse((unsafe_state / "superdev").exists())
+        self.assertEqual(harness.processes, [])
+
+    def test_owner_only_and_root_sticky_ancestor_controls_remain_supported(self):
+        from codex_worker import instance
+
+        self.assertIs(instance._unsafe_ancestor, unsafe_ancestor)
+        owner_root = Path(self.temporary.name) / "owner-root"
+        owner_root.mkdir(mode=0o700)
+        owner_target = owner_root / "service"
+        _ensure_owner_directory(owner_target)
+        self.assertEqual(stat.S_IMODE(owner_target.stat().st_mode), 0o700)
+
+        self.assertIsNone(unsafe_ancestor(Path("/tmp")))
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="cw2-safe-") as sticky_child:
+            sticky_target = Path(sticky_child) / "service"
+            _ensure_owner_directory(sticky_target)
+            self.assertEqual(stat.S_IMODE(sticky_target.stat().st_mode), 0o700)
 
     def test_private_socket_must_be_owner_only(self):
         harness = ServiceHarness(socket_mode=0o660)

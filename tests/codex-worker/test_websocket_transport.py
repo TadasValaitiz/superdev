@@ -262,6 +262,28 @@ class WebSocketTransportTests(unittest.TestCase):
         with self.assertRaises(CodexTransportError):
             client.call("thread/read", {}, 0.2)
 
+    def test_malformed_id_bearing_response_envelopes_fail_transport(self):
+        def malformed_response(shape):
+            def responder(message):
+                if message.get("method") == "initialize":
+                    return {"id": message["id"], "result": {}}
+                if message.get("method") == "initialized":
+                    return None
+                return shape(message["id"])
+            return responder
+
+        shapes = (
+            lambda request_id: {"id": request_id, "method": None, "result": {}},
+            lambda request_id: {"jsonrpc": "1.0", "id": request_id, "result": {}},
+            lambda request_id: {"id": request_id, "result": {}, "error": {}},
+            lambda request_id: {"id": request_id, "error": "busy"},
+        )
+        for shape in shapes:
+            with self.subTest(shape=shape(7)):
+                client, _factory = self.make_client([malformed_response(shape)])
+                with self.assertRaises(CodexTransportError):
+                    client.call("thread/read", {}, 0.2)
+
     def test_non_finite_inbound_value_fails_transport(self):
         def responder(message):
             if message.get("method") == "initialize":

@@ -356,3 +356,45 @@ ambiguous. This is therefore disclosed as a genuine generic-canon/task-interface
 architectural re-review. Re-review should either accept the specific direct/typed-exception
 legacy migration seam or amend the brief/plan and downstream contracts explicitly. This
 correction preserves the single-source task interface rather than silently selecting a fork.
+
+## C1 second correction — Task 2 response dispatch and ancestor policy
+
+Re-review accepted the prior Task 2 technical explanations and withdrew the generic-canon
+findings. D18 and the plan now record the bounded clarification: the generated Codex JSON-RPC
+connection/gateway remain raw protocol adapters with typed internal errors, while strict frozen
+models govern worker domain/public command seams and Task 4 owns public fault conversion.
+
+The two remaining Important findings were reproduced before production changed. A table-driven
+transport case showed that ID-bearing envelopes with `method: null`, JSON-RPC 1.0, both
+`result` and `error`, or a non-object `error` could incorrectly resolve a waiter. A service case
+showed that a non-sticky `0777` ancestor was accepted and a child directory was created. The RED
+outputs were respectively two missing `CodexTransportError` failures plus two incorrectly raised
+`CodexCallError` values, and one missing `PermissionError`.
+
+`websocket_transport.py` now owns one strict JSON-RPC response-envelope predicate used by both
+connection dispatch and gateway classification. Only a non-boolean integer/string ID, absent
+method, absent-or-2.0 version, exactly one result/error, and object-shaped error can correlate or
+settle. Any other ID-bearing response shape fails the transport and all call waiters; the gateway
+still forwards accepted response bytes unchanged. `path_security.py` now owns the existing
+owner/sticky ancestor policy, with a compatibility alias retained in `instance.py` and direct use
+by Claude capture and global-service directory creation. Non-sticky group/world-writable
+components are refused before creation; owner-only `0700`, root-owned sticky `/tmp`, and leading
+root-owned platform aliases remain supported.
+
+Fresh correction evidence:
+
+```text
+focused transport/gateway/service/instance/Claude lane: 102 tests in 1.278s, OK
+real Python 3.9.6 / websockets 15.0.1 Unix WebSocket:
+  malformed-id-envelope-failed-transport-ok; sync-client-server-ok; lazy-modules-ok
+real filesystem: nonsticky-0777-ancestor-refused-ok; owner-0700-root-sticky-controls-ok
+generated Codex 0.150.1 schema: 95 methods; fixture/production set equality, OK
+wheel: exact 23-source-module allowlist; 27 total files; websockets metadata, OK
+compileall and diff-check: exit 0
+full warning-strict fast lane: 490 tests in 46.721s; exactly three D19 failures
+```
+
+The only fast-lane failures are the same version-baseline tests assigned to Task 5. The shell
+archive gate passed every committed-`HEAD` archive, metadata, source-module (including
+`path_security.py`), mode, reproducibility, and dirty-tree check. Independent C1 re-review of
+these last two corrections remains pending; this executor receipt does not claim approval.

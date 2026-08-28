@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from .commands import StrictModel
 from .models import JsonObject
+from .path_security import unsafe_ancestor
 from .service_domain import ServiceConfig, ServicePaths
 from .websocket_gateway import DrainLease, ServiceMaintenanceGate, WebSocketGateway
 from .websocket_transport import CodexConnection, codex_child_env
@@ -159,34 +160,29 @@ def _ensure_owner_directory(path: Path) -> None:
     if not path.is_absolute():
         raise ValueError("service directory must be absolute")
     current = Path(path.anchor)
-    controlled = False
     for component in path.parts[1:]:
         current = current / component
         try:
             value = os.lstat(str(current))
         except FileNotFoundError:
+            unsafe = unsafe_ancestor(current.parent)
+            if unsafe is not None:
+                raise PermissionError("unsafe service directory ancestor: %s" % unsafe)
             current.mkdir(mode=0o700)
             value = os.lstat(str(current))
             if value.st_uid != os.getuid():
                 raise PermissionError("created service directory is not owner-owned")
             os.chmod(str(current), 0o700)
-            controlled = True
         else:
+            unsafe = unsafe_ancestor(current)
+            if unsafe is not None:
+                raise PermissionError("unsafe service directory ancestor: %s" % unsafe)
             if stat.S_ISLNK(value.st_mode):
-                # macOS exposes leading system aliases such as /var -> /private/var.
-                # They are tolerated only before traversal reaches user-owned state.
-                if controlled or value.st_uid != 0:
-                    raise PermissionError(
-                        "service directory path must not contain user-controlled symlinks")
+                # The shared policy permits only a leading root-owned platform alias.
                 continue
             if not stat.S_ISDIR(value.st_mode):
                 raise PermissionError(
                     "service directory path must contain only real directories")
-            if value.st_uid == os.getuid():
-                controlled = True
-            elif controlled and value.st_uid != 0:
-                raise PermissionError(
-                    "service directory path crossed into another user's directory")
     value = os.lstat(str(path))
     if not stat.S_ISDIR(value.st_mode) or value.st_uid != os.getuid():
         raise PermissionError("service directory must be a real owner-owned directory")

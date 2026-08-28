@@ -439,6 +439,11 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   exhaustive serialization and extra-field rejection. New domain models follow that same seam.
   New effects live behind typed dependency records/protocols; CLI remains wiring only. Moves
   retain compatibility re-exports where tests or internal consumers still import old homes.
+- **C1 clarification (2026-08-28):** the generated Codex JSON-RPC connection and gateway are
+  protocol adapters, so their approved `call(method, params, timeout)` seam retains exact open
+  wire objects and typed internal transport/call exceptions. D18's strict frozen-model rule
+  governs worker domain and public command seams; Task 4 converts internal service/protocol
+  failures into the closed public RPC/CLI fault model.
 - **Shape at selection:** `service_domain.py` owns L0 value objects; `migration.py` owns durable
   legacy discovery/import; `websocket_transport.py` owns the initialized broker connection;
   `websocket_gateway.py` owns one-to-one forwarding and drain classification; `service.py` owns

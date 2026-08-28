@@ -249,6 +249,22 @@ def strict_json_loads(frame: str) -> object:
     return json.loads(frame, parse_constant=reject_constant)
 
 
+def is_jsonrpc_response_envelope(value: object) -> bool:
+    """Recognize one correlatable JSON-RPC response without interpreting its result."""
+    if not isinstance(value, dict) or "method" in value:
+        return False
+    request_id = value.get("id")
+    if isinstance(request_id, bool) or not isinstance(request_id, (int, str)):
+        return False
+    if "jsonrpc" in value and value.get("jsonrpc") != "2.0":
+        return False
+    has_result = "result" in value
+    has_error = "error" in value
+    if has_result == has_error:
+        return False
+    return not has_error or isinstance(value.get("error"), dict)
+
+
 class CodexConnection(CodexMethodAdapter):
     """One initialized JSON-RPC connection with request correlation and bounded retry."""
 
@@ -458,15 +474,20 @@ class CodexConnection(CodexMethodAdapter):
             request_id = message.get("id")
             if isinstance(request_id, bool) or not isinstance(request_id, (int, str)):
                 raise ValueError("JSON-RPC id must be an integer or string")
-        if "id" in message and method is None:
+        if is_jsonrpc_response_envelope(message):
             with self._state_lock:
                 pending = self._pending.pop(message.get("id"), None)
             if pending is not None:
                 pending.put_nowait(message)
             return
         if "id" in message and isinstance(method, str):
+            if (("jsonrpc" in message and message.get("jsonrpc") != "2.0")
+                    or "result" in message or "error" in message):
+                raise ValueError("malformed JSON-RPC server request")
             self._queue_server_request(message)
             return
+        if "id" in message:
+            raise ValueError("malformed JSON-RPC response envelope")
         if isinstance(method, str):
             self._emit_notification(message)
 

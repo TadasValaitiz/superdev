@@ -12,6 +12,7 @@ from .websocket_transport import (
     MAX_FRAME_BYTES,
     MAX_INCOMING_QUEUE,
     TextConnection,
+    is_jsonrpc_response_envelope,
     strict_json_loads,
 )
 
@@ -150,16 +151,11 @@ class ServiceMaintenanceGate:
 
 
 def classify_frontend_frame(value: object) -> FrameClass:
+    if is_jsonrpc_response_envelope(value):
+        return FrameClass.RESPONSE
     if not isinstance(value, dict):
         return FrameClass.BLOCKED
     method = value.get("method")
-    if "method" not in value and _request_key(value.get("id")) is not None:
-        has_result = "result" in value
-        has_error = "error" in value
-        valid_version = "jsonrpc" not in value or value.get("jsonrpc") == "2.0"
-        valid_error = not has_error or isinstance(value.get("error"), dict)
-        if has_result != has_error and valid_version and valid_error:
-            return FrameClass.RESPONSE
     if isinstance(method, str) and method in DRAIN_ALLOWED_REQUESTS:
         return FrameClass.ALLOWED
     return FrameClass.BLOCKED
