@@ -38,7 +38,7 @@
 
 ## The Through-Line
 
-The registry and identity arc is load-bearing: it removes session-derived infrastructure and creates one truthful global durable root before transport or CLI code can rely on it. The transport arc then replaces stdio with a private initialized WebSocket client and a transparent public gateway, sharing one maintenance gate across worker and TUI mutations. Once those two interfaces exist, the orchestration arc can reconcile TUI-originated events, inventory every active upstream thread, and preserve callback behavior. The public-surface arc finally rewires lifecycle, faults, RPC and CLI around the singleton without leaking transport mechanics. The experience arc teaches and acceptance-gates the finished behavior through real Codex, Claude and checkride lanes. Only then does the release arc reconcile the measured split baseline, bump 8.1.0, install the UV tool, and deliberately leave the global service running.
+The registry and identity arc is load-bearing: it removes session-derived infrastructure and creates one truthful global durable root before transport or CLI code can rely on it. The transport arc then replaces stdio with a private initialized WebSocket client and a transparent public gateway, sharing one maintenance gate across worker and TUI mutations. Once those two interfaces exist, the orchestration arc can reconcile TUI-originated events, inventory every active upstream thread, and preserve callback behavior. The public-surface arc finally rewires lifecycle, faults, RPC and CLI around the singleton without leaking transport mechanics. The experience arc first performs D19's behavior-neutral 8.0.0 identity reconciliation so trusted preflight can run, then teaches and acceptance-gates the finished behavior through real Codex, Claude and checkride lanes. Only after that PASS does the release arc bump 8.1.0, install the UV tool, and deliberately leave the global service running.
 
 Tasks 1 and 2 are LOAD-BEARING because every later task consumes their exact paths, models, connection and maintenance interfaces. Tasks 3 and 4 are the behavioral composition: neither may invent a second state authority or bypass the gate. Task 5 acceptance-gates the behavior; Task 6 releases exactly that judged candidate and is not a place to repair architecture silently. If reality breaks an interface, follow the decision log's revisit hook, append a build-phase D#, update downstream Consumes/Produces, and keep locked D1–D11 intact.
 
@@ -115,7 +115,7 @@ One process can load/migrate the global registry, start one private Codex WebSoc
 
 - [ ] **Step 2: GREEN — implement strict global domain and atomic migration**
 
-  Use frozen strict dataclasses and closed enums. Global metadata stores exact listener/version/generation only; callback secrets remain in owner-only callback storage. Migration sorts canonical source paths, hashes raw source bytes, validates every record through current registry readers, plans the entire merge before one atomic write, and records source path+digest+outcome. Conflicted names make `resolve_name` raise `legacy_name_conflict` with every candidate and non-force actions.
+  Use frozen strict dataclasses and closed enums. Global metadata stores exact listener/version/generation only; callback secrets remain in owner-only callback storage. Migration sorts canonical source paths, hashes raw source bytes, validates every record through current registry readers, plans the entire merge before executing D20's ordered artifact → registry → callback-store → completion-ledger commits, and records source path+digest+outcome. Conflicted names make `resolve_name` raise `legacy_name_conflict` with every candidate and non-force actions.
 
   ```python
   @dataclass(frozen=True)
@@ -160,6 +160,7 @@ One process can load/migrate the global registry, start one private Codex WebSoc
 - Test: `tests/codex-worker/test_websocket_transport.py`
 - Test: `tests/codex-worker/test_websocket_gateway.py`
 - Test: `tests/codex-worker/test_service.py`
+- Create fixture: `tests/codex-worker/fixtures/codex-0.150.1-client-request-methods.json`
 - Modify tests: `test_app_server_runtime.py`, `test_runtime.py`, `test_tool_package.py`
 - Modify receipt anchor: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
 - Modify checkpoint report: `docs/superdev/reviews/2026-08-28-codex-worker-shared-app-server-c1.md`
@@ -180,7 +181,7 @@ One process can load/migrate the global registry, start one private Codex WebSoc
       self.assertEqual(inventory.active, ())
   ```
 
-  Generate current request schemas into a private `mktemp -d` directory with `codex app-server generate-json-schema --out "$SCHEMA_DIR"` and derive a checked-in test fixture containing every 0.150.1 client-request method. Drive drain classification exhaustively: a small explicit read/interrupt allowlist passes; client responses to server-initiated requests pass; every other current request method and every unknown request method receives typed busy; already-forwarded mutations settle before inventory. A set-equality test fails when an upstream request method is unclassified. Bind tests prove fixed collision preservation and no port fallback.
+  Generate current request schemas into a private `mktemp -d` directory with `codex app-server generate-json-schema --out "$SCHEMA_DIR"` and derive `tests/codex-worker/fixtures/codex-0.150.1-client-request-methods.json`, containing every 0.150.1 client-request method plus the generating Codex version. Drive drain classification exhaustively: a small explicit read/interrupt allowlist passes; client responses to server-initiated requests pass; every other current request method and every unknown request method receives typed busy; already-forwarded mutations settle before inventory. A set-equality test fails when an upstream request method is unclassified. Bind tests prove fixed collision preservation and no port fallback.
 
 - [ ] **Step 2: GREEN — implement the initialized connection and transparent gateway**
 
@@ -324,15 +325,22 @@ Every common/raw command addresses the singleton, TUI actions reconcile into wor
 
 The skill uses the global command safely, real Codex and Claude share/control threads, all common/raw families run through an isolated installed tool, and migration/lifecycle refusals are reconstructable in a fresh PASS checkride.
 
-**Checkpoint gate:** frozen behavioral candidate; fresh executor/evaluator PASS; all AH1–AH12 receipts filled from tracked artifacts; warning-strict/package/live gates green; no version bump, global install, or production-service mutation yet.
+**Checkpoint gate:** frozen behavioral candidate; fresh executor/evaluator PASS; all AH1–AH12 receipts filled from tracked artifacts; warning-strict/package/live gates green; 8.0.0 declarations reconciled but no 8.1.0 release, current-user install, or production-service mutation yet.
 
 ### Task 5: Skill behavior, live evidence, and CLI checkride
 
-**Role in the build:** Convert Tasks 1–4 into the low-friction Claude/human workflow and prove every anchored use case before release, implementing R1–R12 and D1–D18/D20.
+**Role in the build:** Reconcile the trusted preflight identity, convert Tasks 1–4 into the low-friction Claude/human workflow, and prove every anchored use case before release, implementing R1–R12 and D1–D20.
 
 **Read first:** full context pack with every inherited CLI companion; shared CLI §8–§10; design §5.7/§9; decisions D8/D10/D13/D16–D18/D20; every angle's “What … cannot do”, “Visible collisions”, and “Reconciled outcome”; `skills/writing-skills/SKILL.md`; `skills/cli-checkride/SKILL.md`; Python patterns §§6–10; process discipline §§1–3.
 
 **Files:**
+- Modify for D19 baseline: `package.json`
+- Modify for D19 baseline: `.cursor-plugin/plugin.json`
+- Modify for D19 baseline: `.codex-plugin/plugin.json`
+- Modify for D19 baseline: `.kimi-plugin/plugin.json`
+- Modify for D19 baseline: `gemini-extension.json`
+- Modify for D19 baseline: `skills/subagent-driven-development/scripts/pyproject.toml`
+- Modify for D19 public baseline: `README.md`
 - Modify: `skills/subagent-driven-development/SKILL.md`
 - Modify: `skills/subagent-driven-development/codex-worker.md`
 - Modify: `skills/subagent-driven-development/codex-model-selection.md`
@@ -365,9 +373,13 @@ The skill uses the global command safely, real Codex and Claude share/control th
 
 **Interfaces:**
 - Consumes: complete Tasks 1–4 public command and package.
-- Produces: zero-friction skill preflight/use guidance; danger-gated maintenance prose; sanitized tracked live scenario receipts backed by ignored raw transcripts; independently judged PASS checkride; frozen behavior candidate consumed by Task 6.
+- Produces: reconciled 8.0.0 declared baseline; zero-friction skill preflight/use guidance; danger-gated maintenance prose; sanitized tracked live scenario receipts backed by ignored raw transcripts; independently judged PASS checkride; frozen behavior candidate consumed by Task 6.
 
-- [ ] **Step 1: RED/GREEN — teach only the approved workflow**
+- [ ] **Step 1: Reconcile the 8.0.0 preflight baseline without installation**
+
+  Re-read all eight authorities. If the highest shipping authority remains 8.0.0, change only the six lower declaration files listed above from 7.10.0 to 8.0.0 and change README line 20 from `7.10.x` to `8.0.x`. Run `scripts/bump-version.sh --check`, `scripts/bump-version.sh --audit`, `bash tests/codex/test-marketplace-manifest.sh`, `bash tests/codex/test-package-codex-plugin.sh`, and `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh`. Commit `chore(release): reconcile superdev 8.0.0 authorities`; do not install or start/stop a current-user service. If any authority is now above 8.0.0, follow D19's revisit hook before proceeding.
+
+- [ ] **Step 2: RED/GREEN — teach only the approved workflow**
 
   Use writing-skills pressure probes before edits, then structural/semantic reviewer agents after the documentation checkpoint. The skill runs the trusted UV preflight once, uses collision-resistant global names, requires explicit initial cwd, reports returned session/thread/attach/resume metadata, and never uses `--instance`, routine stop, or direct WebSocket flags after creation. It states that stop/restart are machine-wide dangerous commands requiring explicit human supervision/agreement and never appear in cleanup.
 
@@ -380,7 +392,7 @@ The skill uses the global command safely, real Codex and Claude share/control th
 
   Add tests that fail on instance examples, Claude-session infrastructure claims, routine stop, missing attach handoff, missing global-name randomness, missing callback-only distinction, or any automated force action.
 
-- [ ] **Step 2: Build six separate live scenarios and preserve raw evidence**
+- [ ] **Step 3: Build six separate live scenarios and preserve raw evidence**
 
   Extend the harness with individually runnable, finally-safe scenarios:
 
@@ -404,15 +416,15 @@ The skill uses the global command safely, real Codex and Claude share/control th
 
   Each scenario records command argv, cwd, environment allowlist (never secret values), stdout, stderr, exit, elapsed time, substrate label, PIDs/IDs, durable hashes, and cleanup outcome. Each isolated root contains a random `fixture-owner.json` token; cleanup may stop/delete a service/root only after exact token+PID+path verification and records that verification. Copy sanitized-but-verbatim records into the exact tracked scenario paths above; secret scans and record counts are tests. No globally installed service is a cleanup target.
 
-- [ ] **Step 3: Run a real Claude caller and the fresh CLI checkride**
+- [ ] **Step 4: Run a real Claude caller and the fresh CLI checkride**
 
   Run Claude Code using only PATH `codex-worker` common commands. Under the isolated Python 3.9 UV install and an unrelated cwd, record at least one successful live invocation from every inherited family: `start`, `run`, `message`, `status`, `messages`, `history`, `steer`, `interrupt`, `goal set`, `goal show`, `limits`, `model list`, `session start/list/show/resume`, and `turn start/wait/status/events/steer/interrupt`; where a control requires active timing, drive a deliberate long turn and record the terminal state afterward. Also record explicit raw `--socket` diagnostics.
 
   Then use `superdev:cli-checkride`: a fresh executor drives every changed family one command at a time, including successful prose/file starts, attach routes, the composed callback/shared-TUI journey, global lookup, every common/raw family above, migration, listener/config/active refusals, dangerous maintenance help, unknown port peer preservation, and restart durability. A separate evaluator reads literal output and mechanism receipts. Iterate product/evidence until PASS; never edit the evaluator verdict from the implementation role. Fill AH1–AH12 only with tracked paths/record IDs that the evaluator accepted.
 
-- [ ] **Step 4: Freeze C3 and hand off the judged candidate**
+- [ ] **Step 5: Freeze C3 and hand off the judged candidate**
 
-  Run warning-strict, package/archive/sync, Python 3.9 compile/import, every scenario separately, real Claude, secret scans, record-count guards, `git diff --check`, and the evaluator again. Commit skill changes, live receipts, checkride, evaluator verdict and anchor cells in reviewable commits. Record the exact behavioral candidate SHA in the checkride and prohibit Task 6 from changing Python/skill behavior without reopening the affected executor/evaluator lanes.
+  Run warning-strict, `bash tests/codex/test-marketplace-manifest.sh`, `bash tests/codex/test-package-codex-plugin.sh`, `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh`, Python 3.9 compile/import, every scenario separately, real Claude, secret scans, record-count guards, `git diff --check`, and the evaluator again. Commit skill changes, live receipts, checkride, evaluator verdict and anchor cells in reviewable commits. Record the exact behavioral candidate SHA in the checkride and prohibit Task 6 from changing Python/skill behavior without reopening the affected executor/evaluator lanes.
 
 ## Checkpoint C4: The accepted candidate is released and left immediately usable
 
@@ -442,18 +454,14 @@ The judged bytes are versioned monotonically as 8.1.0, installed through UV, ver
 - Modify receipt anchor only if installed evidence adds a receipt: `docs/superdev/specs/2026-08-28-codex-worker-shared-app-server-design.md`
 
 **Interfaces:**
-- Consumes: Task 5 behavioral candidate SHA, PASS evaluator, exact package directory, trusted installer, and service status contract.
-- Produces: reconciled 8.0.0 baseline commit; coupled 8.1.0 release; installed current-user UV command; byte-equality and unrelated-cwd verification; one running compatible service.
+- Consumes: Task 5 reconciled 8.0.0 baseline, behavioral candidate SHA, PASS evaluator, exact package directory, trusted installer, and service status contract.
+- Produces: coupled 8.1.0 release; installed current-user UV command; byte-equality and unrelated-cwd verification; one running compatible service.
 
-- [ ] **Step 1: Reconcile the measured baseline without installation**
+- [ ] **Step 1: Advance all authorities to 8.1.0 and verify the artifact**
 
-  Re-run all eight reads. If the highest shipping authority remains 8.0.0, change only the six exact lower declarations listed above from 7.10.0 to 8.0.0, update the README public version line if required, and run `scripts/bump-version.sh --check` plus `--audit`. Commit `chore(release): reconcile superdev 8.0.0 authorities`. Do not install or alter service state. If any authority is now above 8.0.0, follow D19's revisit hook and append a new decision before proceeding.
+  Run `scripts/bump-version.sh 8.1.0`, update `RELEASE-NOTES.md`, then run `scripts/bump-version.sh --check`, `scripts/bump-version.sh --audit`, `bash tests/codex/test-marketplace-manifest.sh`, `bash tests/codex/test-package-codex-plugin.sh`, `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh`, the isolated Python 3.9 wheel/install/import test in `test_tool_package.py`, the warning-strict full gate, `bash -n skills/subagent-driven-development/scripts/install-codex-worker scripts/bump-version.sh`, and `git diff --check`. Commit the release without changing behavior.
 
-- [ ] **Step 2: Advance all authorities to 8.1.0 and verify the artifact**
-
-  Run `scripts/bump-version.sh 8.1.0`, update `RELEASE-NOTES.md`, then run `--check`, `--audit`, marketplace tests, Codex archive/package allowlist, sync test, Python 3.9 wheel/install/import, warning-strict full gate, `bash -n` for installer/version scripts, and `git diff --check`. Commit the release without changing behavior.
-
-- [ ] **Step 3: Install, verify, review, and leave the service running**
+- [ ] **Step 2: Install, verify, review, and leave the service running**
 
   Install the current source non-editably through `skills/subagent-driven-development/scripts/install-codex-worker`. From an unrelated temp cwd record `command -v codex-worker`, `codex-worker --version` = 8.1.0, UV ownership, package import provenance, and installed/source byte equality for every changed module. Run a short read-only globally named worker, verify exact IDs/attach route and `daemon status` ready at `ws://127.0.0.1:4500`, then leave it running and preserve the mapping. Restore any temporarily changed plugin marketplace source and verify the installed plugin/tool manifests.
 
