@@ -144,6 +144,14 @@ derivation · AH12 the shipped close-gate checklist carries the N−1 pruning li
 AH13 every new term resolves in the glossary; bootstrapping maps existing conventions.
 (AH8 already receipted — d0a0e36+; AH14 discharged by Tasks 2/3 — commit 862a7d9.)
 
+**RECEIPTS (2026-08-28, Task 5d):** AH1/AH3/AH4/AH5/AH11/AH12/AH13 verified ✓ by the
+independent Codex whole-wave review (worker review-experience-c41, gpt-5.6-sol, read-only)
+with producing quotes per hint; AH6/AH9/AH10 initially ✗, fixed across three fold commits
+and re-verified ✓; AH2 receipted by `scripts/marker-census.sh --selftest` (green) + the
+live run on the bench corpus (57 LOCKED · 9 FLEXIBLE · 9 DEFERRED). Final verdict: GO.
+AH7 receipted by the review chain itself (4 Claude passes + 4 Codex passes, all folded).
+Still open by design: BH1–BH7 (Task 4's live trial — awaits a real design session).
+
 ## Self-review (updated post-review; Tasks 1–3 landed — their 'current file' lines are historical)
 BR1–BR14 each have a producing step (BR1 T2 · BR2–BR8 T1 · BR9/BR10 T1+T2 · BR11 T2 ·
 BR12 T1 headers · BR13 T1+T3 · BR14 T2); BH1–BH7 all receipt at T4; the surviving freshness
