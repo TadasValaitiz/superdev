@@ -1,6 +1,6 @@
 ---
 name: self-improvement
-description: Use when a superdev skill or its subagents misfired — a subagent missing context it needed, an orchestrator acting on a thin report, a workflow gap — or when the operator asks to improve/evolve the plugin, or hands over an accumulated process-feedback ledger (docs/orchestration/'s process-feedback ledger) for batched improvement. Diagnoses WHERE in the information flow the failure entered (prompt, orchestrator, return contract, context doc, or missing subagent), plans the smallest fix at that boundary, and applies it ONLY after operator approval, then version-bumps and reinstalls so Claude Code picks it up. Not for fixing the project the skill was working on — this improves the toolchain itself.
+description: Use when a superdev skill or its subagents misfired — a subagent missing context it needed, an orchestrator acting on a thin report, a workflow gap — or when the operator asks to improve/evolve the plugin, or hands over an accumulated process-feedback ledger (in docs/orchestration/) for batched improvement. Diagnoses WHERE in the information flow the failure entered (prompt, orchestrator, return contract, context doc, or missing subagent), plans the smallest fix at that boundary, and applies it ONLY after operator approval, then version-bumps and reinstalls so Claude Code picks it up. Not for fixing the project the skill was working on — this improves the toolchain itself.
 ---
 
 # Self-Improvement — fix the toolchain where the information died
