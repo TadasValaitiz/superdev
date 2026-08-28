@@ -28,7 +28,23 @@ Codex workers are a first-class implementer choice beside native Claude — not 
 but the **long-run powerhouse**: they excel at very long arcs and at **resuming the same
 session** rather than starting new ones. For a broad arc, prefer one Codex worker carrying
 the whole arc with `run --name` continuations over any sequence of fresh dispatches.
-Main-session design stays native Claude. Read [Codex worker broker](codex-worker.md),
+Main-session design stays native Claude.
+
+When Codex is selected, run this preflight once per session before the first Codex-worker
+dispatch. Set `SUPERDEV_PLUGIN_ROOT` from `CLAUDE_PLUGIN_ROOT` when it is present;
+otherwise derive the canonical plugin root containing the exact loaded `SKILL.md` path.
+
+```sh
+"$SUPERDEV_PLUGIN_ROOT/skills/subagent-driven-development/scripts/install-codex-worker" \
+  && codex-worker --version
+```
+
+The installer validates the loaded root, package and manifest versions, UV ownership,
+and PATH precedence before it returns success. Follow its PATH-repair guidance and rerun
+it after fixing an error. Never invoke the source launcher or use an absolute source path
+as an operational fallback. Native Claude-only work does not run this preflight.
+
+Read [Codex worker broker](codex-worker.md),
 give every worker a collision-resistant readable name (role plus random or numbered
 suffix), and use `start` for its first message then short `run` follow-ups. Preserve
 the normal task brief/report/review-package contracts: a worker never reviews its own

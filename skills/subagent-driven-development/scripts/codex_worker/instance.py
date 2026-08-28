@@ -62,6 +62,7 @@ class InstanceDeps:
     rpc_call: Callable[[str, str, dict, Optional[float]], dict]
     monotonic: Callable[[], float]
     wait: Callable[[float], None] = field(default=time.sleep)
+    which: Callable[[str], Optional[str]] = field(default=lambda executable: executable)
 
 
 def resolve_instance(explicit: Optional[str], env: Mapping[str, str]) -> InstanceIdentity:
@@ -394,6 +395,21 @@ class InstanceManager:
             ],
         )
 
+    def _require_external_codex(self) -> None:
+        """Refuse a new spawn when the external Codex CLI is absent."""
+        if self.deps.which(self.deps.codex_bin) is not None:
+            return
+        raise self._start_fault(
+            "codex_not_found",
+            cause={
+                "type": "FileNotFoundError",
+                "message": (
+                    "external '%s' executable was not found on PATH; install the Codex CLI "
+                    "and verify it with '%s --version'" % (self.deps.codex_bin, self.deps.codex_bin)
+                ),
+            },
+        )
+
     def ensure_running(self) -> DaemonStatusResponse:
         try:
             return self._ensure_running()
@@ -430,6 +446,7 @@ class InstanceManager:
                                            "socket_peer_active", self.deps.paths.socket_path)
                 _unlink_verified_socket(self.deps.paths.socket_path, stale_socket,
                                         FacadeFaultCode.DAEMON_START_FAILED)
+            self._require_external_codex()
             try:
                 process = self.deps.spawn(self._serve_argv(), str(self.deps.paths.log_path))
             except Exception as exc:

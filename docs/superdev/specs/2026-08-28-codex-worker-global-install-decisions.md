@@ -199,3 +199,26 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Task 1 package metadata and Task 3 wheel/package checks.
 - **Revisit-when:** hatchling drops Python 3.9-source build support or the tool moves to
   a dedicated repository with another established backend.
+
+## D10 — Probe the external Codex prerequisite through explicit daemon start
+**When:** 2026-08-28T06:45:31Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human
+
+- **Trigger:** Task 2's planned negative probe said `model list` in an isolated managed
+  instance should produce `daemon_start_failed` when external `codex` is absent.
+  Measured runtime behavior showed that `model list` is an RPC-only read: it does not
+  autostart a stopped managed daemon and correctly returns `daemon_unavailable`.
+- **Options weighed:**
+  - A: Make `model list` autostart — would satisfy the original test route / sacrifices
+    established read-only lifecycle semantics and creates an unrequested public change.
+  - B: Preserve `model list` semantics and drive `--instance X daemon start` — exercises
+    the existing explicit lifecycle boundary and its typed start refusal / sacrifices
+    the original test command only.
+- **Decided:** B. The external-prerequisite negative uses explicit managed daemon start,
+  requires one actionable `daemon_start_failed` JSON object, and leaves `model list`
+  RPC-only.
+- **Rests on:** measured CLI behavior, D1, R5–R7, and the existing command-ergonomics
+  lifecycle contract.
+- **Affects:** Task 2 test route and evidence only; no public CLI surface changes.
+- **Revisit-when:** managed read commands deliberately adopt autostart semantics.

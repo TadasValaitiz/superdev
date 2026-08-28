@@ -209,7 +209,12 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
   | root disagreement | set `CLAUDE_PLUGIN_ROOT` to a second valid-looking root | nonzero before UV; stderr names both roots; no install |
   | UV bin off PATH | fake `uv tool dir --bin` returns a directory omitted from PATH | nonzero after any needed install; stderr names `uv tool update-shell` and current-shell PATH recovery |
   | install failure | fake UV exits nonzero and a prior UV-bin worker/durable sentinel exist | nonzero; prior executable and sentinel hashes unchanged; stderr includes UV failure exit/output |
-  | external Codex absent | real installed worker is on PATH but `codex` is removed; invoke `model list` in isolated instance | one JSON refusal with existing typed daemon-start failure, actionable missing-`codex` detail, nonzero exit, no traceback |
+  | external Codex absent | real installed worker is on PATH but `codex` is removed; invoke `--instance <isolated> daemon start` | one JSON refusal with existing typed daemon-start failure, actionable missing-`codex` detail, nonzero exit, no traceback |
+
+  **Build erratum (2026-08-28, D10):** measured `model list` is an RPC-only read and
+  correctly does not autostart a stopped managed daemon. The external-prerequisite
+  negative therefore uses explicit `daemon start`; this corrects the test route without
+  changing public lifecycle semantics.
 
   Before editing the skill, run at least two fresh-agent pressure scenarios against the
   current skill: (a) no PATH worker but a loaded plugin package; (b) a shadowing old

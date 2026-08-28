@@ -5,6 +5,7 @@ import math
 import os
 import shlex
 import signal
+import shutil
 import sys
 import tempfile
 import subprocess
@@ -354,8 +355,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.family == "daemon" and args.action == "start":
             if args.socket:
                 raise ValueError("--socket is not valid with daemon start")
+            manager = _instance_manager(args.instance)
             response = {"jsonrpc": "2.0", "id": "cli",
-                        "result": _instance_manager(args.instance).ensure_running().to_dict()}
+                        "result": manager.ensure_running().to_dict()}
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "status" and not args.socket:
@@ -624,11 +626,20 @@ def _common_endpoint(explicit_instance, autostart):
     return str(manager.deps.paths.socket_path)
 
 
+def _daemon_launcher():
+    source_launcher = Path(__file__).resolve().parent.parent / "codex-worker"
+    if source_launcher.is_file():
+        return str(source_launcher)
+    return str(Path(sys.executable).resolve().with_name("codex-worker"))
+
+
 def _instance_manager(explicit_instance):
     identity = resolve_instance(explicit_instance, os.environ)
     paths = derive_instance_paths(identity, sys.platform, _managed_state_home(), Path(tempfile.gettempdir()), os.getuid())
-    launcher = str(Path(__file__).resolve().parents[4] / "bin" / "codex-worker")
-    return InstanceManager(InstanceDeps(paths, launcher, "codex", _spawn_daemon, rpc_call, time.monotonic), identity)
+    return InstanceManager(InstanceDeps(
+        paths, _daemon_launcher(), "codex", _spawn_daemon, rpc_call, time.monotonic,
+        which=shutil.which,
+    ), identity)
 
 
 def _managed_components(broker, runtime, registry, state_path):

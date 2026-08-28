@@ -841,6 +841,8 @@ class CliTests(unittest.TestCase):
 
     def test_managed_daemon_start_is_an_explicit_json_lifecycle_action(self):
         class Manager:
+            def require_external_codex(self):
+                raise AssertionError("a ready managed peer must not require client PATH codex")
             def ensure_running(self):
                 return type("Status", (), {"to_dict": lambda self: {
                     "status": "ready", "instance": {"instance": "chosen"},
@@ -855,6 +857,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(json.loads(completed.stdout)["result"]["status"], "ready")
         self.assertEqual(completed.stderr, "")
+
+    def test_daemon_launcher_prefers_source_adjacent_entrypoint_over_argv0(self):
+        original = sys.argv[0]
+        sys.argv[0] = "codex-worker"
+        try:
+            launcher = cli._daemon_launcher()
+        finally:
+            sys.argv[0] = original
+        self.assertEqual(
+            launcher,
+            str(ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"),
+        )
 
     def test_message_rejects_socket_and_stopped_daemon_does_not_autostart(self):
         self.rpc_calls = []

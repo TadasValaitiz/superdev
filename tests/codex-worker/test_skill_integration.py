@@ -5,6 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SDD = ROOT / "skills" / "subagent-driven-development" / "SKILL.md"
 REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-worker.md"
+INSTALLER = ROOT / "skills" / "subagent-driven-development" / "scripts" / "install-codex-worker"
+README = ROOT / "README.md"
 MODEL_REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-model-selection.md"
 CODEX_TOOLS_REFERENCE = ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md"
 OPERATOR = REFERENCE
@@ -19,6 +21,59 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
 
     def test_sdd_links_codex_worker_reference(self):
         self.assertIn("[Codex worker broker](codex-worker.md)", SDD.read_text(encoding="utf-8"))
+
+    def test_codex_selection_has_one_structural_preflight_before_short_dispatch(self):
+        text = SDD.read_text(encoding="utf-8")
+        installer = (
+            '"$SUPERDEV_PLUGIN_ROOT/skills/subagent-driven-development/scripts/'
+            'install-codex-worker"'
+        )
+        self.assertIn(installer, text)
+        self.assertIn("codex-worker --version", text)
+        self.assertLess(text.index(installer), text.index("codex-worker --version"))
+        self.assertIn("&& codex-worker --version", " ".join(text.split()))
+        self.assertLess(text.index("codex-worker --version"), text.index("Read [Codex worker broker]"))
+        normalized = " ".join(text.split()).lower()
+        for fragment in (
+            "once per session",
+            "when codex is selected",
+            "claude_plugin_root",
+            "exact loaded `skill.md` path",
+            "native claude-only work does not run this preflight",
+            "never invoke the source launcher",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, normalized)
+
+    def test_preflight_reference_keeps_lifecycle_optional_and_dispatch_short(self):
+        text = REFERENCE.read_text(encoding="utf-8").lower()
+        for fragment in (
+            "uv tool install --reinstall",
+            "local checkout",
+            "git url",
+            "future registry",
+            "uv tool upgrade codex-worker",
+            "uv tool list",
+            "uv tool uninstall codex-worker",
+            "uv tool update-shell",
+            "never invoke the source launcher",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+        start_section = text.index("## start, then continue")
+        self.assertNotIn("scripts/codex-worker", text[start_section:])
+        self.assertIn("codex-worker start --name", text[start_section:])
+
+    def test_readme_makes_uv_and_external_codex_conditional_prerequisites(self):
+        text = " ".join(README.read_text(encoding="utf-8").split()).lower()
+        for fragment in (
+            "when a codex worker is selected",
+            "uv",
+            "external `codex` cli",
+            "native claude",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
 
     def test_reference_names_required_control_and_recovery_commands(self):
         text = self._reference()

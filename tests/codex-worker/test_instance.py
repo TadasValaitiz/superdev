@@ -99,6 +99,16 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(load_managed_identity(self.paths.registry_path), self.identity)
         self.assertEqual(stat.S_IMODE(os.stat(self.paths.metadata_path).st_mode), 0o600)
 
+    def test_ready_peer_is_reused_when_client_path_lacks_external_codex(self):
+        self.ready = True
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", self.manager.deps.spawn,
+            self.manager.deps.rpc_call, lambda: 0.0, which=lambda _: None,
+        ), self.identity)
+        response = manager.ensure_running()
+        self.assertEqual(response.status, "ready")
+        self.assertEqual(self.spawns, [])
+
     def test_instance_paths_reserve_callback_state_and_artifacts(self):
         self.assertEqual(self.paths.callback_path, self.paths.durable_dir / "callbacks.json")
         self.assertEqual(self.paths.callback_artifact_dir,
