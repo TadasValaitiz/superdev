@@ -114,3 +114,57 @@ Amendments to this agenda are logged here as they occur.
 ## Standard amendment (from live failure, this session)
 
 Fork Presentation Standard gains: **a re-ask is a full re-presentation** — a fork awaiting a ruling is presented complete at every asking; "as presented earlier" is never a substitute. Applied to the skill.
+
+## D58 — Checkpoint handover: narrative trio + three factual attachments   (phase: brainstorm, status: locked)
+
+- **Decision:** the handover keeps WHAT WE GOT / WHERE WE FEEL GAPS / UPCOMING FOCUS (each agree/disagree) as the spine — the cross-room narrative judgment only the orchestrator can write — and gains three attachments: (1) map-row claims with evidence at file:line (two-step discharge: claim here, architect writes map); (2) marker-census delta since the last reconcile (machine-generated, D53 script); (3) measured process facts (charter→merge wall-clock, review cycles, blocked-time — already collected for process feedback). The residue collection is referenced, never inlined. The checkpoint message is a pointer to the handover.
+- **Alternatives:** minimal pointer-only handover — cheapest, but loses the narrative sections that made the bench continuation brief work; the ledgers don't carry what it felt like across rooms.
+- **Revisit-when:** handover assembly regularly exceeds ~an hour (then: more of it becomes generated).
+
+## D59 — One mode law: HUMAN vs AUTONOMOUS, declared at co-plan, honored by every ruling gate   (phase: brainstorm, status: locked; supersedes the B1/B2 pre-pass fork — absorbed)
+
+- **Decision:** the orchestrator declares the milestone's mode at co-plan (recorded in graph + conventions). HUMAN mode: architect waits for the operator; rulings only in sittings; self-brainstormed items queue at their ratification gate as desk DECIDE. AUTONOMOUS mode: the architect does real architecture at checkpoints — options with gains/sacrifices + recommendation per the Fork Presentation Standard — and the ORCHESTRATOR picks; self-brainstorming ratification gates are likewise orchestrator-ratified. Unified with the plan Mode: field (already autonomous-capable).
+- **Invariants in both modes:** every autonomous pick is a logged, FLAGGED, revisitable D# (options preserved, named as an autonomous-mode pick); the next human touchpoint opens with the pick list; overturns supersede, never erase. RESERVED forks — money/irreversibility, blast-radius reshapes, taste — always queue to the operator; work routes around them. Milestone close is operator-approved in both modes (safety stays topology). The mechanical pre-pass (census, stale-D# grep, agenda-as-questions) is allowed in both modes — mode governs RULING, not reading.
+- **Why:** the milestone should never stall on an absent human it was told not to wait for; and the architect's "human-driven" law becomes a mode, not an absolute — with the reserved classes keeping the human's irreducible forks human.
+- **Revisit-when:** an autonomous-mode overturn rate above ~1 in 4 picks at human review (then the reserved-fork classes are too narrow).
+
+## D60 — The two-surface law; checkpoint = one operational handover + one reconciled response block   (phase: brainstorm, status: locked; supersedes the artifact clauses of D51/D58, resolves angle-⑥ fork c)
+
+- **The law:** docs/system-design/ is the RECONCILED surface — anything grabbed from it matches reality or wears a marker/banner saying how much to trust it; reconciliation passes apply ONLY here. docs/orchestration/ is the OPERATIONAL surface — files exist as message companions (short message + pointer to detail file); every file opens with a standing stamp: "OPERATIONAL RECORD — point-in-time, never reconciled, may be outdated; design authority lives in docs/system-design/". Operational files are never reconciled — they are PRUNED: at milestone close, working state condenses into the handoff and sediment is deleted (git is the archive). Nothing crosses surfaces.
+- **Checkpoint artifacts (2 total):** (1) orchestrator's handover doc `docs/orchestration/handovers/<milestone>-checkpoint-N.md` — narrative trio + map claims + residue clusters INLINE (residue-collections/ dies) + inlined census/process facts (recurring marker census is ephemeral script output, no committed file); write-once, stamped, prunable. (2) architect's response = a checkpoint block INSIDE milestones/<slug>/decisions.md (sections verdicts · claim verdicts · cluster dispositions incl. BOUNCED DOWN) followed by its D# entries — the response is part of the ruling record, on the reconciled surface. Per-item conformance/ files fold to a conformance-notes line in the block unless one genuinely needs length. The reconcile commit (D52) closes; messages both ways are pointers.
+- **Bounce-down landing:** the orchestrator (backlog curator) converts bounced clusters into backlog items or routes them into an upcoming charter; his next handover's WHAT WE GOT confirms the filing — loop closed.
+- **Why (operator):** "creating too many docs makes reconciliation very hard… orchestration is operational — those files are for messaging convenience, clearly not part of reconciliation, and should be pruned; orchestration never faces reconciliation passes at all."
+- **Revisit-when:** an operational file is found being cited as design authority (then it gets deleted and its content ruled into the corpus, and the stamp language gets teeth).
+
+## D61 — Mid-item contradictions: show must go on; plan-time deviation notification relayed by pointer   (phase: brainstorm, status: locked)
+
+- **Decision (A2 + timing refinement):** an item room that finds the corpus contradicted by reality does NOT stall and does NOT wait for permission: it collects the discrepancies in its OWN item files (item decision log / spec deviations section) during grounding→brainstorm→planning; plants `MIG-MARK[MISMATCH][D#]` at the exact sites; implements against reality with a flagged deviation entry.
+- **The notification seam:** AFTER planning, BEFORE execution starts — if design-class deviations were collected, the room finalizes the deviations section in its file, messages the ORCHESTRATOR a short summary + pointer; the orchestrator FORWARDS the pointer to the architect immediately (not batched to checkpoint). The orchestrator is a RELAY of pointers — never bloated messages; content lives in the room's file. The architect may act at once (re-rule in parallel while the room executes, per mode D59) or fold it to the next checkpoint; receiving pointers does not violate architect idleness — acting is the mode's call.
+- **Checkpoint remains the net:** anything not handled immediately reconciles there; merged code carrying MISMATCH markers is honest by D60's marker promise.
+- **Alternatives:** A1 route-by-severity with LOCKED inviolable below the architect (rejected: stalls a gutted item on an absent human; "show must go on").
+- **Why (operator):** the architect learns at PLAN time and can start working immediately while the room executes — parallelism instead of a gate; pointer-relay keeps messages thin.
+- **Revisit-when:** a room's local deviation from a LOCKED claim is overturned post-merge more than rarely (then the plan-time notification gains a short architect-ack window for LOCKED-class deviations in HUMAN mode).
+
+## D62 — Close-pruning: rolling one-milestone window   (phase: brainstorm, status: locked)
+
+- **Decision (P2):** at milestone N's close gate the orchestrator still harvests (process-feedback → handoff retro; improvement lessons → durable notes) and condenses (graph/cursor/residual outcomes → the handoff), but DELETES only milestone N−1's operational files. The just-closed milestone's handovers/ledgers/spent items survive one more milestone as a live reference window, then go at the next close. Deletion set at each close: N−1's handover docs, raw ledgers, spent backlog items (done/dropped/icebox), proposal working drafts. Always-kept in docs/orchestration/: handoffs, conventions.md, improvement-notes stream.
+- **Alternatives:** P1 condense-then-delete at own close (recommended for minimal surface; rejected — operator prefers the safety window for early-next-milestone lookbacks).
+- **Close-gate line added:** "N−1 operational sediment pruned" joins the checklist the operator approves.
+- **Revisit-when:** the two-milestone surface measurably pollutes grounding (rooms citing stale operational files as authority — D60's revisit trigger).
+
+## D63 — Calibration migration: selective — move the living architecture, bridge the history   (phase: brainstorm, status: locked)
+
+- **Decision (M1):** one migration commit in ai-trading-calibration (git mv, history preserved): bench corpus (~40 files: angles, anchors, milestone decisions log D350–D494, census, glossary, inputs, INDEX from the existing angle index) → `docs/system-design/milestones/bench/`; `docs/canon/` → `docs/system-design/visions/` + `map.md` seeded from angle-08 (current→target). Then one mechanical link-fix pass (audit-file pattern) and CLAUDE.md operating-model paths updated.
+- **Bridged, never moved:** `docs/decisions/` (208 per-file historical decisions) stays — conventions.md records the bridge ("pre-bench decisions per-file; milestone logs going forward"); `docs/superpowers/specs|plans` remains the ITEM lane per the standing CLAUDE.md ruling — item specs were never required to move.
+- **Alternatives:** M2 grow-in-place (zero risk, but the ACTIVE corpus stays outside the reconciliation law and briefs point into the mixed pile — the freshness guarantee starts life broken).
+- **Revisit-when:** the link-fix pass uncovers heavy inbound references from kept item specs into moved corpus files (then: leave a pointer stub at the old path for the hot ones).
+
+## Agenda close (2026-08-28)
+
+All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63. ⑩ census tooling folded into the implementation plan. BLIND carried: mid-item CORRECTION push on superseded quoted D#s (D57/D61 revisit hooks).
+
+## D64 — Two streams, never mixed: skill refinement vs project migration   (phase: brainstorm, status: locked)
+
+- **Decision:** the superdev skill edits are their own stream (this spec + its plan, in the superdev repo, D46 review-verified). The calibration migration (D63) is NOT part of that plan — it belongs to the calibration project's own operational flow (its next milestone's bootstrap act, guided by the updated bootstrapping skill), like any milestone close/reconciliation/cleanup work.
+- **Why (operator):** "skill refinement is a separate process — don't mix it with closing up a milestone or document reconciliation and cleanup."
+- **Consequence:** the shape fork (S1/S2/S3) dissolves — skills ship on their own clock; migration runs whenever calibration's flow reaches it, under the shipped skills.
