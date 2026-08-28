@@ -10,6 +10,7 @@
     { "path": "skills/subagent-driven-development/scripts/pyproject.toml", "field": "project.version", "format": "toml" }
   ],
   "audit": {
+    "public": ["README.md"],
     "exclude": [
       "CHANGELOG.md",
       "RELEASE-NOTES.md",

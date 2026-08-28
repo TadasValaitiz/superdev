@@ -63,6 +63,7 @@ class InstanceDeps:
     monotonic: Callable[[], float]
     wait: Callable[[float], None] = field(default=time.sleep)
     which: Callable[[str], Optional[str]] = field(default=lambda executable: executable)
+    expected_version: Optional[str] = None
 
 
 def resolve_instance(explicit: Optional[str], env: Mapping[str, str]) -> InstanceIdentity:
@@ -349,12 +350,24 @@ class InstanceManager:
                                     result.get("codex_pid"), result.get("session_count", 0),
                                     result if status == "ready" else None, last_error)
 
+    def _compatible(self, result: dict) -> bool:
+        return (self.deps.expected_version is None
+                or result.get("worker_version") == self.deps.expected_version)
+
     def status(self) -> DaemonStatusResponse:
         try:
             result = self._probe()
         except Exception as exc:
             return self._status_response("failed", last_error={"reason": type(exc).__name__})
-        return self._status_response("ready", result) if result is not None else self._status_response("stopped")
+        if result is None:
+            return self._status_response("stopped")
+        if not self._compatible(result):
+            return self._status_response("failed", last_error={
+                "reason": "worker_version_mismatch",
+                "expected_version": self.deps.expected_version,
+                "actual_version": result.get("worker_version"),
+            })
+        return self._status_response("ready", result)
 
     def _serve_argv(self) -> Sequence[str]:
         paths = self.deps.paths
@@ -436,7 +449,9 @@ class InstanceManager:
         with acquire_start_lock(self.deps.paths.lock_path):
             ready = self._probe()
             if ready is not None:
-                return self._status_response("ready", ready)
+                if self._compatible(ready):
+                    return self._status_response("ready", ready)
+                self.stop()
             _write_metadata(self.deps.paths, self.identity)
             stale_socket = _verified_socket(self.deps.paths.socket_path,
                                              FacadeFaultCode.DAEMON_START_FAILED)
@@ -454,7 +469,7 @@ class InstanceManager:
             deadline = self.deps.monotonic() + 2.0
             while True:
                 ready = self._probe()
-                if ready is not None:
+                if ready is not None and self._compatible(ready):
                     return self._status_response("ready", ready)
                 if getattr(process, "poll", lambda: None)() is not None:
                     reason = "child_exited"; break

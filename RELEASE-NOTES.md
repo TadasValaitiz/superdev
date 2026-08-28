@@ -12,6 +12,13 @@
   or mismatched, requires UV-bin PATH ownership, refuses shadows/root drift/install
   failure actionably, and never falls back to the repository launcher. Native
   Claude-only work remains dependency-free.
+- **Exact runtime and cached-room safety:** Operational commands fail typed before
+  runtime contact when `CLAUDE_PLUGIN_ROOT` differs from the installed distribution.
+  Managed daemons expose their worker version and only an incompatible selected runtime
+  is gracefully replaced, preserving durable mappings. Automatic UV mismatch repair
+  remains, with explicit coordination guidance for the one global tool.
+- **Release audit:** `bump-version.sh --audit` now preserves declaration-drift failure
+  and rejects stale Superdev version families in configured public documentation.
 - **Durable replacement:** UV tool reinstall is isolated from worker state. Named
   mappings, session IDs, and thread IDs survive; after a runtime restart, `run --name`
   deliberately resumes/reattaches before status, and runtime stop remains

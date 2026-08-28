@@ -245,6 +245,10 @@ audit_excludes() {
   jq -r '.audit.exclude[]' "$CONFIG" 2>/dev/null
 }
 
+audit_public_paths() {
+  jq -r '.audit.public[]' "$CONFIG" 2>/dev/null
+}
+
 # --- commands ---
 
 cmd_check() {
@@ -287,7 +291,8 @@ cmd_check() {
 
 cmd_audit() {
   # First run check
-  cmd_check || true
+  local check_status=0
+  cmd_check || check_status=$?
   echo ""
 
   # Determine the current version (most common across declared files)
@@ -354,6 +359,50 @@ cmd_audit() {
     echo ""
     echo "Review the above files — if they should be bumped, add them to .version-bump.json"
     echo "If they should be skipped, add them to the audit.exclude list."
+  fi
+
+  local -a public_paths=()
+  while IFS= read -r path; do
+    [[ -n "$path" ]] && public_paths+=("$path")
+  done < <(audit_public_paths)
+  local public_status=0
+  if [[ "${#public_paths[@]}" -gt 0 ]]; then
+    python3 - "$REPO_ROOT" "$current_version" "${public_paths[@]}" <<'PY' || public_status=$?
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+current = sys.argv[2]
+major, minor, _patch = current.split(".")
+accepted = {current, "%s.%s.x" % (major, minor)}
+pattern = re.compile(r"(?<![0-9])([0-9]+\.[0-9]+\.(?:[0-9]+|x))(?![0-9A-Za-z])")
+stale = False
+for relative in sys.argv[3:]:
+    path = root / relative
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        print("stale public version: could not read %s: %s" % (relative, exc), file=sys.stderr)
+        stale = True
+        continue
+    for number, line in enumerate(lines, 1):
+        if "superdev" not in line.lower():
+            continue
+        for match in pattern.finditer(line):
+            if match.group(1) not in accepted:
+                print(
+                    "stale public version: %s:%d: %s (expected %s or %s.%s.x)"
+                    % (relative, number, match.group(1), current, major, minor),
+                    file=sys.stderr,
+                )
+                stale = True
+raise SystemExit(1 if stale else 0)
+PY
+  fi
+
+  if [[ "$check_status" -ne 0 || "$public_status" -ne 0 ]]; then
+    return 1
   fi
 }
 

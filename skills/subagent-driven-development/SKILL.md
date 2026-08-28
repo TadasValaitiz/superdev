@@ -41,7 +41,11 @@ otherwise derive the canonical plugin root containing the exact loaded `SKILL.md
 
 The installer validates the loaded root, package and manifest versions, UV ownership,
 and PATH precedence before it returns success. Follow its PATH-repair guidance and rerun
-it after fixing an error. Never invoke the source launcher or use an absolute source path
+it after fixing an error. UV owns one global command: a mismatch repair updates it for
+every room, so coordinate any rooms using other cached plugin versions first. Operational
+commands fail typed if `CLAUDE_PLUGIN_ROOT` differs from the installed tool; rerun this
+trusted preflight for the loaded room after coordinating version skew. Never invoke the
+source launcher or use an absolute source path
 as an operational fallback. Native Claude-only work does not run this preflight.
 
 Read [Codex worker broker](codex-worker.md),

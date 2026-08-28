@@ -15,6 +15,7 @@ from .models import (
     session_result,
 )
 from .commands import AccessMode
+from .version import distribution_version
 from .registry import RegistryError, SessionRegistry
 from .runtime import (
     CodexProtocolError,
@@ -160,6 +161,7 @@ class WorkerBroker:
             "socket_path": self.socket_path,
             "state_path": self.state_path,
             "session_count": len(self.registry.list()),
+            "worker_version": distribution_version(),
         }
 
     @staticmethod

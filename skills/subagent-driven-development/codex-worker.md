@@ -23,6 +23,16 @@ start a new shell (or prepend the reported UV bin for the current shell), and re
 preflight. Never invoke the source launcher or fall back to an absolute source path.
 Native Claude-only work needs neither this preflight nor UV.
 
+UV owns one mutable global command, so mismatch repair coordinates every open room and
+cannot make different cached plugin versions operate simultaneously. Coordinate rooms
+using other cached versions before repair. Thereafter every operational invocation with
+`CLAUDE_PLUGIN_ROOT` must exactly match the installed tool or it returns typed
+`tool_version_mismatch` before runtime contact; `codex-worker --version` remains the
+safe diagnostic. Rerun this loaded root's trusted preflight only after coordination.
+Managed daemons also report their worker version: the selected incompatible runtime is
+gracefully replaced with durable mappings preserved, while unrelated instances and raw
+socket lifecycles are left alone.
+
 Package lifecycle commands are maintenance opportunities, not routine dispatch
 ceremony. A local checkout may be installed directly for release validation; an
 editable local install is development-only. A pinned Git URL can be used once a release

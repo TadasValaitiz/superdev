@@ -84,6 +84,7 @@ class FacadeFaultCode(int, Enum):
     CALLBACK_TARGET_UNSAFE = -32035
     CALLBACK_SEND_FAILED = -32036
     CALLBACK_PAYLOAD_TOO_LARGE = -32037
+    TOOL_VERSION_MISMATCH = -32038
 
 
 FACADE_FAULT_KINDS = {
@@ -110,6 +111,7 @@ FACADE_FAULT_KINDS = {
     FacadeFaultCode.CALLBACK_TARGET_UNSAFE: "callback_target_unsafe",
     FacadeFaultCode.CALLBACK_SEND_FAILED: "callback_send_failed",
     FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE: "callback_payload_too_large",
+    FacadeFaultCode.TOOL_VERSION_MISMATCH: "tool_version_mismatch",
 }
 
 

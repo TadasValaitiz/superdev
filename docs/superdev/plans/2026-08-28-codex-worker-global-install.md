@@ -453,6 +453,13 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
 
 ## Operational strategy
 
+**Final-review erratum (2026-08-28, D12):** The original executable-only compatibility
+gate was incomplete. One mutable UV tool cannot satisfy differently versioned cached
+rooms simultaneously, so automatic trusted preflight replacement remains the upgrade
+path while every operational invocation with `CLAUDE_PLUGIN_ROOT` fails typed on skew.
+Managed readiness now includes exact daemon version and replaces only an incompatible
+selected runtime, preserving durable state and unrelated/raw runtimes.
+
 All existing Codex-worker behavioral, packaging, release, and skill-integration tests
 are **keep and fix-in-place**. New package/preflight/live tests extend those lanes; no
 legacy tests are archived, regenerated, skipped, or deleted. The package move is not a

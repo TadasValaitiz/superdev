@@ -88,7 +88,12 @@ dispatches any Codex work.
   path is the UV-bin executable and its `--version` equals the manifest exactly. A
   missing or mismatched UV-owned tool is installed/reinstalled non-editably from the
   bundled source. An older or newer version is deliberately replaced because the loaded
-  skill and runtime ship as one compatibility unit (D5).
+  skill and runtime ship as one compatibility unit (D5). Because UV owns one mutable
+  global command, replacement can coordinate—but cannot simultaneously satisfy—rooms
+  using different cached plugin versions. Every operational invocation carrying
+  `CLAUDE_PLUGIN_ROOT` therefore compares that loaded manifest with the installed
+  distribution before runtime contact and fails as typed `tool_version_mismatch` on
+  skew; `--version` remains available for diagnosis (D12).
 - **Interface / contract:** Missing UV, untrusted source, install failure, or a UV bin
   absent from PATH stops before dispatch with a short recovery instruction. A same-named
   non-UV or PATH-shadowing executable is never overwritten and reports its resolved path
@@ -109,6 +114,10 @@ preflight, which is the friction reduction the design exists to deliver.
   `codex-worker --version` is a terminal parser action outside RPC: it writes exactly
   `codex-worker <distribution-version>\n` to stdout, writes nothing to stderr, and exits
   0 without starting or contacting a daemon.
+- **Runtime compatibility:** Managed-daemon readiness includes the daemon distribution
+  version. Exact peers are reused; an incompatible peer for the selected instance is
+  gracefully stopped and replaced under the lifecycle lock without deleting durable
+  state. Other managed instances and explicitly selected raw sockets are not stopped.
 - **Depends on:** successful §5.2 preflight.
 - **Serves:** R1, R3, R6, R7 · **Governed by:** D1, D2, D5 · **Realizes:** UC1, UC4
 
@@ -165,6 +174,17 @@ installation, completing the story from bundled source to real terminal use.
 - **Why:** Exact coupling makes preflight deterministic; PATH-shadowing is reported
   rather than overwritten.
 - **Revisit-when:** The worker gains an independent compatibility API or release cadence.
+
+### D12 — Fail closed across cached-plugin and runtime skew   (status: locked)
+
+- **Decision:** Keep automatic exact-version preflight repair, then enforce exact
+  loaded-manifest/tool equality per operational invocation and exact tool/managed-daemon
+  equality at readiness.
+- **Alternatives:** Version-namespaced commands would permit simultaneous skew but break
+  the required plain-command contract.
+- **Why:** One mutable UV tool cannot satisfy two cached versions simultaneously; typed
+  refusal and selected-runtime replacement prevent silent incompatibility.
+- **Revisit-when:** Concurrent cross-version rooms become a supported requirement.
 
 ### D6 — Resolve install source from the loaded skill trust anchor   (status: locked)
 

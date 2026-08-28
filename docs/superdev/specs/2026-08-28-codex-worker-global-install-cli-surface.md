@@ -49,6 +49,17 @@ daemon interaction, operator decision, or state transition exists. It supports
 version-aware preflight without exposing UV internals to RPC (D2, D3, D5). Existing
 command families are exhaustively retained above and deliberately unchanged.
 
+### 1c. Loaded-plugin and managed-runtime compatibility
+
+Except for terminal `--version`, an invocation with `CLAUDE_PLUGIN_ROOT` reads that
+loaded plugin's manifest before contacting a worker runtime. A version unequal to the
+installed distribution returns the standard typed error envelope with code `-32038`,
+kind `tool_version_mismatch`, both versions, the loaded root, and actionable coordination
+and trusted-preflight recovery. Managed daemon status also carries `worker_version`;
+managed autostart reuses only an exact peer and gracefully replaces an incompatible peer
+for the selected instance while preserving durable state (D12). Raw socket lifecycle is
+unchanged. Local argument validation retains precedence and exits 2 before this guard.
+
 ## 2. UV tool lifecycle — distribution operations
 
 These are UV commands over the `codex-worker` Python distribution, not new
@@ -79,11 +90,15 @@ and therefore survives tool replacement or uninstall.
    `codex-worker --version`.
 3. If the UV-owned executable is absent or mismatched, run
    `uv tool install --reinstall "$SUPERDEV_PLUGIN_ROOT/skills/subagent-driven-development/scripts"`.
+   This replaces the one global tool for every room; coordinate rooms on other cached
+   plugin versions before repair.
 4. Confirm its canonical path and exact version, then run normal short commands such as
    `codex-worker start --name <unique-name> --prompt-file <task-file>`.
 5. Recovery: if UV is missing, install UV explicitly; if UV's bin is not first on PATH,
    run `uv tool update-shell` and start a new shell or prefix the current shell PATH. If
    another executable shadows it, report both paths and stop. Never invoke source directly.
+   If an operational command reports `tool_version_mismatch`, rerun the trusted preflight
+   for that loaded room only after coordinating the other cached rooms.
 
 ### Local development
 
@@ -108,6 +123,11 @@ and therefore survives tool replacement or uninstall.
 Measured daemon-restart behavior preserves registry bytes and IDs but intentionally has
 no runtime attachment until `run --name` resumes the worker. This corrects the upgrade
 proof route without changing public lifecycle behavior.
+
+**Final-review erratum (2026-08-28, D12):** Exact preflight identity now extends to
+each loaded-room invocation and the selected managed daemon. Automatic mismatch repair
+remains, but it is explicitly a coordination point for the one mutable global tool;
+version-skewed rooms fail typed instead of silently using one another's executable.
 
 ## 4. Docs to update
 

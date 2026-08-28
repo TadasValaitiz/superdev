@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -701,6 +702,7 @@ class RpcServerTests(unittest.TestCase):
             -32033: "callback_target_not_found", -32034: "callback_target_ambiguous",
             -32035: "callback_target_unsafe", -32036: "callback_send_failed",
             -32037: "callback_payload_too_large",
+            -32038: "tool_version_mismatch",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)
@@ -800,6 +802,50 @@ class CliTests(unittest.TestCase):
         self.assertEqual(forbidden, [])
         with self.assertRaises(json.JSONDecodeError):
             json.loads(completed.stdout)
+
+    def test_loaded_plugin_version_skew_is_typed_before_any_runtime_contact(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps({"name": "superdev", "version": "0.0.1"}) + "\n",
+            encoding="utf-8",
+        )
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}):
+            completed = self.run_cli(
+                ["model", "list"], fake_rpc=self.fake_rpc_success, include_socket=True,
+            )
+        self.assert_json_error(completed, 1, "tool_version_mismatch")
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["error"]["data"]["details"]["loaded_version"], "0.0.1")
+        self.assertEqual(payload["error"]["data"]["details"]["installed_version"],
+                         cli.distribution_version())
+        self.assertTrue(payload["error"]["data"]["next_actions"])
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_local_invalid_params_precede_loaded_plugin_version_skew(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({"version": "0.0.1"}) + "\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}):
+            completed = self.run_cli(
+                ["start", "--name", "bad/name", "--prompt", "one"],
+                fake_rpc=self.fake_rpc_success,
+            )
+        self.assert_json_error(completed, 2, "invalid_params")
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_loaded_plugin_version_skew_guards_foreground_daemon_serve(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({"version": "0.0.1"}) + "\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}), \
+                mock.patch.object(cli, "_serve") as serve:
+            completed = self.run_cli(["daemon", "serve"])
+        self.assert_json_error(completed, 1, "tool_version_mismatch")
+        serve.assert_not_called()
 
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()

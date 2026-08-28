@@ -15,9 +15,14 @@ cat > "$FIXTURE/.version-bump.json" <<'JSON'
     {"path": "package.json", "field": "version"},
     {"path": "package/pyproject.toml", "field": "project.version", "format": "toml"}
   ],
-  "audit": {"exclude": []}
+  "audit": {"exclude": [], "public": ["README.md"]}
 }
 JSON
+cat > "$FIXTURE/README.md" <<'MARKDOWN'
+# Fixture
+
+claude plugin details superdev # → 1.2.x
+MARKDOWN
 cat > "$FIXTURE/package.json" <<'JSON'
 {
   "version": "1.2.3",
@@ -39,6 +44,27 @@ TOML
 cp "$FIXTURE/package/pyproject.toml" "$FIXTURE/package/pyproject.original"
 
 "$FIXTURE/scripts/bump-version.sh" --check >/dev/null
+
+cp "$FIXTURE/package.json" "$FIXTURE/package-json.audit.before"
+jq '.version = "1.2.4"' "$FIXTURE/package.json" > "$FIXTURE/package.json.tmp"
+mv "$FIXTURE/package.json.tmp" "$FIXTURE/package.json"
+if "$FIXTURE/scripts/bump-version.sh" --audit >"$FIXTURE/audit-drift.out" 2>&1; then
+  echo "expected audit to fail on declaration drift" >&2
+  exit 1
+fi
+grep -F 'DRIFT DETECTED' "$FIXTURE/audit-drift.out" >/dev/null
+mv "$FIXTURE/package-json.audit.before" "$FIXTURE/package.json"
+
+sed -i.bak 's/1\.2\.x/1.1.x/' "$FIXTURE/README.md"
+if "$FIXTURE/scripts/bump-version.sh" --audit >"$FIXTURE/audit-readme.out" 2>&1; then
+  echo "expected audit to fail on stale public README version" >&2
+  exit 1
+fi
+grep -F 'stale public version' "$FIXTURE/audit-readme.out" >/dev/null
+mv "$FIXTURE/README.md.bak" "$FIXTURE/README.md"
+
+sed -i.bak 's/1\.2\.x/2.0.x/' "$FIXTURE/README.md"
+rm "$FIXTURE/README.md.bak"
 "$FIXTURE/scripts/bump-version.sh" 2.0.0 >/dev/null
 
 jq -e '.version == "2.0.0" and .untouched == "keep"' "$FIXTURE/package.json" >/dev/null
@@ -103,6 +129,8 @@ awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$FIXTURE/package/pyproject.toml" 
   > "$FIXTURE/package/pyproject.crlf"
 mv "$FIXTURE/package/pyproject.crlf" "$FIXTURE/package/pyproject.toml"
 cr_before="$(tr -cd '\r' < "$FIXTURE/package/pyproject.toml" | wc -c | tr -d ' ')"
+sed -i.bak 's/2\.0\.x/4.0.x/' "$FIXTURE/README.md"
+rm "$FIXTURE/README.md.bak"
 "$FIXTURE/scripts/bump-version.sh" 4.0.0 >/dev/null
 cr_after="$(tr -cd '\r' < "$FIXTURE/package/pyproject.toml" | wc -c | tr -d ' ')"
 [[ "$cr_before" -gt 0 && "$cr_after" -eq "$cr_before" ]]

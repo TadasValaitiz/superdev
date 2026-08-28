@@ -15,6 +15,7 @@ from codex_worker.broker import ModelSelectionError, WorkerBroker
 from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
+from codex_worker.version import distribution_version
 
 
 class FakeCodex:
@@ -235,7 +236,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(status, {
             "ready": True, "daemon_pid": 1234, "codex_pid": 4321,
             "socket_path": str(Path(self.cwd) / "worker.sock"), "state_path": self.state_path,
-            "session_count": 0,
+            "session_count": 0, "worker_version": distribution_version(),
         })
         models = self.broker.model_list()
         self.assertEqual(models["models"], [
