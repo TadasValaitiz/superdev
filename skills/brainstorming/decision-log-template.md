@@ -51,9 +51,10 @@ fabricate an operator selection that did not happen.>
   <Each option's SACRIFICES live here; the COMPARATIVE reasoning that picked the winner
   lives in Decided. Never duplicate the rejection argument across both. When an option
   had SHAPE and was presented as a sketch (SKILL.md: "the option IS the sketch"), the
-  entry PRESERVES that sketch — condensed inline in a fence, or a link to the companion
-  section that carries it — so the ruling's audit trail shows what the operator actually
-  saw. A shape-bearing fork whose entry has no sketch receipt is a reviewer finding.>
+  entry PRESERVES that sketch INLINE, condensed, in a fence — never as a link to a
+  later-written document, which cannot prove what the operator saw at the moment of
+  ruling (capture-at-decision + append-only forbid retroactive receipts). A shape-bearing
+  fork whose entry has no inline sketch receipt is a reviewer finding.>
 - **Decided:** <choice + rider> — <the reasoning, including evidence consulted (files
   read, probes run, measurements cited with their honesty tier)>.
 - **Not X:** <when the decided thing could be mistaken for a neighbouring concept, say

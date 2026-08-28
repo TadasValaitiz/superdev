@@ -100,8 +100,8 @@ One subsection per area. Each MUST open with its narrative link-sentence.
 
 <Link-sentence: the role this area plays in the §4 story. A SUBSTANTIAL area (one a
 reader could misread, or one carrying a domain shape) additionally opens with a
-compressed mental model — an orienting line plus the 1–3 likeliest wrong readings as
-"not X" clauses — and shows its shape as a small typed sketch labeled with its epistemic
+compressed mental model — an orienting analogy where one exists, then a literal
+"It is not:" list of the 1–3 likeliest wrong readings, each demolished in a line — and shows its shape as a small typed sketch labeled with its epistemic
 weight, never only prose about the shape.>
 **Status:** `LOCKED|FLEXIBLE|DEFERRED|BLIND|MISMATCH|SEED-ILLUSTRATIVE (D#|owner)` — epistemic, positional plain-word grammar per superdev:system-design `map-and-markers.md`; when a corpus exists, cite the governing map row / system-angle passage at file:line.
 
