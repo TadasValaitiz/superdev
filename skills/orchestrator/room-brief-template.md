@@ -48,8 +48,9 @@ flowing, never wait. HIL: the human converses and rules here, in-session.⟩
 The orchestrator coordinates; it NEVER merges your work.
 
 HOME: this worktree (⟨abs path⟩, branch item/⟨area⟩ cut from ⟨milestone branch⟩) is your
-entire world — never run git or write files outside it. Your ID BLOCK for shared
-append-only ledgers: ⟨e.g. D40+⟩.
+entire world — never run git or write files outside it. Your DECISION-NUMBER BLOCK for
+candidate D# entries in your own item log: ⟨e.g. D40+⟩. (No shared ledgers exist — you
+never append to any file outside your worktree; findings travel in your REPORTS.)
 PUBLISH RECIPE (only after ratification + full DoD):
   git rebase ⟨milestone branch⟩ && ⟨gate command⟩ green post-rebase &&
   git push . HEAD:refs/heads/⟨milestone branch⟩
@@ -59,8 +60,24 @@ re-gate, retry). NEVER push to main.
 MISSION (end-to-end, no handoffs): ⟨e.g. design the area → ratification → implement →
 cutover → checkride → cleanup → close⟩. DoD = ⟨the area's definition of done⟩.
 
-READ FIRST (MAJOR — the law): ⟨binding docs⟩ · ⟨notes/refs to quote-check against your design⟩.
-NARROW (on need): ⟨reference material · the surface being replaced · landed code⟩.
+ARCHITECTURE CONTEXT (as of reconcile commit ⟨sha⟩, ⟨date⟩ — the five-part block, D57):
+READ FIRST (MAJOR — the law, read fully before writing anything):
+- ⟨anchor file⟩ §⟨…⟩ — ⟨the boundary this item lives inside⟩
+- ⟨angle file⟩ — ⟨this item's journey⟩
+- docs/orchestration/execution/⟨milestone⟩-proposal.md — celebration ⟨n⟩, item ⟨id⟩ (your scope)
+- ⟨if the map marks your area RESHAPE/REPLACE⟩: ground on ⟨the post-migration vision doc⟩,
+  NOT on the current code in ⟨path⟩.
+NARROW (on need): ⟨neighbouring angles · reference material · the surface being replaced⟩.
+BINDING RULINGS (verbatim from the anchors — these govern your item; the ONE sanctioned duplication):
+> **LOCKED (D⟨#⟩):** ⟨the ruling, quoted character-for-character⟩
+> **LOCKED (D⟨#⟩):** ⟨…3–5 total, chosen from the marker lines that bind THIS item⟩
+RULED SINCE THE RECONCILE: ⟨D# pointers into the milestone decisions file — never retold content⟩.
+
+DEVIATION DUTY (D61 — show must go on): corpus contradictions you find are collected in
+YOUR OWN item files during grounding→planning; AFTER planning, BEFORE execution, message
+me a short summary + pointer (I relay to the architect immediately). Then implement
+against reality with MIG-MARK[⟨class⟩][D⟨#⟩] planted at the exact sites — you never stall
+and never rule; the checkpoint is the net.
 
 SCOPE: ⟨what this room owns⟩. RESIDUALS OWNED: ⟨R# — file:line + what to do⟩.
 ⟨Optional: CROSSWALK / backlog rows to disposition.⟩
