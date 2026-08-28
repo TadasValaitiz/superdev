@@ -214,3 +214,82 @@ Executor self-review found no unresolved Task 2 correctness issue. The approved 
 strict-dataclass exception remains the only knowing pattern exception. This receipt records the
 foundation and does not claim the plan's independent C1 approval; the controller dispatches that
 fresh combined reviewer after the Task 2 commit.
+
+## Task 2 C1 correction — settlement, authority, and boundary hardening
+
+The first independent C1 review found one critical settlement bug and seven important boundary
+issues. The executor reproduced each before changing production code and corrected them without
+adding Task 3's public lifecycle/inventory behavior.
+
+Backend bridge accounting now recognizes only valid response envelopes; an ID alone, both
+result/error, explicit null method, malformed error, or invalid JSON cannot release a forwarded
+mutation. Allowlisted reads also occupy the in-flight ID table, so duplicate IDs refuse before a
+second forward. Strict JSON rejects non-finite values in both directions and on worker/approval
+emission. Successful valid frames remain byte-equivalent.
+
+Approval callbacks run on one bounded FIFO worker rather than the response reader, preserving
+correlation and approval order with bounded close joining. Gateway readiness clears when the
+serve loop exits. Directory creation rejects symlinks after entering a user-controlled path and
+does not create/chmod external children, while permitting leading root-owned platform aliases.
+The child environment additionally removes parent session/instance routing selectors while
+preserving intended provider auth/config.
+
+Ordinary service callers can no longer obtain the service's gate or termination method. Task 3
+receives a sealed frozen private lifecycle composition capability carrying the exact gate; only a
+still-live lease from that gate authorizes owned-resource termination. Public stop/restart and
+authoritative inventory remain Task 3.
+
+### Correction RED / GREEN
+
+Focused REDs observed the exact defects: active mutation count dropped on `{\"id\":7}`, the
+public maintenance gate existed, an intermediate symlink created external children, parent
+session/instance variables survived, `ready` stayed true after serve exit, a blocked approval
+caused `thread/read` timeout, duplicate `thread/read` IDs forwarded twice, and `NaN`/`Infinity`
+were accepted or emitted.
+
+```text
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_websocket_transport.py'
+Ran 15 tests in 0.042s ... OK
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_websocket_gateway.py'
+Ran 20 tests in 0.038s ... OK
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_service.py'
+Ran 12 tests in 0.014s ... OK
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_app_server_runtime.py'
+Ran 32 tests in 0.516s ... OK
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_runtime.py'
+Ran 7 tests in 0.007s ... OK
+```
+
+### Real and full-gate correction evidence
+
+```text
+isolated Python 3.9.6 / websockets 15.0.1: sync-client-server-ok; lazy-modules-ok
+real Unix/public gateway: collision-refused; incomplete-envelope-held-mutation-ok;
+  valid-response-settled-mutation-ok; byte-equivalent-frames-ok; first-peer-preserved-ok
+real Codex service: private-owner-only-socket-ok; ordinary-termination-surface-absent-ok;
+  public-to-private-handshake-ok; private-lifecycle-termination-ok
+generated schema: codex-cli 0.150.1; 95 methods; schema-fixture-production-set-equality-ok
+wheel: wheel-allowlist-ok files=26; wheel-websockets-metadata-ok
+compileall and diff-check: exit 0
+
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py'
+Ran 487 tests in 47.504s
+FAILED (failures=3)
+```
+
+The only failures remain the three D19 version tests assigned to Task 5; no correction or Task 1
+behavior failed. No default listener or installed/global service was mutated.
+
+### Canon reconciliation and re-review status
+
+The suggested raw-payload/exception redesign conflicts with the exact Task 2 interface and design
+§5.2: `CodexConnection.call(method, params, timeout)` is the open, generated Codex JSON-RPC wire
+adapter, while D18 governs strict frozen worker domain models and incremental compatibility. The
+fixed-bind contract also deliberately propagates collision, and Task 4 owns public closed-fault
+conversion. A wrapper around the same 95 heterogeneous payloads would not make them closed and
+would not remove the required compatibility call.
+
+Proposed bounded clarification for re-review: record under D18 that raw Codex protocol/gateway
+boundaries retain measured JSON and internal exception contracts, and require Task 4 to convert
+service failures at the public RPC/CLI edge. This executor did not silently change the decision
+log. Independent C1 re-review remains pending; this correction receipt does not claim approval.

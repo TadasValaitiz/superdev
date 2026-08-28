@@ -154,8 +154,9 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         )
         def cleanup():
             if service.status().ready:
-                with service.maintenance_gate.drain() as lease:
-                    service.terminate_owned(lease)
+                lifecycle = service._lifecycle_for_composition()
+                with lifecycle.gate.drain() as lease:
+                    lifecycle.terminate_owned(lease)
         self.addCleanup(cleanup)
         return service
 
@@ -199,8 +200,9 @@ class GlobalWorkerServiceTests(unittest.TestCase):
     @staticmethod
     def _terminate_if_ready(service):
         if service.status().ready:
-            with service.maintenance_gate.drain() as lease:
-                service.terminate_owned(lease)
+            lifecycle = service._lifecycle_for_composition()
+            with lifecycle.gate.drain() as lease:
+                lifecycle.terminate_owned(lease)
 
     def test_public_collision_refuses_before_spawning_and_preserves_peer(self):
         harness = ServiceHarness(gateway_fail=True)
@@ -235,6 +237,24 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), before)
         self.assertEqual(harness.processes, [])
 
+    def test_intermediate_symlink_is_refused_before_creating_external_children(self):
+        external = Path(self.temporary.name) / "external-target"
+        external.mkdir(mode=0o755)
+        linked_state = Path(self.temporary.name) / "linked-state"
+        linked_state.symlink_to(external, target_is_directory=True)
+        paths = derive_service_paths(
+            "darwin", linked_state, Path(self.temporary.name) / "safe-runtime", os.getuid())
+        harness = ServiceHarness()
+        service = GlobalWorkerService(
+            paths, self.config, lambda _message: None, None, harness.deps(),
+            codex_argv=("/opt/bin/codex",),
+        )
+        self.addCleanup(lambda: self._terminate_if_ready(service))
+        with self.assertRaises(PermissionError):
+            service.start()
+        self.assertFalse((external / "superdev").exists())
+        self.assertEqual(harness.processes, [])
+
     def test_private_socket_must_be_owner_only(self):
         harness = ServiceHarness(socket_mode=0o660)
         service = self.make_service(harness)
@@ -248,32 +268,45 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         harness = ServiceHarness()
         service = self.make_service(harness)
         service.start()
+        lifecycle = service._lifecycle_for_composition()
         with self.assertRaises(PermissionError):
-            service.terminate_owned(object())
+            lifecycle.terminate_owned(object())
         foreign = ServiceMaintenanceGate()
         with foreign.drain() as lease:
             with self.assertRaises(PermissionError):
-                service.terminate_owned(lease)
-        with service.maintenance_gate.drain() as lease:
-            service.terminate_owned(lease)
+                lifecycle.terminate_owned(lease)
+        with lifecycle.gate.drain() as lease:
+            lifecycle.terminate_owned(lease)
         self.assertFalse(service.status().ready)
         self.assertTrue(harness.gateways[0].closed)
         self.assertTrue(harness.connections[0][3].closed)
         self.assertIsNotNone(harness.processes[0].poll())
         with self.assertRaises(PermissionError):
-            service.terminate_owned(lease)
+            lifecycle.terminate_owned(lease)
 
     def test_service_has_no_public_stop_or_restart_surface(self):
         self.assertFalse(hasattr(GlobalWorkerService, "stop"))
         self.assertFalse(hasattr(GlobalWorkerService, "restart"))
 
+    def test_ordinary_service_surface_cannot_issue_drain_or_termination_authority(self):
+        service = self.make_service(ServiceHarness())
+        self.assertFalse(hasattr(service, "maintenance_gate"))
+        self.assertFalse(hasattr(service, "terminate_owned"))
+        lifecycle = service._lifecycle_for_composition()
+        self.assertIsInstance(lifecycle.gate, ServiceMaintenanceGate)
+        with self.assertRaises(TypeError):
+            type(lifecycle)(object(), service, lifecycle.gate)
+        with self.assertRaises(AttributeError):
+            lifecycle.gate = ServiceMaintenanceGate()
+
     def test_termination_attempts_every_owned_resource_when_close_raises(self):
         harness = FailingCloseHarness()
         service = self.make_service(harness)
         service.start()
-        with service.maintenance_gate.drain() as lease:
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
             with self.assertRaises(OSError):
-                service.terminate_owned(lease)
+                lifecycle.terminate_owned(lease)
         self.assertFalse(service.status().ready)
         self.assertTrue(harness.gateways[0].closed)
         self.assertTrue(harness.connections[0][3].closed)
@@ -283,7 +316,10 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertEqual(list(inspect.signature(GlobalWorkerService.start).parameters), ["self"])
         self.assertEqual(list(inspect.signature(GlobalWorkerService.status).parameters), ["self"])
         self.assertEqual(list(inspect.signature(
-            GlobalWorkerService.terminate_owned).parameters), ["self", "lease"])
+            GlobalWorkerService._lifecycle_for_composition).parameters), ["self"])
+        lifecycle = self.make_service(ServiceHarness())._lifecycle_for_composition()
+        self.assertEqual(list(inspect.signature(
+            lifecycle.terminate_owned).parameters), ["lease"])
         status = self.make_service(ServiceHarness()).status()
         with self.assertRaises(Exception):
             status.ready = True

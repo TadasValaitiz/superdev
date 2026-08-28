@@ -18,6 +18,7 @@ from .websocket_transport import CodexConnection, codex_child_env
 
 
 PRIVATE_SOCKET_TIMEOUT = 5.0
+_LIFECYCLE_ISSUER = object()
 
 
 class OwnedProcess(Protocol):
@@ -93,6 +94,29 @@ class GlobalWorkerServiceStatus(StrictModel):
             raise ValueError("private_codex_socket must be absolute")
 
 
+@dataclass(frozen=True)
+class _ServiceLifecycle:
+    """Private composition capability consumed by Task 3's maintenance coordinator."""
+
+    _service: "GlobalWorkerService"
+    _gate: ServiceMaintenanceGate
+
+    def __init__(self, issuer: object, service: "GlobalWorkerService",
+                 gate: ServiceMaintenanceGate):
+        if issuer is not _LIFECYCLE_ISSUER:
+            raise TypeError("service lifecycle capabilities are internally composed")
+        object.__setattr__(self, "_service", service)
+        object.__setattr__(self, "_gate", gate)
+
+    @property
+    def gate(self) -> ServiceMaintenanceGate:
+        return self._gate
+
+    def terminate_owned(self, lease: DrainLease) -> None:
+        self._gate.authorize(lease)
+        self._service._terminate_resources()
+
+
 def _spawn_codex(argv: Sequence[str], cwd: str,
                  env: Mapping[str, str]) -> OwnedProcess:
     return subprocess.Popen(
@@ -131,13 +155,43 @@ def _verify_private_socket(path: Path, uid: int) -> None:
 
 
 def _ensure_owner_directory(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    """Create and harden one directory without traversing symlink components."""
+    if not path.is_absolute():
+        raise ValueError("service directory must be absolute")
+    current = Path(path.anchor)
+    controlled = False
+    for component in path.parts[1:]:
+        current = current / component
+        try:
+            value = os.lstat(str(current))
+        except FileNotFoundError:
+            current.mkdir(mode=0o700)
+            value = os.lstat(str(current))
+            if value.st_uid != os.getuid():
+                raise PermissionError("created service directory is not owner-owned")
+            os.chmod(str(current), 0o700)
+            controlled = True
+        else:
+            if stat.S_ISLNK(value.st_mode):
+                # macOS exposes leading system aliases such as /var -> /private/var.
+                # They are tolerated only before traversal reaches user-owned state.
+                if controlled or value.st_uid != 0:
+                    raise PermissionError(
+                        "service directory path must not contain user-controlled symlinks")
+                continue
+            if not stat.S_ISDIR(value.st_mode):
+                raise PermissionError(
+                    "service directory path must contain only real directories")
+            if value.st_uid == os.getuid():
+                controlled = True
+            elif controlled and value.st_uid != 0:
+                raise PermissionError(
+                    "service directory path crossed into another user's directory")
     value = os.lstat(str(path))
     if not stat.S_ISDIR(value.st_mode) or value.st_uid != os.getuid():
         raise PermissionError("service directory must be a real owner-owned directory")
     os.chmod(str(path), 0o700)
-    verified = os.lstat(str(path))
-    if stat.S_IMODE(verified.st_mode) != 0o700:
+    if stat.S_IMODE(os.lstat(str(path)).st_mode) != 0o700:
         raise PermissionError("service directory must be owner-only")
 
 
@@ -167,7 +221,9 @@ class GlobalWorkerService:
         self._deps = deps or default_service_deps()
         self._codex_argv = tuple(codex_argv)
         self._worker_version = config.worker_version
-        self.maintenance_gate = ServiceMaintenanceGate()
+        self._maintenance_gate = ServiceMaintenanceGate()
+        self._lifecycle_capability = _ServiceLifecycle(
+            _LIFECYCLE_ISSUER, self, self._maintenance_gate)
         self._process = None  # type: Optional[OwnedProcess]
         self._connection = None  # type: Optional[CodexConnection]
         self._gateway = None  # type: Optional[WebSocketGateway]
@@ -183,7 +239,7 @@ class GlobalWorkerService:
         if self.paths.private_codex_socket.exists() or self.paths.private_codex_socket.is_symlink():
             raise FileExistsError("private Codex socket already exists; refusing to unlink it")
         gateway = self._deps.create_gateway(
-            self.config.listener, self.private_endpoint, self.maintenance_gate)
+            self.config.listener, self.private_endpoint, self._maintenance_gate)
         try:
             # Bind the exact public authority before the child exists. A public collision
             # therefore cannot spawn, kill, trust, or otherwise disturb another peer.
@@ -254,10 +310,9 @@ class GlobalWorkerService:
         return (ListenerExposure.LOOPBACK if address.is_loopback
                 else ListenerExposure.NON_LOOPBACK)
 
-    def terminate_owned(self, lease: DrainLease) -> None:
-        """Terminate only under a still-live authorization from this service's gate."""
-        self.maintenance_gate.authorize(lease)
-        self._terminate_resources()
+    def _lifecycle_for_composition(self) -> _ServiceLifecycle:
+        """Return the private capability wired only into Task 3 lifecycle composition."""
+        return self._lifecycle_capability
 
     def _rollback_start(self, gateway: WebSocketGateway) -> None:
         if self._gateway is None:

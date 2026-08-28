@@ -209,6 +209,15 @@ class GatewayTests(unittest.TestCase):
         first_thread.join(1)
         second_thread.join(1)
 
+    def test_ready_clears_when_server_loop_exits_unexpectedly(self):
+        self.assertTrue(self.gateway.ready)
+        self.factory.servers[0].shutdown()
+        deadline = time.monotonic() + 1
+        while self.gateway.ready:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertFalse(self.gateway.ready)
+
     def test_successful_frames_are_byte_equivalent_and_mutation_settles_on_response(self):
         frontend, backend, thread = self.bridge()
         request = '{ "id" : "r-1", "method" : "turn/start", "params" : {"x":1} }'
@@ -226,6 +235,38 @@ class GatewayTests(unittest.TestCase):
             time.sleep(0.001)
         self.assertEqual(frontend.sent, [response])
         self.assertEqual(self.gate.active_mutations, 0)
+        frontend.close()
+        thread.join(1)
+
+    def test_incomplete_or_ambiguous_backend_envelope_does_not_settle_mutation(self):
+        frontend, backend, thread = self.bridge()
+        frontend.inject('{"id":7,"method":"turn/start","params":{}}')
+        deadline = time.monotonic() + 1
+        while not backend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(self.gate.active_mutations, 1)
+
+        incomplete = '{"id":7}'
+        ambiguous = '{"id":7,"result":{},"error":{}}'
+        null_method = '{"id":7,"method":null,"result":{}}'
+        malformed_error = '{"id":7,"error":"busy"}'
+        backend.inject(incomplete)
+        backend.inject(ambiguous)
+        backend.inject(null_method)
+        backend.inject(malformed_error)
+        while len(frontend.sent) < 4:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(frontend.sent[:4], [
+            incomplete, ambiguous, null_method, malformed_error,
+        ])
+        self.assertEqual(self.gate.active_mutations, 1)
+
+        backend.inject('{"id":7,"result":{}}')
+        while self.gate.active_mutations:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
         frontend.close()
         thread.join(1)
 
@@ -270,6 +311,19 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(backend.sent, [])
         faults = [json.loads(frame)["error"]["data"]["kind"] for frame in frontend.sent]
         self.assertEqual(faults, ["invalid_request", "invalid_request"])
+        frontend.close()
+        thread.join(1)
+
+    def test_non_finite_frontend_json_is_refused_before_forwarding(self):
+        frontend, backend, thread = self.bridge()
+        frontend.inject('{"id":1,"method":"turn/start","params":{"value":NaN}}')
+        deadline = time.monotonic() + 1
+        while not frontend.sent and not backend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(backend.sent, [])
+        self.assertEqual(json.loads(frontend.sent[0])["error"]["data"]["kind"],
+                         "invalid_request")
         frontend.close()
         thread.join(1)
 
@@ -322,6 +376,22 @@ class GatewayTests(unittest.TestCase):
         frontend.close()
         thread.join(1)
 
+    def test_duplicate_inflight_allowlisted_read_id_is_refused_before_forward(self):
+        frontend, backend, thread = self.bridge()
+        request = '{"id":"read-1","method":"thread/read","params":{"threadId":"t"}}'
+        frontend.inject(request)
+        frontend.inject(request)
+        deadline = time.monotonic() + 1
+        while len(backend.sent) < 2 and not frontend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(backend.sent, [request])
+        self.assertEqual(json.loads(frontend.sent[0])["error"]["data"]["kind"],
+                         "invalid_request")
+        backend.inject('{"id":"read-1","result":{}}')
+        frontend.close()
+        thread.join(1)
+
     def test_backend_disconnect_closes_frontend_and_releases_inflight_mutation(self):
         frontend, backend, thread = self.bridge()
         frontend.inject('{"id":1,"method":"turn/start","params":{}}')
@@ -333,6 +403,22 @@ class GatewayTests(unittest.TestCase):
         thread.join(1)
         self.assertFalse(thread.is_alive())
         self.assertTrue(frontend.closed)
+        self.assertEqual(self.gate.active_mutations, 0)
+
+    def test_non_finite_backend_json_closes_bridge_without_forwarding(self):
+        frontend, backend, thread = self.bridge()
+        frontend.inject('{"id":1,"method":"turn/start","params":{}}')
+        deadline = time.monotonic() + 1
+        while not backend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        backend.inject('{"id":1,"result":{"value":Infinity}}')
+        while not frontend.closed and not frontend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertTrue(frontend.closed)
+        self.assertEqual(frontend.sent, [])
+        thread.join(1)
         self.assertEqual(self.gate.active_mutations, 0)
 
     def test_server_approval_request_and_client_response_continue_during_drain(self):

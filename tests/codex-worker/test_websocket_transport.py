@@ -113,6 +113,14 @@ class WebSocketTransportTests(unittest.TestCase):
         self.assertTrue(all(not frame.endswith("\n") for frame in factory.connections[0].sent))
         self.assertEqual(factory.calls, [("unix:///private/codex.sock", MAX_FRAME_BYTES, 16)])
 
+    def test_non_finite_outbound_value_is_refused_without_serializing_a_frame(self):
+        client, factory = self.make_client()
+        before = list(factory.connections[0].sent)
+        with self.assertRaises(CodexCallError) as caught:
+            client.call("thread/read", {"value": float("nan")}, timeout=1)
+        self.assertEqual(caught.exception.kind, "protocol_error")
+        self.assertEqual(factory.connections[0].sent, before)
+
     def test_correlates_concurrent_requests_and_delivers_notifications(self):
         notifications = []
 
@@ -160,6 +168,68 @@ class WebSocketTransportTests(unittest.TestCase):
         self.assertNotIn("DO-NOT-LEAK", repr(notifications))
         self.assertEqual(notifications[-1]["method"], "approval/declined")
 
+    def test_blocked_approval_handler_does_not_block_response_reader(self):
+        approval_started = threading.Event()
+        release_approval = threading.Event()
+        handled = []
+
+        def approval_handler(message):
+            handled.append(message["id"])
+            approval_started.set()
+            if message["id"] == "approval-blocked":
+                release_approval.wait(1)
+            return {"decision": "decline"}
+
+        client, factory = self.make_client(approval_handler=approval_handler)
+        factory.connections[0].inject({
+            "id": "approval-blocked",
+            "method": "item/commandExecution/requestApproval",
+            "params": {},
+        })
+        self.assertTrue(approval_started.wait(1))
+        factory.connections[0].inject({
+            "id": "approval-queued",
+            "method": "item/fileChange/requestApproval",
+            "params": {},
+        })
+        try:
+            self.assertEqual(client.call("thread/read", {}, 0.2),
+                             {"method": "thread/read"})
+        finally:
+            release_approval.set()
+        deadline = time.monotonic() + 1
+        while len([
+                frame for frame in factory.connections[0].sent
+                if json.loads(frame).get("id") in
+                ("approval-blocked", "approval-queued")]) < 2:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        approval_responses = [
+            json.loads(frame)["id"] for frame in factory.connections[0].sent
+            if "result" in json.loads(frame) and
+            json.loads(frame).get("id") in ("approval-blocked", "approval-queued")
+        ]
+        self.assertEqual(approval_responses, handled)
+
+    def test_non_finite_approval_result_fails_transport_without_emitting_frame(self):
+        notifications = []
+        client, factory = self.make_client(
+            notifications=notifications,
+            approval_handler=lambda _message: {"decision": float("nan")},
+        )
+        before = list(factory.connections[0].sent)
+        factory.connections[0].inject({
+            "id": "approval-nan",
+            "method": "item/commandExecution/requestApproval",
+            "params": {},
+        })
+        deadline = time.monotonic() + 1
+        while not factory.connections[0].closed:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(factory.connections[0].sent, before)
+        self.assertEqual(notifications[-1]["method"], "transport/error")
+
     def test_close_and_oversized_frames_fail_all_waiters(self):
         def responder(message):
             if message.get("method") == "initialize":
@@ -187,6 +257,18 @@ class WebSocketTransportTests(unittest.TestCase):
             if message.get("method") == "initialized":
                 return None
             return {"id": True, "result": {"wrong": True}}
+
+        client, _factory = self.make_client([responder])
+        with self.assertRaises(CodexTransportError):
+            client.call("thread/read", {}, 0.2)
+
+    def test_non_finite_inbound_value_fails_transport(self):
+        def responder(message):
+            if message.get("method") == "initialize":
+                return {"id": message["id"], "result": {}}
+            if message.get("method") == "initialized":
+                return None
+            return '{"id":%d,"result":{"value":Infinity}}' % message["id"]
 
         client, _factory = self.make_client([responder])
         with self.assertRaises(CodexTransportError):

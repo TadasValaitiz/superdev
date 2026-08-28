@@ -16,6 +16,7 @@ MAX_INCOMING_QUEUE = 16
 MAX_READ_RETRIES = 2
 MAX_INITIALIZE_RECONNECTS = 1
 OVERLOAD_CODE = -32001
+_APPROVAL_STOP = object()
 
 IDEMPOTENT_READ_METHODS = frozenset({
     "account/rateLimits/read",
@@ -230,11 +231,22 @@ def default_connection_deps() -> CodexConnectionDeps:
 
 
 def codex_child_env() -> Dict[str, str]:
-    """Copy ambient process state without product-managed callback credentials."""
+    """Copy ambient state without parent routing or callback authority."""
     child_env = dict(os.environ)
-    child_env.pop("CLAUDE_CODE_MESSAGING_SOCKET", None)
-    child_env.pop("CLAUDE_CODE_MESSAGING_TOKEN", None)
+    for key in (
+            "CLAUDE_CODE_MESSAGING_SOCKET",
+            "CLAUDE_CODE_MESSAGING_TOKEN",
+            "CLAUDE_CODE_SESSION_ID",
+            "CODEX_WORKER_INSTANCE"):
+        child_env.pop(key, None)
     return child_env
+
+
+def strict_json_loads(frame: str) -> object:
+    def reject_constant(value: str) -> None:
+        raise ValueError("non-finite JSON number: %s" % value)
+
+    return json.loads(frame, parse_constant=reject_constant)
 
 
 class CodexConnection(CodexMethodAdapter):
@@ -262,7 +274,14 @@ class CodexConnection(CodexMethodAdapter):
         self._close_error = None  # type: Optional[CodexTransportError]
         self._socket = None  # type: Optional[TextConnection]
         self._reader = None  # type: Optional[threading.Thread]
+        self._approval_queue = queue.Queue(maxsize=MAX_INCOMING_QUEUE)  # type: queue.Queue
+        self._approval_worker = threading.Thread(
+            target=self._approval_loop,
+            name="codex-websocket-approval",
+            daemon=True,
+        )
         self.stderr_diagnostics = []  # type: List[str]
+        self._approval_worker.start()
         try:
             self._initialize_with_reconnect()
         except BaseException:
@@ -337,7 +356,7 @@ class CodexConnection(CodexMethodAdapter):
                 if len(frame.encode("utf-8")) > MAX_FRAME_BYTES:
                     raise ValueError("Codex WebSocket frame exceeded limit")
                 try:
-                    message = json.loads(frame)
+                    message = strict_json_loads(frame)
                 except (TypeError, ValueError) as exc:
                     raise ValueError("invalid JSON from Codex") from exc
                 if not isinstance(message, dict):
@@ -361,9 +380,15 @@ class CodexConnection(CodexMethodAdapter):
             raise CodexTransportError(details={"message": "connection is unavailable"})
 
     def _send(self, message: JsonObject) -> None:
-        encoded = json.dumps(message, separators=(",", ":"))
+        method = str(message.get("method", "transport"))
+        try:
+            encoded = json.dumps(message, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise CodexCallError(
+                "protocol_error", method,
+                {"message": "message contains a value outside strict JSON"}) from exc
         if len(encoded.encode("utf-8")) > MAX_FRAME_BYTES:
-            raise CodexCallError("frame_too_large", str(message.get("method", "transport")))
+            raise CodexCallError("frame_too_large", method)
         with self._write_lock:
             with self._state_lock:
                 self._require_open()
@@ -440,7 +465,7 @@ class CodexConnection(CodexMethodAdapter):
                 pending.put_nowait(message)
             return
         if "id" in message and isinstance(method, str):
-            self._handle_server_request(message)
+            self._queue_server_request(message)
             return
         if isinstance(method, str):
             self._emit_notification(message)
@@ -477,6 +502,34 @@ class CodexConnection(CodexMethodAdapter):
             with self._state_lock:
                 self.stderr_diagnostics.append("notification observer raised")
 
+    def _queue_server_request(self, message: JsonObject) -> None:
+        try:
+            self._approval_queue.put_nowait(message)
+        except queue.Full:
+            self._fail_transport(CodexTransportError(details={
+                "message": "Codex approval queue exceeded limit",
+            }))
+
+    def _approval_loop(self) -> None:
+        while True:
+            message = self._approval_queue.get()
+            if message is _APPROVAL_STOP:
+                return
+            with self._state_lock:
+                if self._closed:
+                    return
+            try:
+                self._handle_server_request(message)
+            except Exception as exc:
+                with self._state_lock:
+                    already_closed = self._closed
+                if not already_closed:
+                    self._fail_transport(CodexTransportError(details={
+                        "message": "Codex approval response failed",
+                        "error": type(exc).__name__,
+                    }))
+                return
+
     def _fail_transport(self, error: CodexTransportError) -> None:
         with self._state_lock:
             if self._closed:
@@ -497,6 +550,10 @@ class CodexConnection(CodexMethodAdapter):
                 connection.close()
             except Exception:
                 pass
+        try:
+            self._approval_queue.put_nowait(_APPROVAL_STOP)
+        except queue.Full:
+            pass
         self._emit_notification({"method": "transport/error", "params": {
             "kind": "transport_error",
             "details": dict(error.details) if error.details is not None else None,
@@ -508,6 +565,9 @@ class CodexConnection(CodexMethodAdapter):
         reader = self._reader
         if reader is not None and reader is not threading.current_thread():
             reader.join(timeout=1.0)
+        worker = self._approval_worker
+        if worker is not threading.current_thread():
+            worker.join(timeout=1.0)
 
     def shutdown(self) -> None:
         """Compatibility alias for broker code migrating from the stdio adapter."""

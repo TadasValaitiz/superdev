@@ -66,14 +66,17 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(client.steer("thr-resumed", turn_id, "narrow"), turn_id)
         client.interrupt("thr-resumed", turn_id)
 
-    def test_codex_child_environment_scrubs_only_messaging_credentials(self):
+    def test_codex_child_environment_scrubs_parent_identity_but_keeps_provider_config(self):
         fake = Path(__file__).with_name("fake_codex.py")
         with mock.patch.dict(os.environ, {
                 "CLAUDE_CODE_MESSAGING_SOCKET": "/private/parent.sock",
                 "CLAUDE_CODE_MESSAGING_TOKEN": "a" * 32,
-                "CLAUDE_CODE_SESSION_ID": "harmless-session-metadata",
+                "CLAUDE_CODE_SESSION_ID": "parent-session",
+                "CODEX_WORKER_INSTANCE": "parent-instance",
+                "OPENAI_API_KEY": "provider-auth",
+                "CODEX_HOME": "/private/codex-home",
                 "PATH": os.environ.get("PATH", "/usr/bin"),
-        }, clear=False), mock.patch(
+        }, clear=True), mock.patch(
                 "codex_worker.app_server.subprocess.Popen",
                 wraps=__import__("subprocess").Popen) as popen:
             client = CodexAppServer(self.cwd, [sys.executable, str(fake)],
@@ -82,7 +85,10 @@ class AppServerTests(unittest.TestCase):
         child_env = popen.call_args.kwargs["env"]
         self.assertNotIn("CLAUDE_CODE_MESSAGING_SOCKET", child_env)
         self.assertNotIn("CLAUDE_CODE_MESSAGING_TOKEN", child_env)
-        self.assertEqual(child_env["CLAUDE_CODE_SESSION_ID"], "harmless-session-metadata")
+        self.assertNotIn("CLAUDE_CODE_SESSION_ID", child_env)
+        self.assertNotIn("CODEX_WORKER_INSTANCE", child_env)
+        self.assertEqual(child_env["OPENAI_API_KEY"], "provider-auth")
+        self.assertEqual(child_env["CODEX_HOME"], "/private/codex-home")
         self.assertEqual(child_env["PATH"], os.environ.get("PATH", "/usr/bin"))
 
     def test_fake_history_pages_preserve_provider_newest_first_items(self):

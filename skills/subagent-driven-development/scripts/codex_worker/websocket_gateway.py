@@ -8,7 +8,12 @@ from typing import Dict, Iterator, Optional, Protocol, Set, Tuple
 from urllib.parse import urlsplit
 
 from .service_domain import validate_public_listener
-from .websocket_transport import MAX_FRAME_BYTES, MAX_INCOMING_QUEUE, TextConnection
+from .websocket_transport import (
+    MAX_FRAME_BYTES,
+    MAX_INCOMING_QUEUE,
+    TextConnection,
+    strict_json_loads,
+)
 
 
 DRAIN_ALLOWED_REQUESTS = frozenset({"thread/list", "thread/read", "turn/interrupt"})
@@ -59,6 +64,7 @@ class ServiceBusyError(RuntimeError):
 
 
 _LEASE_AUTHORITY = object()
+_MISSING_PENDING = object()
 
 
 class DrainLease:
@@ -147,10 +153,12 @@ def classify_frontend_frame(value: object) -> FrameClass:
     if not isinstance(value, dict):
         return FrameClass.BLOCKED
     method = value.get("method")
-    if method is None and _request_key(value.get("id")) is not None:
+    if "method" not in value and _request_key(value.get("id")) is not None:
         has_result = "result" in value
         has_error = "error" in value
-        if has_result != has_error:
+        valid_version = "jsonrpc" not in value or value.get("jsonrpc") == "2.0"
+        valid_error = not has_error or isinstance(value.get("error"), dict)
+        if has_result != has_error and valid_version and valid_error:
             return FrameClass.RESPONSE
     if isinstance(method, str) and method in DRAIN_ALLOWED_REQUESTS:
         return FrameClass.ALLOWED
@@ -225,9 +233,17 @@ def _request_key(value: object) -> Optional[Tuple[str, object]]:
 class _Bridge:
     frontend: TextConnection
     backend: TextConnection
-    pending: Dict[Tuple[str, object], AbstractContextManager]
+    pending: Dict[Tuple[str, object], "_PendingRequest"]
     lock: threading.RLock
     closed: bool = False
+
+
+@dataclass(frozen=True)
+class _PendingRequest:
+    mutation: Optional[AbstractContextManager]
+
+
+_READ_PENDING = _PendingRequest(None)
 
 
 class WebSocketGateway:
@@ -270,7 +286,8 @@ class WebSocketGateway:
         server = self._deps.bind_server(
             self._handle_frontend, host, port, MAX_FRAME_BYTES, MAX_INCOMING_QUEUE)
         thread = threading.Thread(
-            target=server.serve_forever,
+            target=self._serve,
+            args=(server,),
             name="codex-websocket-gateway",
             daemon=True,
         )
@@ -279,6 +296,14 @@ class WebSocketGateway:
             self._server_thread = thread
             self._ready = True
         thread.start()
+
+    def _serve(self, server: GatewayServer) -> None:
+        try:
+            server.serve_forever()
+        finally:
+            with self._lock:
+                if self._server is server:
+                    self._ready = False
 
     def _handle_frontend(self, frontend: TextConnection) -> None:
         try:
@@ -333,7 +358,7 @@ class WebSocketGateway:
             self._send_fault(bridge.frontend, None, "invalid_request", -32600, None)
             return
         try:
-            value = json.loads(frame)
+            value = strict_json_loads(frame)
         except (TypeError, ValueError):
             self._send_fault(bridge.frontend, None, "invalid_request", -32600, None)
             return
@@ -344,7 +369,7 @@ class WebSocketGateway:
             self._send_fault(bridge.frontend, None, "invalid_request", -32600, None)
             return
         frame_class = classify_frontend_frame(value)
-        if frame_class in (FrameClass.RESPONSE, FrameClass.ALLOWED):
+        if frame_class is FrameClass.RESPONSE:
             bridge.backend.send(frame)
             return
         method = value.get("method")
@@ -358,6 +383,19 @@ class WebSocketGateway:
                     self._send_fault(
                         bridge.frontend, value.get("id"), "invalid_request", -32600, None)
                     return
+        if frame_class is FrameClass.ALLOWED:
+            if key is not None:
+                with bridge.lock:
+                    bridge.pending[key] = _READ_PENDING
+            try:
+                bridge.backend.send(frame)
+            except BaseException:
+                if key is not None:
+                    with bridge.lock:
+                        if bridge.pending.get(key) is _READ_PENDING:
+                            bridge.pending.pop(key, None)
+                raise
+            return
         context = self.gate.mutation(method)
         try:
             context.__enter__()
@@ -368,14 +406,15 @@ class WebSocketGateway:
             # Publish accounting before forwarding so a fast backend response can't
             # outrun registration and strand the maintenance gate.
             with bridge.lock:
-                bridge.pending[key] = context
+                bridge.pending[key] = _PendingRequest(context)
         try:
             bridge.backend.send(frame)
             if key is None:
                 context.__exit__(None, None, None)
         except BaseException:
             with bridge.lock:
-                retained = key is not None and bridge.pending.get(key) is context
+                retained = (key is not None
+                            and bridge.pending.get(key) == _PendingRequest(context))
                 if retained:
                     bridge.pending.pop(key, None)
             if retained or key is None:
@@ -395,7 +434,7 @@ class WebSocketGateway:
                 "message": "service is draining" if kind == "service_busy" else "invalid request",
                 "data": data,
             },
-        }, separators=(",", ":")))
+        }, separators=(",", ":"), allow_nan=False))
 
     def _pump_backend(self, bridge: _Bridge) -> None:
         try:
@@ -406,16 +445,17 @@ class WebSocketGateway:
                 if len(frame.encode("utf-8")) > MAX_FRAME_BYTES:
                     raise ValueError("backend frame exceeded limit")
                 try:
-                    value = json.loads(frame)
-                except (TypeError, ValueError):
-                    value = None
-                if isinstance(value, dict) and value.get("method") is None:
+                    value = strict_json_loads(frame)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("backend frame is not strict JSON") from exc
+                if classify_frontend_frame(value) is FrameClass.RESPONSE:
                     key = _request_key(value.get("id"))
                     if key is not None:
                         with bridge.lock:
-                            context = bridge.pending.pop(key, None)
-                        if context is not None:
-                            context.__exit__(None, None, None)
+                            context = bridge.pending.pop(key, _MISSING_PENDING)
+                        if (context is not _MISSING_PENDING
+                                and context.mutation is not None):
+                            context.mutation.__exit__(None, None, None)
                 bridge.frontend.send(frame)
         except Exception:
             return
@@ -434,7 +474,8 @@ class WebSocketGateway:
             pending = list(bridge.pending.values())
             bridge.pending.clear()
         for context in pending:
-            context.__exit__(None, None, None)
+            if context.mutation is not None:
+                context.mutation.__exit__(None, None, None)
         for connection in (bridge.frontend, bridge.backend):
             try:
                 connection.close()
