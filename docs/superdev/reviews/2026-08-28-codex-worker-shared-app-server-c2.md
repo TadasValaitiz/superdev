@@ -230,3 +230,28 @@ changed. A fresh adversarial reviewer found no Critical or Important issue after
 repair (`Ready`); it inspected, but did not rerun, the cited tests. Python 3.9.6
 `compileall`, `bash -n`, and `git diff --check` also exit 0. This remains a Task 4
 foundation, not combined C2 approval or Task 5's installed/live checkride receipt.
+
+### Correction to recovery erratum — 2026-08-29
+
+The preceding assertion that all 539 warning-strict discovery tests were green was
+incorrect and is withdrawn. The exact full command remains nonzero with the three
+plan-assigned D19 version failures; the controller independently reproduced the same
+three selectors at commit `ea9a513`. No version declaration was changed here: the source
+CLI reports `7.10.0` while the plugin manifest requires `8.0.0`, exactly as assigned to
+Task 5.
+
+```text
+$ PYTHONWARNINGS=error python3 -m unittest -v \
+    test_tool_package.ToolPackageTests.test_all_declared_versions_match_plugin_manifest \
+    test_tool_package.ToolPackageTests.test_source_cli_prefers_adjacent_pyproject_over_ambient_metadata \
+    test_tool_package.ToolPackageTests.test_source_cli_version_matches_plugin_manifest
+Ran 3 tests in 0.152s
+FAILED (failures=3)
+
+$ [539-test discovery suite with exactly those three IDs excluded]
+remaining_tests=536; failures=0; errors=0; exit 0
+```
+
+Thus the honest full-gate receipt is **539 discovered; 536 GREEN; 3 expected D19
+failures**. All focused/process/structural/reviewer claims in the recovery erratum remain
+valid; Task 5 continues to own the version reconciliation.
