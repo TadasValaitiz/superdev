@@ -1,71 +1,81 @@
-# Protocols — the ledgers between altitudes, with worked examples
+# Protocols — the seam between altitudes, with worked examples
 
-Every protocol: a ledger with one writer (or ID blocks), plus a pointer message. When a message and its ledger disagree, the ledger wins.
+Every protocol: content in a file with ONE writer, plus a pointer message with a short summary. When a message and its file disagree, the file wins. The two surfaces never mix (D60): `docs/system-design/` is reconciled — grab-and-trust; `docs/orchestration/` is operational — stamped, prunable, never reconciled.
 
-## Residue rows and process-feedback rows — the schemas {#row-schemas}
+## The ledgers (orchestrator-written, from room reports — D51) {#row-schemas}
 
-`design/residue/residue.jsonl` — append-only; any room, own ID block; ONE JSON object per line:
-`{"id": "R-<ROOM>-<n>", "date": "YYYY-MM-DD", "room": "...", "kind": "discrepancy|insight|duplicate-risk|design-gap", "ref": "<map row / angle / file:line>", "summary": "<one line>", "marker": "<MIG-MARK id or null>"}`
-**Disposition never edits the jsonl** (it is append-only): the orchestrator's clustering and
-disposition live in the checkpoint handover's cluster list, which cites row ids — that
-document IS the disposition record.
+Rooms do NOT write any shared file. A room records findings in its OWN item files, and its reports carry them; the ORCHESTRATOR comprehends reports into typed ledgers in his space — he is their sole writer, and comprehension is the feature (only he sees across rooms, so he dedupes and clusters):
 
-`orchestration/process-feedback.jsonl` — same shape discipline (rooms write their own rows in their ID blocks; the ORCHESTRATOR alone writes `measured` rows and owns disposition):
-`{"id": "PF-<ROOM|ORCH>-<n>", "date": "...", "kind": "brief-gap|friction|measured", "skill": "<implicated skill or null>", "summary": "...", "values": {<measured facts>|null}}`
+- **Residue ledger** — design-class findings; row kinds: `discrepancy | insight | duplicate-risk | question`. Each row cites the room report it came from. Disposition never edits a row: the handover's cluster list and the response block's verdicts cite row ids — those documents ARE the disposition record.
+- **Process-feedback ledger** — rooms' R5 lines + his own `measurement` rows (charter→merge wall-clock, review cycles, blocked-wait, token sums); kinds: `friction | brief-gap | measurement | win`. Feeds brief adaptation immediately and `/superdev:self-improvement` in batch.
+- **Plan-time deviation pointers (D61):** a room that finds the corpus contradicted collects deviations in its own files during grounding→planning, then — after planning, before execution — messages the orchestrator a summary + pointer; the orchestrator RELAYS the pointer to the architect immediately. Relay of pointers, never paraphrase. The architect may act at once (per the mode law) or fold it to the next checkpoint.
 
-## The design-checkpoint handover (orchestrator → architect) {#checkpoint-handover}
+## The checkpoint handover (orchestrator → architect) — ONE operational document {#checkpoint-handover}
 
-`design/residue-collections/<date>-checkpoint-<n>.md`, orchestrator single-writer. Declared from **rule + green lights + feel**. Three parts and a question:
+`docs/orchestration/handovers/<milestone>-checkpoint-<n>.md`, orchestrator single-writer, write-once, pruned on the rolling window (D62). Declared from **rule + green lights + feel**. The old separate residue-collection document is DEAD — clusters live inline here (D60):
 
 ```markdown
-# Checkpoint 3 — handover (orchestrator → architect)
-Green lights: item-3.1 ✓ · item-3.3 ✓ · warehouse-fix ✓   Rule trigger: regime-bridge side merged
+# Handover — checkpoint 3
+> OPERATIONAL RECORD — point-in-time, never reconciled. May be outdated the moment you
+> read it. Design authority lives in docs/system-design/ (as of its last reconcile).
+
+Green lights: item-3.1 ✓ · item-3.3 ✓   Rule trigger: regime-bridge side merged
 Feel: contributions exhausted on this arc — nothing live is producing.
 
-## 1. WHAT WE GOT                                [facts]
-- merged: 3.1 regime-migration (claims map rows M12, M14) · warehouse-only-bars
-- marker delta: MIG-MARK 41 → 33 (−9 removed with fixes; +1 planted: SEAM D381 in bench_engine)
-- residue clusters (deduped, rows cited, no interpretation):
-  C1 regime-grant edge cases — R-3.1-4, R-3.1-7, R-WHB-2 → map row M14
-  C2 detector timeline leaks into deployable spec — R-3.1-9 → map row M17 (KEEP — contested?)
+## WHAT WE GOT                                   [facts + the cross-room narrative]
+merged: 3.1 regime-migration · warehouse-only-bars. The fee model did not hold — three
+rooms independently hit its edges; the milestone's center of gravity moved…
 
-## 2. WHERE WE FEEL GAPS                         [feel, labelled as feel, by angle]
-- paper-wallet boundary is BLIND in the corpus; two clusters brushed it (angle-09 territory)
+## WHERE WE FEEL GAPS                            [feel, labelled as feel, by angle]
+paper-wallet boundary is BLIND in the corpus; two clusters brushed it (angle-09 territory)
 
-## 3. UPCOMING FOCUS                             [what the next charters need]
-- want to charter: 3.3 bench core. Blocked on: M17 ruling, paper-wallet vision
-- not blocked: 3.4 deploy prep — can charter today
+## UPCOMING FOCUS                                [what the next charters need]
+want to charter: 3.3 bench core — blocked on M17 ruling + paper-wallet vision.
+not blocked: 3.4 deploy prep — can charter today.
 
-## Question to architect: agree or disagree with 1–3?
+## MAP CLAIMS
+M12 discharged — evidence: src/…/target_book.py:112 + transcript t3
+M14 discharged — evidence: replay CLI journey, transcript t4
+
+## CLUSTERS                                      [his authored grouping; rows cited, no rulings]
+C1 regime-grant edge cases — rows R-14, R-17, R-22 → map row M14
+C2 detector timeline leaks into deployable spec — row R-19 → map row M17 (KEEP — contested?)
+
+## FACTS                                         [inlined; the recurring census is ephemeral]
+census delta since reconcile abc1234: BLIND 3→0 · MISMATCH +2 (both fee seam)
+charter→merge 2.1d avg · review cycles 2 · blocked-wait 4h
 ```
 
-## The response (architect → orchestrator) {#checkpoint-response}
+The message to the architect is a pointer. (All SHAs, ids, and figures above: SEED-ILLUSTRATIVE.)
 
-`…-checkpoint-<n>-response.md`, architect single-writer. Agree/disagree per section; the architect may **bounce a cluster back down** ("tactical, not structural — item level, no corpus change"); ends with the session agenda organised by angle and the DOC-MARKs planted:
+## The response — a BLOCK inside the milestone decisions file, then the rulings (D60) {#checkpoint-response}
+
+No response document exists. The sitting's answer opens a checkpoint block in `docs/system-design/…-architecture-decisions.md`, immediately followed by the D# entries it announces — response and rulings in the one file reconciliation already owns:
 
 ```markdown
-# Checkpoint 3 — architect response
-§1 AGREE (M12, M14 will be written as discharged at the session).
-§2 PARTIAL: paper-wallet gap real → vision drafting on the agenda; the 3.2↔3.3 wobble is tactical — bounced to item level.
-§3 DISAGREE on one: M17 cannot be ruled without the operator — session required first.
-Agenda: [M17 fork (lettered) · paper-wallet vision scope · C1 → angle-02 update]
-DOC-MARKs planted: map M17 → [MISMATCH][C2] · visions/paper-wallet.md → [BLIND→DEFERRED][session-4]
+## Checkpoint 3 — response (reconcile def5678)
+Sections: GOT agree · GAPS agree, except the fee seam is worse than felt (D468) ·
+FOCUS disagree — 2b before 3a; 3a's kernel depends on the fee ruling (D469)
+Claims: M12 ACCEPTED · M14 REJECTED — receipt covers the read path only; re-claim with a
+write-path receipt
+Clusters: C1 → ruled, D466–D468 · C2 → deferred, needs the optimization vision ·
+C4 → BOUNCED DOWN — item-work, no design fork; suggest one quick-fix item
+Conformance notes: celebration 3 straddles a REPLACE boundary — advisory only.
+
+### D466 — the fee model owns its rounding …
 ```
 
-## The milestone handoff {#milestone-handoff}
+Claim verdicts and their reasons survive greppably — the map alone could never tell you WHY a claim was refused. **Bounce-downs land mechanically:** the orchestrator (backlog curator) files each bounced cluster as items or routes them into an upcoming charter; his NEXT handover's WHAT WE GOT confirms the filing — the loop audits itself. The reconcile commit (SKILL.md step 5) closes the sitting; the message back is a pointer.
 
-`design/handoffs/<milestone>.md` — two sections, one writer each; a milestone may not close without it:
+## The milestone handoff — SPLIT, no shared file (D49/D68) {#milestone-handoff}
 
-```markdown
-# Handoff — milestone 3 → milestone 4
-## What was built, and what it suggests            [orchestrator]
-merged items + map rows discharged + marker census + retro facts (wall-clock, review cycles, token sums)
-architectural suggestions harvested from residue that stayed unresolved
-## Upfront design for milestone 4                  [architect]
-visions ready: paper-wallet.md (LOCKED core, FLEXIBLE fields) · rulings milestone 4 rests on: D…, D…
-angles updated this milestone: 02, 08, 09 · BLIND areas milestone 4 will hit: …
-```
+Near-homophones, deliberately contrasted: **handovers** are per-CHECKPOINT operational companions (above), pruned; **handoffs** are per-MILESTONE close documents, in the never-pruned keep-set. The old two-section file is dead:
 
-## The session protocol {#session-protocol}
+- **Orchestrator's half** — `docs/orchestration/handoffs/<milestone>.md`: what was built, map rows discharged, marker census, retro facts (measured), architectural suggestions harvested from unresolved residue.
+- **Architect's half IS the birth of the next milestone's document set** — its INDEX, decisions file, census, first visions under the new slug in the flat corpus. Not a section anywhere; a working set coming into existence.
 
-Open mechanically (BLIND/MISMATCH grep · marker census · the pending handover) → agenda by angle → census before forks → lettered forks, operator rules, D# per ruling → visions before big rulings (any REPLACE/RESHAPE cluster >1 module) → **angle sweep** → INDEX update → response document. A session that skipped the sweep is unfinished.
+A milestone may not close without both halves; close is operator-approved in every mode.
+
+## The sitting protocol {#session-protocol}
+
+Open mechanically (census script · stale-D# grep · the pending handover) → agenda by angle, entries as questions → census before forks → forks per the Fork Presentation Standard, ruled per the MODE LAW (SKILL.md#mode-law), D# per ruling with the full entry contract → visions before big rulings (any REPLACE/RESHAPE cluster >1 module) → response block → RECONCILIATION (statuses, banners, canon, census re-run) → the named reconcile commit. A sitting that skipped reconciliation is unfinished.
