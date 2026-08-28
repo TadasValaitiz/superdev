@@ -222,3 +222,27 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   lifecycle contract.
 - **Affects:** Task 2 test route and evidence only; no public CLI surface changes.
 - **Revisit-when:** managed read commands deliberately adopt autostart semantics.
+
+## D11 — Resume a durable mapping before post-reinstall status
+**When:** 2026-08-28T07:23:03Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human
+
+- **Trigger:** The planned upgrade recipe called `status --name` immediately after a
+  reinstall and daemon restart. Measured behavior proved that durable registry bytes,
+  session ID, and thread ID survive, while the fresh daemon intentionally has no runtime
+  attachment for that worker; direct status therefore returns `daemon_stopped`.
+- **Options weighed:**
+  - A: Change status to load or reattach detached mappings — would make the original
+    test route pass / sacrifices the established read-only lifecycle semantics.
+  - B: Preserve lifecycle semantics and deliberately call `run --name` to resume and
+    reattach the existing mapping before status — proves continuity through the public
+    resume path / costs one short real continuation in the live proof.
+- **Decided:** B. The durable-reinstall scenario first proves the registry file bytes
+  survived replacement, then runs one short continuation under the same name, requires
+  exact session/thread ID equality, and only then reads status.
+- **Rests on:** measured daemon restart behavior, D4, D10, and the existing common-command
+  resume contract.
+- **Affects:** Task 3 evidence route and CLI §3 upgrade recipe only; no public CLI change.
+- **Revisit-when:** detached mappings gain a separately designed read-only inspection
+  surface.

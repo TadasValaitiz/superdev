@@ -100,8 +100,14 @@ and therefore survives tool replacement or uninstall.
    manifest.
 2. If version differs in either direction, run the same non-editable `uv tool install
    --reinstall <bundled-source>` operation.
-3. Run `codex-worker status --name <existing-name>` to confirm durable mapping/state
-   survives replacement.
+3. Run `codex-worker run --name <existing-name> --prompt <short-continuation>` to
+   deliberately resume and reattach the durable mapping, confirm that its session and
+   thread IDs are unchanged, then run `codex-worker status --name <existing-name>`.
+
+**Build erratum (2026-08-28, D11):** The previous direct-`status` recipe was incorrect.
+Measured daemon-restart behavior preserves registry bytes and IDs but intentionally has
+no runtime attachment until `run --name` resumes the worker. This corrects the upgrade
+proof route without changing public lifecycle behavior.
 
 ## 4. Docs to update
 

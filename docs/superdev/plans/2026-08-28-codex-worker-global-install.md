@@ -289,7 +289,7 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
 
 **Role in the build:** Prove the shipped source installs independently, survives source removal/reinstall, and drives a real named worker from another repository, implementing R1–R7 and producing AH1–AH7 receipts.
 
-**Read first:** spec §5.4 and §9; CLI surface §3; decisions D4–D9; Python patterns §§1, 4, 6, 9, 10; process discipline §§2–3.
+**Read first:** spec §5.4 and §9; CLI surface §3; decisions D4–D11; Python patterns §§1, 4, 6, 9, 10; process discipline §§2–3.
 
 **Files:**
 - Modify: `tests/codex/test-package-codex-plugin.sh`
@@ -318,8 +318,11 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
   away, asserts the installed interpreter is Python 3.9, imports `codex_worker` from the
   UV environment rather than the moved source, and runs `--version`.
   `preflight-recovery` drives absent, mismatch, shadow, forced installation failure,
-  and absent-external-`codex` refusals. `durable-reinstall` creates a named mapping, stops the runtime,
-  reinstalls, and reads the same mapping. `external-status-worker` runs from
+  and absent-external-`codex` refusals. `durable-reinstall` creates a named mapping,
+  stops the runtime, reinstalls, proves the registry bytes survived, deliberately runs
+  the same name to resume/reattach it with exact session/thread IDs, and then reads
+  status (D11 build erratum; direct post-restart status was the wrong proof route).
+  `external-status-worker` runs from
   `/Users/tadas/Projects/ai-ethics/ai-trading-calibration` with instance
   `uv-global-install` and name `status-checker-abc`, read-only/no-callback, asking for
   branch/staged/unstaged/untracked/clean status without modification; it validates the

@@ -162,6 +162,17 @@ commit_fixture() {
     git -C "$repo" commit -q -m "$message"
 }
 
+copy_worker_tool_fixture() {
+    local destination="$1"
+    local source="$REPO_ROOT/skills/subagent-driven-development/scripts"
+    local target="$destination/skills/subagent-driven-development/scripts"
+
+    mkdir -p "$target"
+    cp "$source/install-codex-worker" "$source/pyproject.toml" "$target/"
+    cp -R "$source/codex_worker" "$target/codex_worker"
+    chmod +x "$target/install-codex-worker"
+}
+
 checkout_fixture_branch() {
     local repo="$1"
     local branch="$2"
@@ -284,6 +295,8 @@ EOF
 Fixture content.
 EOF
 
+    copy_worker_tool_fixture "$repo"
+
     printf 'tracked keep\n' > "$repo/.private-journal/keep.txt"
     printf 'ignored leak\n' > "$repo/.private-journal/leak.txt"
     if [[ "$with_pure_ignored" == "1" ]]; then
@@ -305,7 +318,8 @@ EOF
         hooks/session-start-codex \
         package.json \
         scripts/sync-to-codex-plugin.sh \
-        skills/example/SKILL.md
+        skills/example/SKILL.md \
+        skills/subagent-driven-development/scripts
     git -C "$repo" add -f .private-journal/keep.txt
 
     commit_fixture "$repo" "Initial upstream fixture"
@@ -423,6 +437,9 @@ interface:
   short_description: "Destination-owned OpenAI metadata"
 EOF
 
+
+    copy_worker_tool_fixture "$repo/plugins/superdev"
+
     printf 'tracked keep\n' > "$repo/plugins/superdev/.private-journal/keep.txt"
 
     git -C "$repo" add \
@@ -435,6 +452,7 @@ EOF
         plugins/superdev/hooks/session-start-codex \
         plugins/superdev/skills/example/agents/openai.yaml \
         plugins/superdev/skills/example/SKILL.md \
+        plugins/superdev/skills/subagent-driven-development/scripts \
         plugins/superdev/.private-journal/keep.txt
 
     commit_fixture "$repo" "Initial synced destination fixture"
@@ -667,6 +685,11 @@ main() {
     assert_not_contains "$preview_output" "Overlay file (.codex-plugin/plugin.json) will be regenerated" "Preview omits overlay regeneration note"
     assert_not_contains "$preview_output" "Assets (superdev-small.svg, app-icon.png) will be seeded from" "Preview omits assets seeding note"
     assert_contains "$preview_section" "skills/example/SKILL.md" "Preview reflects dirty tracked destination file"
+    assert_contains "$preview_section" "skills/subagent-driven-development/scripts/install-codex-worker" "Preview includes worker preflight"
+    assert_contains "$preview_section" "skills/subagent-driven-development/scripts/pyproject.toml" "Preview includes worker package metadata"
+    while IFS= read -r module; do
+        assert_contains "$preview_section" "skills/subagent-driven-development/scripts/codex_worker/$module" "Preview includes worker module $module"
+    done < <(find "$REPO_ROOT/skills/subagent-driven-development/scripts/codex_worker" -maxdepth 1 -type f -name '*.py' -exec basename {} \; | LC_ALL=C sort)
     assert_not_matches "$preview_section" "\\*deleting +skills/example/agents/openai\\.yaml" "Preview preserves destination-owned OpenAI agent metadata"
     assert_current_branch "$dest" "$dest_branch" "Preview leaves destination checkout on its original branch"
     assert_branch_absent "$dest" "sync/superdev-*" "Preview does not create sync branch in destination checkout"

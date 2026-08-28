@@ -170,6 +170,13 @@ assert_contains "$archive_paths" "skills/brainstorming/SKILL.md" "archive includ
 assert_contains "$archive_paths" "skills/brainstorming/agents/openai.yaml" "archive includes OpenAI skill metadata"
 assert_contains "$archive_paths" "assets/app-icon.png" "archive includes app icon"
 assert_contains "$archive_paths" "assets/superdev-small.svg" "archive includes composer icon"
+tool_payload="skills/subagent-driven-development/scripts"
+assert_contains "$archive_paths" "$tool_payload/install-codex-worker" "archive includes executable worker preflight"
+assert_contains "$archive_paths" "$tool_payload/pyproject.toml" "archive includes worker package metadata"
+while IFS= read -r module; do
+  relative_module="${module#"$REPO_ROOT/"}"
+  assert_contains "$archive_paths" "$relative_module" "archive includes worker module ${module##*/}"
+done < <(find "$REPO_ROOT/$tool_payload/codex_worker" -maxdepth 1 -type f -name '*.py' -print | LC_ALL=C sort)
 
 manifest_summary="$(read_archive_file "$archive" .codex-plugin/plugin.json | python3 -c 'import json,sys; data=json.load(sys.stdin); print("\t".join([data["name"], data["version"], data["skills"], str(data.get("hooks"))]))')"
 expected_version="$(git -C "$REPO_ROOT" show HEAD:.codex-plugin/plugin.json |
@@ -184,6 +191,11 @@ if [[ -x "$extracted/skills/subagent-driven-development/scripts/task-brief" ]]; 
   pass "archive preserves executable script mode"
 else
   fail "archive preserves executable script mode"
+fi
+if [[ -x "$extracted/$tool_payload/install-codex-worker" ]]; then
+  pass "archive preserves worker preflight executable mode"
+else
+  fail "archive preserves worker preflight executable mode"
 fi
 
 zip_times="$(python3 - "$archive" <<'PY'
