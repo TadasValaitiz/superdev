@@ -62,8 +62,8 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
    as pending after its fork resolved. One commit. A document set shipped without the
    sweep contains its own contradictions.
 9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log and checks narrative continuity and traceability; fix blocking issues, re-dispatch once
-11. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log + census + EVERY angle companion, checks narrative continuity and traceability, and runs the angle experience probes (stranger test, LOCKED-without-consequence, bare "later"); fix blocking issues, re-dispatch once
+11. **User reviews the written set** — hand the operator EVERYTHING by file link: the spec, the decision log, the census, and every angle companion. The operator reviews documents, not a chat summary — approval means the written record is what got approved
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Presentation convention (all session output)
@@ -243,7 +243,7 @@ see. Fix blocking issues, re-dispatch once to confirm.
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "The set is written and committed — spec: `<link>` · decision log: `<link>` · census: `<link>` · angles: `<links>`. Please review before we write the implementation plan."
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
 
