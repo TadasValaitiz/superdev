@@ -200,3 +200,20 @@ All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63
 - **handoffs/ vs handovers/ (near-homophones, different things):** `docs/orchestration/handovers/` = per-CHECKPOINT operational message companions, pruned on the rolling window. `docs/orchestration/handoffs/` = per-MILESTONE close documents (the orchestrator's half), in the never-pruned keep-set. Every document naming one must gloss the contrast on first use.
 - **Rests on:** D49, D51, D55, D60, D62. **Affects:** angles 01/02/04 text; orchestrator skill text at implementation.
 - **Revisit-when:** a third seat kind appears (then the two-homes rule generalizes to "the commissioning role owns the report").
+
+## D69 — The corpus is FLAT; filenames carry what folders would have   (phase: brainstorm, status: locked; AMENDS D47/D48's milestones/<slug>/ nesting and D63's migration shape)
+
+- **Trigger:** development started; the master system-design documents now exist ON THE GROUND at `docs/system-design/` (calibration main, commit a42b408e) — 40+ files, flat, date-prefixed, milestone slug in every filename, dense relative `./` cross-links. Operator: "they are already written in this structure and this form, and we don't want to reconcile them… flatter… improve it to match what is on the ground."
+- **Decision:** `docs/system-design/` is FLAT. The naming convention carries milestone identity and type:
+  `YYYY-MM-DD-<milestone>-angle-NN-<slug>.md` (angles; the current→target map IS an angle) ·
+  `YYYY-MM-DD-<milestone>-<topic>-design.md` (anchors) ·
+  `YYYY-MM-DD-<milestone>-architecture-{angles,decisions,census,glossary,handover}.md` (the milestone set: INDEX, log, census, glossary, continuation brief) ·
+  `YYYY-MM-DD-<milestone>-inputs/` (the ONE subfolder kind: curated design-intake) ·
+  `YYYY-MM-DD-<area>-post-migration-domain.md` (visions, dated and flat).
+  Cross-links are relative `./` — flatness is what keeps them stable; nothing is ever moved.
+- **Canon-vs-dated survives as DISCIPLINE, not folders:** the milestone INDEX file (`…-architecture-angles.md`) and glossary are reconciled IN PLACE (the freshness hubs — status language, per-angle statuses, D# range); everything else is dated, banner-superseded, never rewritten. "Peek between milestones" = the INDEX files; `ls docs/system-design/*<slug>*` lists a milestone's set.
+- **D# stream unchanged:** global, each milestone's decisions file declares its range (bench: D350–D494).
+- **Grandfather clause:** documents already on the ground stay exactly where and how they are — including `2026-08-27-bench-execution-celebrations-proposal.md`, written pre-D55 inside system-design; it stands as history. FUTURE execution proposals follow D55 (`docs/orchestration/execution/`); the single-writer law binds go-forward writes, never demands retroactive moves.
+- **Alternatives:** nested `milestones/<slug>/{angles/,anchors/,…}` (D47's shape — cleaner ls, but migration would break every relative link in a live corpus for zero content gain); flat-with-symlinks (fragile, tooling-hostile).
+- **Rests on:** D47/D48 (amended), D52, D55, D63 (amended: no restructuring migration remains — the corpus is already home). **Affects:** angle-01 text; system-design skill floor at implementation; census script globs; bootstrapping floor step.
+- **Revisit-when:** a second concurrent milestone makes the flat directory genuinely ambiguous to navigate (then: revisit foldering for NEW milestones only; never move the old).

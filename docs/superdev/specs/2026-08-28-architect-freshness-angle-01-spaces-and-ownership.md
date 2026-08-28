@@ -1,7 +1,7 @@
 # Angle 1 — Spaces and ownership
 
 **Purpose:** understand who may write where in a governed repository, why each boundary sits where it does, and how ownership is audited — without reading the spec or the decision log.
-**Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D47–D49, D51 (D50 superseded), D60, D68 · experience design §5.6. All quantities in this angle are real measurements from the evidence corpus, not illustrations.
+**Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D47–D49 (D47/D48 amended by D69: flat corpus), D51 (D50 superseded), D60, D68, D69 · experience design §5.6. All quantities in this angle are real measurements from the evidence corpus, not illustrations.
 **Series:** 1 of 4.
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
@@ -42,38 +42,47 @@ git log --format='%an %s' -- docs/system-design/
 
 must show architecture commits only — the architect's sittings, its reconcile commits, nothing else. Any foreign commit in that listing means the system is broken, and the check requires no interpretation, no review meeting, no trust. The same audit applies to each space with its own expected author. This is what "mechanically knowable" means: the guarantee is a `git log` invocation away at any moment, for any space.
 
-### LOCKED — inside the architect's space: a small canon and a dated working set
+### LOCKED — inside the architect's space: flat, with filenames doing the work of folders
 
-The corpus divides into two layers with opposite maintenance disciplines:
-
-**The canon layer** — `map.md` and `visions/<area>.md`. These files are *rewritten in place*. No banners, no supersession trail inside the file, no dates in the filename. The contract: if it's in canon, you may rely on it today, as written. When the architecture moves, canon moves in the same sitting. The layer stays deliberately tiny — a handful of files — because "always current" is expensive and only affordable at small size. (The evidence project had already invented this shape independently: a three-file `canon/` folder — vision, topology, operating procedures — surviving unstale while hundreds of dated docs churned around it.)
-
-**The dated layer** — `milestones/<slug>/`, one folder per milestone, holding everything that milestone's design produced:
+The corpus is one flat directory. This is not a compromise — it is what the live corpus
+chose for itself (40+ files by its fourth checkpoint) and the reason is load-bearing:
+the documents cross-link densely with relative `./` links, and in a flat directory a
+link can never break because nothing ever moves. The filename carries everything a
+folder hierarchy would have — date, milestone, type, topic:
 
 ```
-milestones/<slug>/
-├─ INDEX.md            the angle index, the status vocabulary, this milestone's declared D# range
-├─ decisions.md        the milestone's decision log
-├─ angles/NN-<slug>.md the angle series
-├─ anchors/<topic>.md  the formal design anchors
-├─ census.md           the charter-time grounding sweep, every claim provenance-tagged:
-│                        MEASURED = output of a command run in that sweep ·
-│                        READ = taken from source or a committed doc, file:line given ·
-│                        FLAGGED = noticed, unverified — "the work queue, not conclusions"
-├─ inputs/             design-intake material the architect curates in — e.g. perspective
-│                        ("seat") reports commissioned as inputs to a sitting; copying
-│                        them in is authorship of the record (D68: EXECUTION seats'
-│                        reports live in the orchestrator's space, never here)
-└─ conformance-<item>.md  an advisory conformance read that outgrew its response-block line
+docs/system-design/
+├─ 2026-08-20-bench-angle-06-adaptation-journey.md      an angle (the current→target
+│                                                        map is itself an angle)
+├─ 2026-08-20-bench-runtime-composition-design.md       a formal design anchor
+├─ 2026-08-20-bench-architecture-angles.md              the milestone INDEX: angle list,
+│                                                        status language, declared D# range
+├─ 2026-08-20-bench-architecture-decisions.md           the milestone decision log
+├─ 2026-08-20-bench-architecture-census.md              charter-time grounding sweep:
+│                                                        MEASURED = command output that sweep ·
+│                                                        READ = from source/doc, file:line ·
+│                                                        FLAGGED = noticed, unverified —
+│                                                        "the work queue, not conclusions"
+├─ 2026-08-20-bench-architecture-glossary.md            the milestone glossary
+├─ 2026-08-20-bench-architecture-inputs/                the ONE subfolder kind: design-intake
+│                                                        the architect curates in (D68 —
+│                                                        execution seats' reports go to the
+│                                                        orchestrator's space, never here)
+├─ 2026-08-24-strategy-core-post-migration-domain.md    a vision: dated, flat
+└─ 2026-08-27-bench-optimization-operator-api-design.md a later checkpoint's anchor
 ```
 
-Dated files are *never rewritten*: a superseded document gets a banner at the top redirecting to current authority, and the prose below stays as the historical record.
-
-The milestone folder is the working set: a sitting touches one folder — the angles being flipped, the log being appended, the index that navigates them, all siblings. History is a *peek*: open the neighbouring milestone's folder directly.
+A milestone's whole set is `ls docs/system-design/*bench*`; peeking at another milestone
+is opening ITS index file. **Canon-versus-dated survives as a discipline, not as folders:**
+the INDEX and glossary are reconciled *in place* — they are the freshness hubs, always
+current, where statuses flip at every reconcile — while every other file is dated and
+never rewritten: a superseded document gets a banner at the top redirecting to current
+authority, and the prose below stays as the historical record. This means the reader's
+protocol is one rule long: *enter through the index; trust banners over prose age.*
 
 ### LOCKED — decision numbers: one stream, many files
 
-Each milestone's `decisions.md` continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its folder's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint number blocks at charter time (milestone A rules D500–D599, milestone B D600–D699) — the same collision-avoidance trick used when parallel rooms once shared an append-only ledger. This is what makes cross-milestone citation safe without a global file.
+Each milestone's `decisions.md` continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its folder's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint number blocks at charter time (milestone A rules D500–D599, milestone B D600–D699) — the same collision-avoidance trick used when parallel rooms once shared an append-only ledger. One grandfather clause completes the picture (D69): documents already on the ground stay exactly where they are — the ownership and naming laws bind go-forward writes, and never demand retroactive moves that would break the link web. This is what makes cross-milestone citation safe without a global file.
 
 ### LOCKED — residue transport: rooms report, the orchestrator comprehends
 

@@ -98,7 +98,7 @@ edits if landed, else current).
   experience is only real in use); bump version; RELEASE-NOTES entry; release.
 
 ### Task 5: the D47–D63 transcription (re-sequenced from the discarded plan)
-**Scope:** identical to discarded W3-2..W3-4 — system-design skill (corpus floor, marker
+**Scope:** identical to discarded W3-2..W3-4 with ONE amendment (D69): the corpus floor taught by the system-design skill is the FLAT structure (filename convention, INDEX-as-hub, in-place-reconciled INDEX+glossary, grandfathered ground truth) — not the nested milestones/<slug>/ shape; census script globs follow the filename convention. Otherwise — system-design skill (corpus floor, marker
 grammar + census script, session protocol, canonical mode law) · orchestrator skill
 (handover/checkpoint-protocol/room-brief five-part block/durable-state/execution-proposal
 seats/close-gate pruning) · cross-wiring (self-brainstorming mode gate, SDD deviation flow,
