@@ -76,8 +76,9 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
    dependencies + residual-routing. The graph is the plan-of-record, held in durable state
    (durable-state.md); the cursor tracks progress against it.
 2. **Open the milestone branch** + each room's worktree off it (your only git action until
-   close). Assign each room a **disjoint ID block** for any shared append-only ledger
-   (e.g. decisions D24+ vs D40+) so parallel branches merge without renumbering.
+   close). Assign each room a **disjoint decision-number block** for its own item log
+   (e.g. D24+ vs D40+) so parallel branches merge without renumbering — no shared
+   append-only files exist (D51); findings travel in reports.
 3. **Execute — autonomous.** Spawn rooms per the graph's dependency order (launch commands +
    briefs: room-mechanics.md + room-brief-template.md). Receive reports; keep the cursor and
    ledger current AS EVENTS ARRIVE. Rooms **self-publish** to the milestone branch via FF-CAS —
@@ -100,14 +101,19 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
    coherence — the deviation-audit instinct at milestone altitude) · **per-room close
    verified: worktree merged AND retired (`git worktree list`), archived tests deleted with
    their manifest kept, and — when the item changed a user-facing surface — its date-stamped
-   scenario intent doc exists in `design/scenarios/` (the checkride's distill step)** · **the milestone handoff written** (both sections) when a design
-   corpus exists. Present the evidence; the human approves; you land milestone→main (a
-   fast-forward — your one merge act, the sole human gate on the merge path).
+   scenario intent doc exists in `docs/superdev/scenarios/` (the checkride's distill step)** ·
+   **the milestone handoff complete — BOTH halves** (yours in `docs/orchestration/handoffs/`;
+   the architect's half is the next milestone's document set coming into existence, D49) ·
+   **N−1 operational sediment pruned** (D62: delete the PREVIOUS milestone's handovers, raw
+   ledgers, spent backlog items, and proposal drafts after harvesting — keep-set: handoffs,
+   conventions.md, improvement notes; git is the archive). Present the evidence; the human
+   approves; you land milestone→main (a fast-forward — your one merge act, the sole human
+   gate on the merge path).
 
 ## The battery — the operational suite at milestone close
 
 Before the milestone close gate, charter an **ad-hoc battery room**: an executor walks EVERY
-scenario intent in `design/scenarios/` against the current surface (re-deriving commands —
+scenario intent in `docs/superdev/scenarios/` against the current surface (re-deriving commands —
 intents, never scripts), an evaluator judges each against its what-good-looks-like criteria;
 verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
 milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
@@ -123,47 +129,74 @@ attention. Types (foundation · surface · ad-hoc · quick fix · backlog) carry
 done-bars. Full taxonomy, principles and the algorithm: [chartering.md](chartering.md);
 the operator ratifies the graph + splits at the co-plan.
 
-## The system-design layer (binds whenever the project has a `design/` corpus)
+## The system-design layer (binds whenever the project has a `docs/system-design/` corpus)
 
 When a design corpus exists (see superdev:system-design — the glossary there is the shared
 vocabulary), the milestone sits under a design authority and you are the seam between the
-two altitudes. Seven duties, none of which make you a designer:
+two altitudes. **The two surfaces (D60):** `docs/system-design/` is the RECONCILED surface —
+architect-only, grab-and-trust; `docs/orchestration/` is YOUR operational surface — message
+companions and working state, stamped OPERATIONAL RECORD, never reconciled, pruned on the
+rolling window (durable-state.md). Nothing crosses. Your duties, none of which make you a
+designer:
 
 - **The milestone is your whole world.** Bias to contain; boundary adjustments are discussed,
-  never improvised. A milestone may not close without its **handoff**
-  (`design/handoffs/<milestone>.md` — your section: what was built, map rows claimed, marker
-  census, retro facts; the architect's: next milestone's upfront design).
-- **Residue ≠ residual.** Design-class findings (discrepancies with the architecture,
-  insights, duplicate risks) are **residue**: rooms append them to `design/residue/residue.jsonl`
-  in their ID blocks; you collect and cluster continuously but never interpret and never act
-  on them as architecture. Loose ends that must drain before close remain **residuals** —
-  the ledger below is unchanged. Never file residue to the backlog escape hatch; it has its
-  own destination.
-- **Design checkpoints, declared by rule + green lights + feel:** rule (a bridge side fully
-  merged · milestone close · operator ask) · green lights (rooms report "nothing more to
-  contribute on this arc" — weight ephemeral rooms' lights low; a closed room trivially has
-  nothing more) · your judgment that the collection justifies an operator sitting. At a
-  checkpoint you write the **handover** (format: system-design protocols.md#checkpoint-handover)
-  and message a pointer; the architect responds agree/disagree and may bounce clusters back
-  down. **Between checkpoints the architect is idle — do not message it work.**
-- **Two-step discharge:** you CLAIM map rows in the handover's "what we got"; only the
-  architect WRITES `map.md`. Never touch the corpus.
-- **The design-dry pause withholds charters only.** A charter needing an unruled map row or
-  a missing vision, with the operator away: withhold that charter (scoped — unaffected
-  charters proceed; "full stop" = withhold all only when the gap sits on a bridge every
-  remaining charter crosses). Alternatively launch the room in **wait-at-ratification** mode:
-  it self-brainstorms to the ratification gate and waits there as a desk DECIDE — the one
-  sanctioned waiting state. Chartered, building rooms are NEVER stopped by design-dryness;
-  they finish, plant markers, and merge.
-- **Process feedback (the fast loop):** capture your observations, rooms' R5 lines, and the
-  measured facts (charter→merge wall-clock, review cycles, blocked-wait, token sums) into
-  `orchestration/process-feedback.jsonl`; adapt every NEW room's brief from the accumulated
-  feedback immediately (your surface — one O-log line per change). You never edit skills;
-  when entries cluster, the operator runs superdev:self-improvement in inbox mode over the
-  ledger.
-- **You never execute work.** No micro-task tier; small work is scoped into an item room.
-  Ad-hoc rooms (probe, spike, sweep) are yours to charter freely — the **probe gate** (no
-  ITEM charter without a measured census) does not bind them; they are how censuses get made.
+  never improvised.
+- **The MODE is declared at the co-plan** — HUMAN or AUTONOMOUS, recorded in your graph and
+  `conventions.md`. The canonical law lives in system-design SKILL.md#mode-law; in
+  AUTONOMOUS mode YOU pick among the architect's presented options (every pick a flagged,
+  revisitable D#; reserved forks — money/irreversibility, blast radius, taste — always
+  queue to the operator; close is always operator-approved).
+- **Residue ≠ residual, and rooms never write ledgers (D51).** Rooms record findings in
+  their own item files; their REPORTS carry the survivors; YOU comprehend reports into the
+  typed residue ledger in your space (kinds: discrepancy · insight · duplicate-risk ·
+  question) and cluster continuously — never interpret as architecture, never file residue
+  to the backlog escape hatch. **Plan-time deviation pointers (D61):** when a room messages
+  a corpus contradiction after planning, RELAY the pointer to the architect immediately —
+  pointers, never paraphrase; the room keeps building.
+- **Design checkpoints, declared by rule + green lights + feel.** Your side: ONE handover
+  document with clusters inline (checkpoint-protocol.md); the architect's answer arrives as
+  a response BLOCK in the milestone's decisions file, followed by rulings and the named
+  reconcile commit. Two-step discharge: you CLAIM map rows with evidence; only the architect
+  writes the map — and rejected claims come back with reasons. Between checkpoints the
+  architect is idle: it may RECEIVE pointers anytime, but do not message it work.
+- **Briefs carry architecture as-of the reconcile SHA** (room-brief-template.md: the
+  five-part block — MAJOR/NARROW reads, 3–5 verbatim LOCKED quotes, post-SHA D# pointers).
+  After each sitting, update the SHA your new briefs cite.
+- **The design-dry pause withholds charters only** — an absence, not a veto. A charter
+  needing an unruled map row or a missing vision: withhold it (scoped — unaffected charters
+  proceed), or launch the room wait-at-ratification as a desk DECIDE. Chartered, building
+  rooms are NEVER stopped by design-dryness; they finish, plant markers, and merge.
+- **Process feedback (the fast loop):** rooms' R5 lines + your measured facts into your
+  process-feedback ledger; adapt every NEW room's brief immediately (one O-line per change).
+  You never edit skills; when entries cluster, the operator runs superdev:self-improvement
+  in inbox mode.
+- **You never execute work.** No micro-task tier. Ad-hoc rooms (probe, spike, sweep) are
+  yours to charter freely — the probe gate does not bind them; they are how censuses get made.
+
+## The execution proposal (D55 — yours to author, by opposed seats)
+
+Before chartering, translate the reconciled corpus into a delivery hypothesis:
+`docs/orchestration/execution/<milestone>-proposal.md` (stamped OPERATIONAL RECORD;
+reconcilable, never locked; authorizes no code). Method — dispatch two read-only seat
+subagents, both grounded on the corpus as-of the reconcile SHA:
+
+- **Domain-boundaries seat:** "Cut the ruled architecture along domain seams — type
+  ownership, package boundaries, contract breaks. You optimize CLEAN CUTS; you are
+  forbidden to weigh demonstrability. Return: proposed items, each with the seams it
+  respects and the contracts it isolates."
+- **Celebration seat:** "Cut along operator-visible journeys on the real user surface. You
+  optimize PROVABLE WINS — each celebration a journey with proof, refusal, and recovery
+  evidence; you are forbidden to weigh internal cleanliness. Return: proposed celebrations,
+  each with the journey that proves it."
+
+Their reports land in your space or sdd scratch (never the corpus — D68). **The collision
+zone is the product**; adjudicate under the five rules: operator-visible capability · proof
+at the user surface · foundations fold into the first proving vertical *unless they unlock
+named independent streams* · terminal-not-tiny · reconciliation expected. Ratify the
+reconciled proposal with the operator at the co-plan; then derive the charter graph
+(chartering.md). Item-level splits/merges amend YOUR proposal (rule 5); only design-class
+divergence crosses to the architect, as residue. The architect touches this twice only:
+upstream via the corpus (a gap = design-dry), downstream via an advisory conformance note.
 
 ## The room gate seam (audit never skipped)
 
