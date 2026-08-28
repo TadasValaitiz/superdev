@@ -25,16 +25,17 @@ A session is not:
 
 ## Concrete journey
 
-### LOCKED — station 1: the census, before anything else   (SEED-ILLUSTRATIVE example)
+### LOCKED — station 1: the census, before anything else   (example: real READ/MEASURED lines from this stream, quoted as a census would carry them)
 
 The session's first committed artifact is a written census of the ground:
 
 ```markdown
 # Census — orchestrator/architect collaboration (2026-08-28)
 **MEASURED** — 199 files in docs/superpowers/specs/ (ls | wc -l); marker counts:
-  130 LOCKED · 22 DOC-MARK[LOCKED] (grep, commands quoted)
+  112 line-initial `**LOCKED:**` · 22 DOC-MARK[LOCKED] (grep, commands quoted — D53's evidence)
 **READ** — the checkpoint protocol writes handovers to design/residue-collections/
-  (checkpoint-protocol.md:10)
+  (checkpoint-protocol.md:10 — a path since RETIRED by D60; an honest census records what
+  the text says today, staleness included)
 **FLAGGED** — the residue inbox may be incompatible with worktrees (unverified —
   the work queue, not a conclusion)
 ```

@@ -47,10 +47,10 @@ An item room is a fresh session; everything it knows about your architecture, it
 ## ARCHITECTURE CONTEXT (as of reconcile commit abc1234, 2026-08-27)
 
 READ FIRST — the law (read fully before writing anything):
-- docs/system-design/milestones/bench/anchors/runtime-composition.md §3–4
-- docs/system-design/milestones/bench/angles/06-adaptation-journey.md
+- docs/system-design/2026-08-20-bench-runtime-composition-design.md §3–4
+- docs/system-design/2026-08-20-bench-angle-06-adaptation-journey.md
 - docs/orchestration/execution/bench-proposal.md — celebration 2, item 2a (your scope)
-- Your area is marked REPLACE → ground on docs/system-design/visions/strategy-core.md,
+- Your area is marked REPLACE → ground on docs/system-design/2026-08-24-strategy-core-post-migration-domain.md,
   NOT on the current code in src/domain/strategy/.
 
 READ ON NEED:
@@ -65,7 +65,7 @@ BINDING RULINGS (verbatim — these govern your item):
 > different objects.
 
 RULED SINCE THE RECONCILE:
-- D468 tightened the fee rule — read its entry in milestones/bench/decisions.md.
+- D468 tightened the fee rule — read its entry in docs/system-design/2026-08-20-bench-architecture-decisions.md.
 ```
 
 Part by part, against its failure:

@@ -49,7 +49,7 @@ The orchestrator does not write the proposal from one mind. He dispatches two su
 - **The domain-boundaries seat** receives the corpus as-of the reconcile SHA plus the map rows, and optimizes for *clean cuts*: type ownership, package seams, contract breaks. It is forbidden to weigh demonstrability. It returns a proposed item set with, for each item, the seams it respects and the contracts it isolates.
 - **The celebration seat** receives the same corpus plus the real user-facing surface, and optimizes for *provable wins*: operator-visible journeys with proof, refusal, and recovery evidence. It is forbidden to weigh internal cleanliness. It returns proposed celebrations with, for each, the journey that proves it.
 
-Both reports land in the orchestrator's space or sdd scratch — never the corpus (D68; design-intake seats, the bench pattern of perspective reports feeding an architecture *sitting*, are a different animal, and those the architect curates into `milestones/<slug>/inputs/`). The reports are inputs, not rulings: nobody has adjudicated them, and their disagreement is the point.
+Both reports land in the orchestrator's space or sdd scratch — never the corpus (D68; design-intake seats, the bench pattern of perspective reports feeding an architecture *sitting*, are a different animal, and those the architect curates into the milestone's `YYYY-MM-DD-<milestone>-inputs/` folder (D69's one subfolder kind)). The reports are inputs, not rulings: nobody has adjudicated them, and their disagreement is the point.
 
 ### LOCKED — the collision zone is the product
 
@@ -58,7 +58,7 @@ Where the two seats disagree is precisely where the middle ground must be found 
 ### LOCKED — the architect touches this twice, through existing channels only
 
 **Upstream:** the corpus the seats read. If the celebration seat wants a vertical through an area with no vision document, that charter is *withheld* — the design-dry rule. Withholding is an absence, not a veto: nobody blocks anybody; the gap travels back as residue, lands at the next checkpoint, and the unaffected charters proceed.
-**Downstream:** an advisory conformance note — normally one line in the checkpoint response block, a standalone `milestones/<slug>/conformance-<item>.md` only when it genuinely needs length (D68). Advice, never authorship; it cannot block.
+**Downstream:** an advisory conformance note — normally one line in the checkpoint response block, a standalone `YYYY-MM-DD-<milestone>-conformance-<item>.md` in the flat corpus only when it genuinely needs length (D68/D69). Advice, never authorship; it cannot block.
 
 ### LOCKED — ratification, then derivation
 
@@ -113,9 +113,9 @@ It wears the operational stamp because it lives in the orchestrator's space: nev
 |---|---|---|---|
 | execution proposal | orchestrator | `docs/orchestration/execution/` | operational: stamped, prunable, reconcilable-not-locked |
 | execution seat reports | the seats (via orchestrator dispatch) | orchestrator space / sdd scratch | operational, prunable |
-| design-intake seat reports | architect (curated copies) | `milestones/<slug>/inputs/` | dated layer: never rewritten, banner-superseded |
+| design-intake seat reports | architect (curated copies) | `YYYY-MM-DD-<milestone>-inputs/` in the flat corpus | dated layer: never rewritten, banner-superseded |
 | charter graph | orchestrator | `docs/orchestration/` | operational working state |
-| conformance note | architect | response block, or `milestones/<slug>/conformance-<item>.md` | reconciled surface |
+| conformance note | architect | response block, or `YYYY-MM-DD-<milestone>-conformance-<item>.md` | reconciled surface |
 
 ## Visible collisions
 

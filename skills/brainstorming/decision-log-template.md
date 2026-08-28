@@ -11,8 +11,7 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
 - **Capture at the moment of decision** — during brainstorming that means the entry is
   written when the fork is resolved in dialogue, not reconstructed afterward. Memory of
   reasoning decays within hours; the log is written while the reasoning is alive.
-- **Shared numbering with the spec:** numbering STARTS here (the log predates the spec); the spec's §6 later adopts the same D#s. the spec's §6 Decisions are the distilled subset of
-  this log, same D-numbers. The log may hold more (dead ends, reversed calls, small forks
+- **Shared numbering with the spec:** numbering STARTS here (the log predates the spec); the spec's §6 Decisions later adopt the same D-numbers as the distilled subset of this log. The log may hold more (dead ends, reversed calls, small forks
   that never graduate to the spec); the spec never holds a D# the log lacks.
 - **Every phase appends:** brainstorm and spec-writing forks (phase: brainstorm/spec),
   planning forks the spec didn't settle (phase: plan), build-time deviations and

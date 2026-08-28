@@ -25,7 +25,7 @@ only, never reverses it.
 3. **During development** the archive is a recall buffer: any archived test can be pulled
    back when a question needs it.
 4. **Rewrite against the vision:** new tests are authored from the harvest file and the
-   area's vision doc (`design/visions/`), never from the old implementation. The REVIEWER
+   area's vision doc (`the area's post-migration vision document in docs/system-design/ never from the old implementation. The REVIEWER
    authors the requirement tests (it is the adversary — D38); the implementer makes them pass.
 5. **Post-development cleanup is a close-gate item:** archived tests are DELETED; the
    manifest is kept for the record. The archive is a development-time buffer, not a museum.

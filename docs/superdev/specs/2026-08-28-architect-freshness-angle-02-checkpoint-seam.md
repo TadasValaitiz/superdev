@@ -6,8 +6,9 @@
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it · MISMATCH current text behaves differently today ·
-> SEED-ILLUSTRATIVE worked example only — every SHA, duration, and count in this angle's
-> sketches is invented for illustration, never a measurement.
+> BLIND not yet examined — said honestly · SEED-ILLUSTRATIVE worked example only — every
+> SHA, duration, and count in this angle's sketches is invented for illustration, never a
+> measurement.
 
 ## The central question
 
@@ -96,7 +97,7 @@ The architect's sitting opens mechanically, in both modes: read the handover, gr
 | | HUMAN mode | AUTONOMOUS mode |
 |---|---|---|
 | declared | at the co-plan — the milestone's opening sitting, where operator and orchestrator ratify the charter graph — default for design-heavy milestones | explicitly by the orchestrator, recorded in his graph file and `conventions.md` so every room and the architect can read it |
-| architect does | stages only; waits for the operator; rulings happen in the sitting together | real architecture: for each fork, options with gains/sacrifices + a recommendation, presented to the Fork Presentation Standard — every fork carries the situation and its failure modes, each option's mechanism with a concrete example, its consequences for this project, and a reasoned recommendation; labels refer, never present |
+| architect does | stages only; waits for the operator; rulings happen in the sitting together | real architecture: for each fork, options with gains/sacrifices + a recommendation, presented to the Fork Presentation Standard (situation · mechanism-with-example · consequences · recommendation — owned in full by brainstorming-flow angle 1) |
 | who picks | the operator | **the orchestrator** |
 | the pick's record | ordinary D# | flagged D#: options preserved, named as an autonomous-mode pick, revisitable |
 | reserved forks (money/irreversibility, blast-radius reshapes, taste) | operator | **operator — always**; tagged and queued; the architect designs around them so work continues |
@@ -106,7 +107,7 @@ The invariant making autonomy safe: the next human touchpoint *opens with the pi
 
 ### LOCKED — the response lives inside the decision log, and the reconcile commit closes
 
-The sitting's answer is NOT a new document — every new doc type is a new reconciliation surface, which is the disease. The response is a *block inside the milestone's `decisions.md`*, immediately followed by the rulings it announces:
+The sitting's answer is NOT a new document — every new doc type is a new reconciliation surface, which is the disease. The response is a *block inside the milestone's decisions file* (`…-architecture-decisions.md`), immediately followed by the rulings it announces:
 
 ```markdown
 ## Checkpoint 3 — response (reconcile def5678)

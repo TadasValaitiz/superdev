@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-28 · **Status:** draft
 **Mode:** human-in-loop
-**Decision log:** ./2026-08-28-architect-freshness-decisions.md (D47–D67 stand; this spec adds BR-series requirements grounded in D56/D65/D66/D67)
+**Decision log:** ./2026-08-28-architect-freshness-decisions.md (D47–D69 stand — D68/D69 landed after first draft; this spec adds BR-series requirements grounded in D56/D65/D66/D67)
 **Evidence:** ./2026-08-28-bench-experience-study.md (read it first — every requirement below cites its part)
 **Origin:** operator directive after discarding the wave-3 set (D67): "make brainstorming produce a similar experience" to the bench corpus.
 
@@ -81,7 +81,9 @@ messages stay short; documents teach.
 Census (artifact, tiered) → mental-model orientation → angle agenda (amendable, logged) →
 angle-by-angle work (open with situation; forks as variants; close writes the document) →
 whole-design variants → in-session reconcile sweep (every doc's statuses vs the log) →
-spec + review gates. Serves BR1, BR11, BU1/BU3/BU4.
+spec + review gates. The presentation convention (BR14) lives here as a skill section, and
+every template-produced document opens with a self-authority line (BR12 — 'RECONCILABLE,
+NOT LOCKED', 'governs nothing yet'). Serves BR1, BR11, BR12, BR14, BU1/BU3/BU4.
 
 ### 5.2 The fork experience (rewrites the Fork Presentation Standard's second half)
 The Standard's four parts stay; two additions: **variants with shape arrive as sketches**
@@ -91,9 +93,10 @@ ruling's law. Trivial-fork self-decision unchanged. Serves BR10, BR9, BU2.
 
 ### 5.3 The angle document standard (rewrites item-angle-template.md to the bench form)
 Sections: mental model (analogy + "It is not:") · concrete journey with `### LOCKED — claim`
-subsections, each closing "this means…" · per-host walks where hosts differ · what-X-cannot-do ·
+subsections, each closing "this means…" · TYPED SKETCHES wherever a ruling has shape,
+labeled with epistemic weight (BR3) · per-host walks where hosts differ · what-X-cannot-do ·
 current mismatch + salvage · visible collisions ("X versus Y: mechanism") · flexible-and-deferred
-with landing places · reconciled outcome. Depth bar in the template header. Serves BR2–BR8, BR13, BU5.
+with landing places · reconciled outcome. Depth bar and self-authority line in the template header. Serves BR2–BR8, BR13, BU5.
 
 ### 5.4 The decision entry standard (rewrites decision-log-template.md)
 Adds to Trigger/Options/Why/Revisit-when: the **Decided-by line** (who, which variant,
@@ -113,7 +116,7 @@ discarded plan's W3-2..W3-4 content; it is re-expressed in the new plan.
 
 ## 6–8. Decisions · Assumptions · Not doing
 
-Decisions: D56, D65, D66, D67 govern; new forks during implementation log as D68+.
+Decisions: D56, D65–D69 govern; new forks during implementation log as D70+ (D68/D69 are TAKEN — check the log's tail before numbering, always).
 Assumptions: A-BR1 — the bench form transfers to process/documentation domains (this
 session's rewritten angle-01..03 at ~1,500 words each are the first evidence; ratify at
 first fresh use). Not doing: automating depth checks by word count (length must be earned —
@@ -127,10 +130,12 @@ format in this wave (revisit after the HIL experience proves out).
 | BH1 | A fresh session's first committed artifact is a tiered census, and its agenda is amendable and logged | BR1 | |
 | BH2 | A fork with shape reaches the operator as a typed sketch; the pick + rider land in the entry | BR10, BR9 | |
 | BH3 | An angle's document exists in git before the next angle opens | BR11 | |
-| BH4 | A stranger (fresh reviewer, no log access) correctly answers questions about a session's design from one angle doc alone | BR2–BR8, BU5 | |
+| BH4 | A stranger (fresh reviewer, no log access) correctly answers questions about a session's design from an angle doc plus its DECLARED sibling angles — never the log | BR2–BR8, BU5 | |
 | BH5 | A decision entry shows selector, variant, rider, rests-on, affects | BR9 | |
 | BH6 | The session-end sweep flips a deliberately-staled status (seeded test) | BR11 | |
-| BH7 | The reviewer flags a planted LOCKED-without-consequence and a bare "later" | BR13, §5.5 | |
+| BH7 | The reviewer flags a planted LOCKED-without-consequence, a bare "later", and a shape-bearing option presented without its sketch | BR13, BR3, §5.5 | |
+| BH8 | Every template-produced document opens with a line stating its own authority | BR12 | |
+| BH9 | The skill's presentation-convention section exists, and a probing review flags a bare visual and a stale recommendation | BR14 | |
 
 ## 10. Drift protocol
 Standard: governing D# → revisit-when → log (phase: build) → supersede, never erase.

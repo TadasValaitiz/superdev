@@ -82,7 +82,7 @@ protocol is one rule long: *enter through the index; trust banners over prose ag
 
 ### LOCKED — decision numbers: one stream, many files
 
-Each milestone's `decisions.md` continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its folder's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint number blocks at charter time (milestone A rules D500–D599, milestone B D600–D699) — the same collision-avoidance trick used when parallel rooms once shared an append-only ledger. One grandfather clause completes the picture (D69): documents already on the ground stay exactly where they are — the ownership and naming laws bind go-forward writes, and never demand retroactive moves that would break the link web. This is what makes cross-milestone citation safe without a global file.
+Each milestone's decisions file continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its set's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint number blocks at charter time (milestone A rules D500–D599, milestone B D600–D699) — the same collision-avoidance trick used when parallel rooms once shared an append-only ledger. One grandfather clause completes the picture (D69): documents already on the ground stay exactly where they are — the ownership and naming laws bind go-forward writes, and never demand retroactive moves that would break the link web. This is what makes cross-milestone citation safe without a global file.
 
 ### LOCKED — residue transport: rooms report, the orchestrator comprehends
 
@@ -95,7 +95,7 @@ The one flow that crosses all four spaces is the residue flow — design-class f
 
 ### LOCKED — the handoff splits; no file has two writers
 
-The old milestone handoff was one file with an orchestrator section and an architect section — two writers, one file, the exact thing the ownership law forbids. It splits naturally: the orchestrator writes his half (what was built, claims, retro facts) in `docs/orchestration/handoffs/` — note the near-homophone: `handoffs/` are per-MILESTONE close documents in the never-pruned keep-set, while `handovers/` (angle 2) are per-CHECKPOINT message companions pruned on the rolling window; the architect's half — "upfront design for the next milestone" — *is the creation of the next `milestones/<slug>/` folder itself*. The handoff is not a document the architect contributes a section to; it is the birth of the next working set.
+The old milestone handoff was one file with an orchestrator section and an architect section — two writers, one file, the exact thing the ownership law forbids. It splits naturally: the orchestrator writes his half (what was built, claims, retro facts) in `docs/orchestration/handoffs/` — note the near-homophone: `handoffs/` are per-MILESTONE close documents in the never-pruned keep-set, while `handovers/` (angle 2) are per-CHECKPOINT message companions pruned on the rolling window; the architect's half — "upfront design for the next milestone" — *is the creation of the next milestone's document set itself* (its INDEX, decisions file, census — the flat set under the new slug). The handoff is not a document the architect contributes a section to; it is the birth of the next working set.
 
 ## What the ownership law does not guarantee
 
@@ -118,4 +118,4 @@ FLEXIBLE: exact filenames and sub-layout inside `docs/orchestration/` (the owner
 
 ## Reconciled outcome
 
-All load-bearing claims LOCKED: four spaces with one writer each and a one-command audit; canon/dated split inside the architect's space; milestone folders on a global D# stream; report-based residue transport with typed rows; the handoff split. The single-writer law admits no exception anywhere in the repository — the previous exceptions (shared residue file, two-section handoff) were both dissolved rather than granted.
+All load-bearing claims LOCKED: four spaces with one writer each and a one-command audit; canon/dated split as discipline inside the flat corpus; milestone document sets on a global D# stream; report-based residue transport with typed rows; the handoff split. The single-writer law admits no exception anywhere in the repository — the previous exceptions (shared residue file, two-section handoff) were both dissolved rather than granted.

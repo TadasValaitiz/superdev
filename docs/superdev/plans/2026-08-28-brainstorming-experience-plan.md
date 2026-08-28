@@ -9,8 +9,9 @@ the remaining skills using the rebuilt templates as exemplars.
 
 **Context pack:** the study (`specs/2026-08-28-bench-experience-study.md` — the WHY behind
 every edit; quote it in reviews) · the experience design (`specs/2026-08-28-brainstorming-experience-design.md`)
-· the decision log (D47–D67) · the bench originals (angle-19, angle-06, D461, the
-angle-definition doc — at the worktree path in the study header) as the depth reference ·
+· the decision log (D47–D69 — D68 boundary rulings and D69 FLAT corpus are load-bearing for Task 5) · the bench originals (angle-19, angle-06, D461, the angle-definition doc — NOW at
+`/Users/tadas/Projects/ai-ethics/ai-trading-calibration/docs/system-design/` on main, flat,
+per D69/a42b408e; the study header's worktree path is historical) as the depth reference ·
 current skill files per task.
 
 ## Global Constraints
@@ -94,23 +95,56 @@ edits if landed, else current).
   end under the rebuilt skill. Its artifacts — census, sketch-forks, per-angle companions,
   the sweep commit, the upgraded entries — are the receipts for BH1–BH6; the reviewer run
   on its output receipts BH7.
+- [ ] Seed one deliberately stale status into a session document mid-run and verify the
+  sweep flips it (BH6's planted defect — tell the operator it was seeded, after).
 - [ ] Fold whatever the live run teaches (there WILL be findings — D67's lesson is that the
   experience is only real in use); bump version; RELEASE-NOTES entry; release.
 
-### Task 5: the D47–D63 transcription (re-sequenced from the discarded plan)
-**Scope:** identical to discarded W3-2..W3-4 with ONE amendment (D69): the corpus floor taught by the system-design skill is the FLAT structure (filename convention, INDEX-as-hub, in-place-reconciled INDEX+glossary, grandfathered ground truth) — not the nested milestones/<slug>/ shape; census script globs follow the filename convention. Otherwise — system-design skill (corpus floor, marker
-grammar + census script, session protocol, canonical mode law) · orchestrator skill
-(handover/checkpoint-protocol/room-brief five-part block/durable-state/execution-proposal
-seats/close-gate pruning) · cross-wiring (self-brainstorming mode gate, SDD deviation flow,
-cli-checkride paths, glossary, bootstrapping) · release.
-- [ ] Re-derive the task details from the decision log directly (D47–D63 entries are the
-  law; the discarded plan may be consulted as a checklist but the NEW text is written in
-  the rebuilt register, with the Task-1 templates as exemplars for every document format
-  these skills teach).
-- [ ] Per-skill fresh-eyes reviews; final whole-wave review; receipts for the surviving AH
-  set; version bump; release.
+### Task 5: the D47–D69 transcription — explicit subtasks
+**Read first:** the decision log D47–D63 + D68/D69 (the law); the four freshness angles
+(the format exemplars); the AH appendix below (the receipts owed).
+**5a — system-design skill** (`skills/system-design/`): SKILL.md corpus floor → the FLAT
+structure (D69 filename convention, INDEX-as-hub, in-place-reconciled INDEX+glossary,
+grandfather clause), single-writer law + audit line (D49), report-based residue with typed
+rows (D51), session protocol with reconcile close (D52), response block (D60), THE
+canonical mode-law section (D59). map-and-markers.md → positional grammar + census script
+(globs per D69 filenames) with self-test fixtures. protocols.md → two-artifact checkpoint
+worked example. angle-guide.md → align with the rebuilt item-angle-template.
+**5b — orchestrator skill** (`skills/orchestrator/`): SKILL.md system-design-layer section
+(spaces, typed ledgers, pointer relay incl. D61 plan-time forwarding, mode at co-plan,
+handoff split with the D68 handoffs/handovers gloss, close gate + D62 pruning line,
+execution-proposal section + two seat prompts per D55). checkpoint-protocol.md → full
+rewrite to `docs/orchestration/handovers/` + response-block expectations.
+room-brief-template.md → the five-part ARCHITECTURE CONTEXT block with FLAT paths (copy
+the corrected block from freshness-angle-03). durable-state.md → ledger paths + the
+OPERATIONAL RECORD stamp.
+**5c — cross-wiring:** self-brainstorming SKILL.md (mode-resolved ratification gate);
+writing-plans Mode text (cites the canonical law); brainstorming SKILL.md steps 1/8 path+
+transport fixes (done early if blocker-driven); SDD SKILL.md room paragraph → D61 flow;
+cli-checkride §5b → docs/superdev/scenarios/; test-driven-development/test-clearance.md
+design/visions reference → flat vision filenames; glossary.md (two surfaces, reconcile
+commit, claim marker, mode law, execution proposal, handover vs handoff, pruning window,
+pointer relay, rider); bootstrapping SKILL.md (flat floor creation, bridge-rows).
+**5d — release:** repo-wide sweep `grep -rn "design/" skills/ | grep -v system-design` →
+zero unjustified survivors; per-skill fresh-eyes reviews; whole-wave review; fill the AH
+appendix receipts; version bump (8.0.0 — breaking paths); RELEASE-NOTES; release.
 
-## Self-review (write time)
+## AH appendix — surviving acceptance hints (re-homed from the discarded freshness spec)
+The discarded spec's hints remain the receipts Task 5 owes; their texts, verbatim, so no
+discarded document is load-bearing: AH1 two-surface map drawable from skill text alone ·
+AH2 census script runs on a corpus copy with zero prose false-positives · AH3 a composed
+brief carries all five parts with real reads · AH4 the three mode-law citations resolve to
+one canonical statement · AH5 worked checkpoint shows two artifacts + one commit, stamped,
+placed · AH6 a simulated mid-item contradiction walks the D61 flow in the skill text ·
+AH7 fresh-eyes reviews passed on every edited skill (spans ALL tasks) · AH9 skill text
+walks a full checkpoint incl. the milestone set's D#-range line · AH10 a room finding
+reaches the orchestrator's typed ledger from a report, no room-writable ledger anywhere ·
+AH11 a complete proposal round: two seat dispatches, five-rule reconciliation, ratification,
+derivation · AH12 the shipped close-gate checklist carries the N−1 pruning line + keep-set ·
+AH13 every new term resolves in the glossary; bootstrapping maps existing conventions.
+(AH8 already receipted — d0a0e36+; AH14 discharged by Tasks 2/3 — commit 862a7d9.)
+
+## Self-review (updated post-review; Tasks 1–3 landed — their 'current file' lines are historical)
 BR1–BR14 each have a producing step (BR1 T2 · BR2–BR8 T1 · BR9/BR10 T1+T2 · BR11 T2 ·
 BR12 T1 headers · BR13 T1+T3 · BR14 T2); BH1–BH7 all receipt at T4; the surviving freshness
 AH set receipts at T5. No placeholders; all current-file claims verified this session.
