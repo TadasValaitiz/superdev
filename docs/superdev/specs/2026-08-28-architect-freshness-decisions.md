@@ -169,5 +169,6 @@ All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63
 
 - **Decision:** the superdev skill edits are their own stream (this spec + its plan, in the superdev repo, D46 review-verified). The calibration migration (D63) is NOT part of that plan — it belongs to the calibration project's own operational flow (its next milestone's bootstrap act, guided by the updated bootstrapping skill), like any milestone close/reconciliation/cleanup work.
 - **Why (operator):** "skill refinement is a separate process — don't mix it with closing up a milestone or document reconciliation and cleanup."
+- **Alternatives:** S1 skills-then-migrate (rejected as a bundle: ties the release to another project's milestone rhythm); S2 migrate-first (rejected: migration would run under old, un-governing skills); S3 interleave (rejected: two half-released plugin states). All three presumed one stream — the operator cut the premise instead.
 - **Consequence:** the shape fork (S1/S2/S3) dissolves — skills ship on their own clock; migration runs whenever calibration's flow reaches it, under the shipped skills.
 - **Revisit-when:** a skill edit turns out to REQUIRE a live migrated instance to be writable (then that edit alone waits for the migration, without merging the streams).
