@@ -1,4 +1,4 @@
-"""Notification-owned, condition-based observable state for Codex sessions."""
+"""WebSocket-notification-owned, condition-based observable Codex session state."""
 import threading
 import time
 from collections import deque

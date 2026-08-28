@@ -11,7 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
-from codex_worker.app_server import CodexAppServer, CodexCallError, CodexTransportError
+from codex_worker.app_server import (
+    CodexAppServer,
+    CodexCallError,
+    CodexConnection,
+    CodexMethodAdapter,
+    CodexTransportError,
+)
 from codex_worker.models import ErrorDetail, SessionRecord
 from codex_worker.runtime import (
     CodexProtocolError,
@@ -43,6 +49,11 @@ class AppServerTests(unittest.TestCase):
         )
         self.clients.append(client)
         return client
+
+    def test_legacy_stdio_adapter_reuses_websocket_method_home_and_exports_new_connection(self):
+        self.assertTrue(issubclass(CodexAppServer, CodexMethodAdapter))
+        self.assertNotIn("start_turn", CodexAppServer.__dict__)
+        self.assertEqual(CodexConnection.__module__, "codex_worker.websocket_transport")
 
     def test_handshake_and_wrappers_use_measured_wire_shapes(self):
         client = self.make_client()

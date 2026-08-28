@@ -124,6 +124,19 @@ class RuntimeTerminalObserverTests(unittest.TestCase):
         copied.items[0].data["nested"]["value"] = "changed"
         self.assertEqual(original.items[0].data["nested"]["value"], "original")
 
+    def test_websocket_close_notification_detaches_without_endpoint_or_request_data(self):
+        self.runtime.on_notification({
+            "method": "transport/error",
+            "params": {"kind": "transport_error", "details": {
+                "message": "Codex WebSocket receive failed", "error": "ConnectionClosed",
+            }},
+        })
+        status = self.runtime.status(self.record.session_id)
+        self.assertFalse(status.attached)
+        page = self.runtime.events(self.record.session_id, 0, 10)
+        self.assertEqual(page.events[-1].event, "transport_error")
+        self.assertNotIn("endpoint", repr(page.to_dict()))
+
 
 if __name__ == "__main__":
     unittest.main()
