@@ -293,3 +293,66 @@ Proposed bounded clarification for re-review: record under D18 that raw Codex pr
 boundaries retain measured JSON and internal exception contracts, and require Task 4 to convert
 service failures at the public RPC/CLI edge. This executor did not silently change the decision
 log. Independent C1 re-review remains pending; this correction receipt does not claim approval.
+
+## C1 correction — Task 1 listener and enforcement guards
+
+The public-listener validator now classifies every OS-supported numeric spelling with
+`getaddrinfo(..., AI_NUMERICHOST)`, so classification cannot query DNS. It rejects any result
+whose address is unspecified, including the measured `0`, `00`, `0000`, `0x0`, abbreviated and
+zero-padded IPv4, and expanded IPv6 forms, while preserving exact accepted hostname, loopback,
+IPv4, IPv6, and connectable numeric-alias text. The independently probed alias table requires
+host `0` to classify as unspecified. A separate patched-hostname control proves the production
+resolver call always carries `AI_NUMERICHOST`.
+
+The four architecture/seam guards now share their assertion implementations with four executable
+negative controls. Two temporary fixture files inject forbidden `cli`/`rpc` imports; a generated
+module adds an unexpected public service seam; a generated migrator exposes unannotated methods.
+All four counterexamples make the real assertion raise. They do not inspect the test module's own
+source. A behavioral path regression derives equal `ServicePaths` under contradictory
+`CLAUDE_CODE_SESSION_ID` and `CODEX_WORKER_INSTANCE` values.
+
+### Correction RED / GREEN
+
+Before the production listener change, the 17-test service-domain lane failed for all seven
+OS-recognized IPv4 unspecified aliases and errored because no numeric-only resolver seam existed:
+
+```text
+Ran 17 tests in 0.014s
+FAILED (failures=7, errors=1)
+```
+
+After correction:
+
+```text
+$ python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_service_domain.py'
+Ran 17 tests in 0.014s ... OK
+$ python3 -W error::ResourceWarning -m unittest -q \
+  test_service_domain test_migration test_commands test_models_registry \
+  test_instance test_callback_store
+Ran 108 tests in 0.538s ... OK
+$ python3 -W error::ResourceWarning -m unittest -q <four original architecture guards>
+Ran 4 tests in 0.007s ... OK
+$ python3 -W error::ResourceWarning -m unittest -q <four negative controls>
+Ran 4 tests in 0.002s ... OK
+```
+
+### Migration Result-law re-review request
+
+No incompatible return-shape change was made. Generic Python §4 requires Result-valued seams
+(`skills/engineering-patterns/python-patterns.md:74-89`), and D18 does not explicitly waive that
+law. But the Task 1 brief's published interface is exactly
+`scan_and_apply() -> MigrationStatusView` and `resolve(...) -> SessionRecord`, with a direct
+`.conflict_count` usage (`.superdev/sdd/task-1-brief.md:20-36`); the approved plan repeats both
+contracts (`docs/superdev/plans/2026-08-28-codex-worker-shared-app-server.md:95-111`). Both brief
+and plan also explicitly require `resolve_name` to *raise* `legacy_name_conflict`
+(`.superdev/sdd/task-1-brief.md:41-43`; plan lines 116-118), which the existing typed registry
+seam does at `skills/subagent-driven-development/scripts/codex_worker/registry.py:300-305`.
+D14 selected explicit conflict refusal/resolution, and D18 selected
+incremental evolution of existing dependency-light seams rather than an unrelated big-bang.
+
+Returning `Ok | Err` from the existing names would break the approved direct types and their
+consumers; a parallel wrapper family would expand this task and leave the published interface
+ambiguous. This is therefore disclosed as a genuine generic-canon/task-interface conflict for
+architectural re-review. Re-review should either accept the specific direct/typed-exception
+legacy migration seam or amend the brief/plan and downstream contracts explicitly. This
+correction preserves the single-source task interface rather than silently selecting a fork.

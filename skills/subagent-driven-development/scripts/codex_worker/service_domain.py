@@ -1,5 +1,6 @@
 """Global Codex worker service value objects and pure path derivation."""
 import ipaddress
+import socket
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -241,12 +242,19 @@ def validate_public_listener(value: str) -> str:
     if not host or host == "*":
         raise ValueError("listener host must be connectable")
     try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        address = None
-    if address is not None and address.is_unspecified:
+        numeric_rows = socket.getaddrinfo(
+            host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM,
+            flags=socket.AI_NUMERICHOST)
+    except socket.gaierror:
+        numeric_rows = []
+    addresses = [
+        ipaddress.ip_address(row[4][0].split("%", 1)[0])
+        for row in numeric_rows
+    ]
+    if any(address.is_unspecified for address in addresses):
         raise ValueError("listener host must not be unspecified")
-    # A non-IP hostname is valid. Reject only URL-delimiter ambiguity.
-    if address is None and any(character in host for character in "/@?#"):
+    # AI_NUMERICHOST classifies OS-supported numeric aliases without DNS. A host
+    # that is not numeric remains valid; reject only URL-delimiter ambiguity.
+    if not addresses and any(character in host for character in "/@?#"):
         raise ValueError("listener host is invalid")
     return value
