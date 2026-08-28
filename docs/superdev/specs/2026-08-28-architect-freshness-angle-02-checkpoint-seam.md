@@ -1,26 +1,122 @@
 # Angle 2 — The checkpoint seam
 
-**Purpose:** understand what crosses between orchestrator and architect — and what freshness each side promises — without reading either skill.
-**Formal anchors:** D52, D58–D60, D62; spec §5.1–§5.3 (R5, R9, R10).
+**Purpose:** understand the complete life of one design checkpoint — what crosses between orchestrator and architect, in which artifacts, under which freshness promises, and who rules — without reading either skill.
+**Formal anchors:** D52, D58–D60, D62 · spec §5.1–§5.3 (R5, R9, R10, R12).
 **Series:** 2 of 4.
 
 > **Status guide:** LOCKED · FLEXIBLE · DEFERRED · MISMATCH.
 
 ## The central question
+
 How do two altitudes converse through files without the files becoming a third, drifting version of the truth?
 
 ## Boundaries
-Starts when the orchestrator declares a checkpoint; ends at the reconcile commit. Room-side flows are angle 3; who RULES inside the sitting is the mode law (below), everything else about modes stays in D59.
 
-## Concrete consequences
-**The two-surface law (D60), the keystone:** docs/system-design/ is the RECONCILED surface — grab anything, it matches reality or wears a marker pricing your trust. docs/orchestration/ is the OPERATIONAL surface — message companions (short message + pointer into a file), stamped "OPERATIONAL RECORD — never reconciled, may be outdated", pruned on a rolling window (close of N deletes N−1, D62), never reconciled. **LOCKED.**
-**Per checkpoint, exactly two artifacts + one commit:** the orchestrator's handover doc (narrative trio + map-row claims + residue clusters inline + inlined census/process facts) on the operational surface; the architect's response BLOCK inside milestones/<slug>/decisions.md (section verdicts · claim verdicts accepted/REJECTED-with-reason · cluster dispositions incl. BOUNCED DOWN) followed by its D# rulings, on the reconciled surface; the named reconcile commit closes the sitting (D52). **LOCKED.**
-**Mode law (D59):** HUMAN — architect waits, operator rules; AUTONOMOUS — architect produces options+recommendation, ORCHESTRATOR picks (flagged, revisitable D#); reserved forks (money/irreversibility, blast radius, taste) always human; close always human. Applies identically to self-brainstorming ratification gates. **LOCKED.**
+The journey starts when the orchestrator declares a checkpoint and ends at the reconcile commit that closes the architect's sitting. How rooms produce the material that arrives here is angle 3; how a milestone's items were cut in the first place is angle 4. The mode law is explained here because the sitting is where it bites hardest, but it governs every ruling gate in the system, not only this one.
+
+## Concrete journey
+
+Follow one checkpoint end to end.
+
+### LOCKED — the two-surface law is the ground everything stands on
+
+The repository's documentation has two surfaces with *opposite* freshness contracts, and every artifact in this journey belongs unambiguously to one of them.
+
+**The reconciled surface** (`docs/system-design/`): anything you grab from it matches reality — either the content is current, or it wears a marker or banner saying exactly how much to rely on it. This promise is expensive, which is why the surface is small and why a named process (reconciliation, below) exists solely to keep it.
+
+**The operational surface** (`docs/orchestration/`): files exist here for one reason — messages must stay short, so the message carries a summary and a pointer, and the detail lives in a file. These files are point-in-time records *the moment they are written*: nobody ever reconciles them, they are allowed to rot, and they say so on their face. Every operational file opens with a standing stamp:
+
+> OPERATIONAL RECORD — point-in-time, never reconciled. May be outdated the moment
+> you read it. Design authority lives in docs/system-design/ (as of its last reconcile).
+
+Because nothing here is reconciled, the surface is kept honest the only other way possible: **pruning**. At milestone N's close, milestone N−1's operational files are deleted — handovers, raw ledgers, spent backlog items, proposal drafts — after their durable lessons are harvested into the handoff. One milestone's files survive one milestone longer as a lookback window; git is the archive beyond that. (The keep-set that never gets pruned: the handoffs themselves, `conventions.md`, and the improvement-notes stream — the files that feed the next milestone and the skill-improvement loop.)
+
+### LOCKED — declaration: rule + green lights + judgment
+
+A checkpoint is declared by the orchestrator when a rule fires (a bridge side fully merged · milestone close · the operator asks), when rooms' green lights accumulate ("nothing more to contribute on this arc"), or when his judgment says the residue collection now justifies a sitting. Between checkpoints the architect is idle — the one exception being plan-time deviation pointers (angle 3), which it may *receive* at any time, because receiving is not ruling.
+
+### LOCKED — the handover: one operational document carrying everything the seam needs
+
+Declaring means writing ONE document — `docs/orchestration/handovers/<milestone>-checkpoint-N.md` — and messaging the architect a pointer to it. Its shape:
+
+```markdown
+# Handover — checkpoint 3
+> OPERATIONAL RECORD — … (the stamp)
+
+## WHAT WE GOT
+Items 2a and 2c merged. The replay seam held; the fee model did not — three rooms
+independently hit its edges. We believe the milestone's center of gravity moved…
+
+## WHERE WE FEEL GAPS
+The optimization area has no vision doc; charters are approaching it…
+
+## UPCOMING FOCUS
+Next window: items 2b, 3a. We propose taking 3a first because…
+
+## MAP CLAIMS
+R12 discharged — evidence: src/domain/target_book.py:112 + test transcript t3.
+R17 discharged — evidence: replay CLI journey, transcript t4.
+
+## CLUSTERS
+1. fee-seam discrepancies (rooms A,C — rows A-12, A-14, C-3): both rooms found …
+2. naming drift in the wallet bridge (room B — row B-7): …
+4. module-internal refactor requests (room C — rows C-5, C-6): …
+
+## FACTS
+Census delta since reconcile abc1234: BLIND 3→0, MISMATCH +2 (both fee seam).
+charter→merge: 2.1d avg · review cycles: 2 · blocked-wait: 4h total.
+```
+
+Three narrative sections first — they are the point. The ledgers hold every row and every measurement, but no file holds what it *felt like across rooms* — that judgment exists only in the orchestrator, and the handover is where it becomes durable. The claims section practices **two-step discharge**: the orchestrator *claims* map rows with evidence; only the architect *writes* the map. The clusters section is his authored grouping of the typed ledger rows — interpretation offered to the sitting, not imposed on it. The facts are machine-generated numbers inlined, not attached as documents: the recurring marker census is ephemeral script output that lives in handovers, never as a committed census file (the milestone folder's `census.md` — the charter-time grounding sweep — is a different, surviving artifact).
+
+### LOCKED — the sitting: mechanical open, then ruling by mode
+
+The architect's sitting opens mechanically, in both modes: read the handover, grep its own docs for markers gone stale (cited D#s whose status flipped), assemble an agenda organized by angle, each entry a *question*. Then the mode law decides who rules:
+
+| | HUMAN mode | AUTONOMOUS mode |
+|---|---|---|
+| declared | at co-plan, default for design-heavy milestones | explicitly by the orchestrator, recorded in graph + conventions |
+| architect does | stages only; waits for the operator; rulings happen in the sitting together | real architecture: for each fork, options with gains/sacrifices + a recommendation, presented to the Fork Presentation Standard |
+| who picks | the operator | **the orchestrator** |
+| the pick's record | ordinary D# | flagged D#: options preserved, named as an autonomous-mode pick, revisitable |
+| reserved forks (money/irreversibility, blast-radius reshapes, taste) | operator | **operator — always**; tagged and queued; the architect designs around them so work continues |
+| milestone close | operator approves | **operator approves — always** (safety stays topology: nothing reaches main un-approved) |
+
+The invariant making autonomy safe: the next human touchpoint *opens with the pick list* — every autonomous pick reviewed first, overturnable by a superseding D# that preserves the original. Nothing is erased; the operator's authority is deferred, never diluted.
+
+### LOCKED — the response lives inside the decision log, and the reconcile commit closes
+
+The sitting's answer is NOT a new document — every new doc type is a new reconciliation surface, which is the disease. The response is a *block inside the milestone's `decisions.md`*, immediately followed by the rulings it announces:
+
+```markdown
+## Checkpoint 3 — response (reconcile def5678)
+Sections: GOT agree · GAPS agree, except the fee seam is worse than felt (D468) ·
+FOCUS disagree — 2b before 3a; 3a's kernel depends on the fee ruling (D469)
+Claims: R12 ACCEPTED · R17 REJECTED — receipt covers the read path only; re-claim
+with a write-path receipt
+Clusters: 1 → ruled, D466–D468 · 2 → deferred, needs the optimization vision ·
+4 → BOUNCED DOWN — item-work, no design fork; suggest one quick-fix item
+Conformance notes: celebration 3 straddles a REPLACE boundary — advisory only.
+
+### D466 — the fee model owns its rounding …
+### D467 — …
+```
+
+Claim verdicts and their *reasons* survive here — three weeks later, "R17 was rejected and why" is one grep away, which `map.md` alone could never tell you. **Bounced-down** clusters land mechanically: the orchestrator (backlog curator) converts each into backlog items or routes them into an upcoming charter, and his *next* handover's WHAT WE GOT confirms the filing — the loop audits itself.
+
+Then the sitting's mandatory last act (both modes, every sitting — checkpoint-triggered or an operator brainstorm alike): the **reconciliation pass**. Statuses flip in the INDEX and the touched angles/anchors; superseded docs get banners; canon is rewritten if the rulings moved it; and ONE named commit closes: `docs: reconcile <milestone> architecture authority`. No sitting ends with the corpus contradicting what it just ruled. Between sittings, staleness is permitted — and honestly marked, which is what the markers are *for*.
 
 ## Visible collisions
-- **Rich handover vs pointer doctrine:** the narrative trio is judgment only the orchestrator has — it earned a durable doc; but the RESPONSE nearly became a third doc type until the operator's rule: every doc type is a reconciliation surface — so the response lives inside the file reconciliation already owns.
-- **Architect idleness vs staging cost:** resolved by the mode law absorbing the pre-pass question — mechanical opens (census, stale-D# grep, agenda-as-questions) allowed in both modes; mode governs RULING, not reading.
-- **Census as artifact vs tooling:** a committed recurring marker-census file lost to ephemeral script output quoted in handovers.
+
+- **Rich handover vs the pointer doctrine.** The narrative trio is genuine content in an operational file — allowed because the operational surface's contract ("point-in-time, may rot, will be pruned") makes durable-but-unreconciled content safe there. The same content on the reconciled surface would be a maintenance debt.
+- **The response document that almost was.** The first design gave the response its own file in a `responses/` directory — symmetric, tidy, and wrong: the operator's rule that every doc type multiplies reconciliation surfaces killed it, and the response moved *inside* the file reconciliation already owns. The general lesson: when two artifacts always change together, they are one artifact.
+- **Architect idleness vs staging cost.** Strict idleness wastes the operator's most expensive minutes on watching greps; unrestricted preparation drifts into pre-cooked conclusions. The mode law absorbed this: mechanical opens are always allowed because *reading is not ruling* — the line is drawn at judgment, not at activity.
+- **Autonomy vs authority.** AUTONOMOUS mode looks like it transfers design authority to the orchestrator. It doesn't: it transfers *scheduling* of authority — picks are provisional-by-construction (flagged, reviewable, overturnable) and the irreducible forks never leave the operator. What the milestone gains is that it never stalls on an absent human it was told not to wait for.
+
+## Flexible and deferred
+
+FLEXIBLE: handover section wording and ordering; the stamp's exact phrasing; the response block's line format. DEFERRED: none — but note the mode law's revisit trigger: an autonomous-pick overturn rate above roughly one in four at human review means the reserved-fork classes are drawn too narrow.
 
 ## Reconciled outcome
-LOCKED: two-surface law, two-artifact checkpoint, mode law with reserved forks, rolling-window pruning. FLEXIBLE: handover section wording, stamp phrasing. DEFERRED: none.
+
+LOCKED: the two-surface law with the stamp and rolling-window pruning; checkpoint = one handover doc + one response block + one reconcile commit; two-step discharge with durable claim verdicts; bounce-downs with a self-auditing loop; the mode law with reserved forks and flagged revisitable picks; reconciliation as every sitting's mandatory close. FLEXIBLE: wordings and formats above. The seam's whole design fits one sentence: judgment crosses in two named artifacts, authority stays where it always was, and the files can never disagree about which of them is the truth.

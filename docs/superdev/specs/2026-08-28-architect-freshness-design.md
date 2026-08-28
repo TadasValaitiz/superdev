@@ -1,3 +1,8 @@
+> **DISCARDED by the operator (2026-08-28, D67).** This document is retained as record only.
+> The replacement set: `2026-08-28-bench-experience-study.md`,
+> `2026-08-28-brainstorming-experience-design.md`, and the plan
+> `2026-08-28-brainstorming-experience-plan.md`. The D47–D66 rulings remain in force.
+
 # Architect ↔ Orchestrator Freshness — Design (anchor)
 
 **Date:** 2026-08-28 · **Status:** draft
