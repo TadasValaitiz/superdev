@@ -31,8 +31,8 @@ those paths — discovering mid-apply that another file needs touching reopens t
 
 ## Inbox mode — a process-feedback ledger instead of one failure
 
-When the input is an accumulated ledger (`docs/orchestration/'s process-feedback ledger` — rooms'
-brief-gap and friction entries in their ID blocks, plus the orchestrator's measured facts),
+When the input is an accumulated ledger (the process-feedback ledger in `docs/orchestration/` —
+orchestrator-written from rooms' reports: friction | brief-gap | measurement | win rows, D51),
 do NOT run the checklist per entry. Three steps precede it:
 
 1. **Cluster** entries by implicated skill + boundary class; note frequency and severity.

@@ -12,8 +12,8 @@ An **angle** is a deliberately partial way to examine one shared architecture. I
 
 - **Purpose**, one reader-oriented sentence ("make X understandable without reading Y").
 - **Formal anchors** — the D#s and glossary entries it renders. *Angles are prose over rulings; the decision log owns the forks.*
-- **Series position** (`N of M`) and a row in the milestone INDEX file (`…-architecture-angles.md`, flat corpus — D69) (number · purpose one-liner · anchors · last-updated · DOC-MARK counts).
-- **Marker statuses** throughout — LOCKED/FLEXIBLE/DEFERRED/BLIND/MISMATCH/SEED-ILLUSTRATIVE, in the positional grammar (D53/D70: line-initial claim markers, Status lines, heading markers; the DOC-MARK bracket is retired — full rewrite lands at implementation Task 5).
+- **Series position** (`N of M`) and a row in the milestone INDEX file (`…-architecture-angles.md`, flat corpus — D69) (number · purpose one-liner · anchors · last-updated · marker-status counts).
+- **Marker statuses** throughout — LOCKED/FLEXIBLE/DEFERRED/BLIND/MISMATCH/SEED-ILLUSTRATIVE, in the positional grammar (D53/D70: line-initial claim markers, Status lines, heading markers; the DOC-MARK bracket is retired for documents).
 - **The five useful-angle properties:** one central question · explicit boundaries (where the journey starts, stops, and who owns what's outside) · concrete domain consequences (named states, model sketches, call sites) · **visible collisions** (where forces pull apart) · a reconciled outcome. Length is earned by domain complexity, never by angle number.
 
 ## The five kinds {#five-kinds}
@@ -56,7 +56,7 @@ Plain explanation first; models or short flows only where they improve understan
 
 1. **The angle sweep** is the mandatory last act of every session: every angle whose anchors were touched is updated *in that session*, superseded in place, never copied.
 2. **Staleness is mechanical:** grep an angle's cited D#s against the decision log's statuses; a superseded citation puts the angle on the next agenda.
-3. **INDEX.md is the bloat display:** last-updated and DOC-MARK counts per angle. Sets beyond ~15 angles merge at a session.
+3. **The milestone INDEX file is the bloat display:** last-updated and marker-status counts per angle. Sets beyond ~15 angles merge at a session.
 
 ## Item angles {#item-angles}
 

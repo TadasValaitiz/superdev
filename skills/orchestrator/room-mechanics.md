@@ -84,7 +84,7 @@ close, human-approved.
   self-publish and confirm.
 - **R5 CLOSE** — summary · residual dispositions · proposed cursor text for the
   orchestrator's durable state.
-- **STOP (immediately, any time):** contradiction with a human ruling/lock · gate red the
+- **STOP (immediately, any time):** violating an operator instruction about the room's own scope or conduct (a corpus-vs-reality contradiction with a LOCKED design claim is the D61 deviation duty — build on, report the pointer) · gate red the
   room can't triage inside its scope · anything touching outside its worktree.
 
 ## Fault handling (never blind-relaunch)
@@ -106,5 +106,5 @@ a blind relaunch double-writes.
   every git operation, or you read/commit in the wrong checkout.
 - **Settings hot-reload is not guaranteed** for a running session — launch flags are
   deterministic; global settings changes bind only sessions launched after them.
-- **Disjoint ID blocks** for any shared append-only ledger (decision numbers D24+ vs D40+):
+- **Disjoint decision-number blocks** for each room's own candidate D# entries (D24+ vs D40+; no shared append-only ledgers exist — D51, findings travel in reports):
   assigned in the orchestration graph at spawn, or parallel branches collide on renumbering.

@@ -38,7 +38,7 @@ against evidence and said so in the hand-off.
 If — and ONLY if — your launch brief names an orchestrator address, a reporting protocol
 (R0–R5), and a milestone-branch publish recipe, you are an ORCHESTRATED ROOM: follow the
 brief's reporting contract (R1 design-ready then WAIT at the gate for ratification per the milestone MODE (HUMAN: relayed human ruling; AUTONOMOUS: the orchestrator's flagged pick) — the
-orchestrator carries your doc to the human), produce its FILES-YOU-PRODUCE set, and
+orchestrator carries your doc to the ruling authority per the milestone MODE — the human in HUMAN mode, its own flagged pick in AUTONOMOUS mode), produce its FILES-YOU-PRODUCE set, and
 self-publish via the brief's FF-CAS recipe to the milestone branch — never to main. See
 orchestrator/room-mechanics.md. Absent that contract, ignore this section entirely.
 
@@ -116,7 +116,7 @@ The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/
 
 ## The hand-off (how a run ends)
 
-Report to the human, leading with what needs them:
+Report to the ratifying authority (per the mode law; the human in HUMAN mode), leading with what needs them:
 
 1. **Assumptions requiring ratification** — the A# queue, each with what rests on it.
    This comes FIRST; it is the honesty bill for running without an oracle.
