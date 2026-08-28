@@ -72,7 +72,7 @@ Claim verdicts and their reasons survive greppably — the map alone could never
 Near-homophones, deliberately contrasted: **handovers** are per-CHECKPOINT operational companions (above), pruned; **handoffs** are per-MILESTONE close documents, in the never-pruned keep-set. The old two-section file is dead:
 
 - **Orchestrator's half** — `docs/orchestration/handoffs/<milestone>.md`: what was built, map rows discharged, marker census, retro facts (measured), architectural suggestions harvested from unresolved residue.
-- **Architect's half IS the birth of the next milestone's document set** — its INDEX, decisions file, census, first visions under the new slug in the flat corpus. Not a section anywhere; a working set coming into existence.
+- **Architect's half IS the birth of the next milestone's document set** — its INDEX, decisions file, census, glossary, continuation handover, first visions under the new slug in the flat corpus. Not a section anywhere; a working set coming into existence.
 
 A milestone may not close without both halves; close is operator-approved in every mode.
 

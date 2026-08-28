@@ -12,7 +12,7 @@ An **angle** is a deliberately partial way to examine one shared architecture. I
 
 - **Purpose**, one reader-oriented sentence ("make X understandable without reading Y").
 - **Formal anchors** — the D#s and glossary entries it renders. *Angles are prose over rulings; the decision log owns the forks.*
-- **Series position** (`N of M`) and a row in `angles/INDEX.md` (number · purpose one-liner · anchors · last-updated · DOC-MARK counts).
+- **Series position** (`N of M`) and a row in the milestone INDEX file (`…-architecture-angles.md`, flat corpus — D69) (number · purpose one-liner · anchors · last-updated · DOC-MARK counts).
 - **Marker statuses** throughout — LOCKED/FLEXIBLE/DEFERRED/BLIND/MISMATCH/SEED-ILLUSTRATIVE, in the positional grammar (D53/D70: line-initial claim markers, Status lines, heading markers; the DOC-MARK bracket is retired — full rewrite lands at implementation Task 5).
 - **The five useful-angle properties:** one central question · explicit boundaries (where the journey starts, stops, and who owns what's outside) · concrete domain consequences (named states, model sketches, call sites) · **visible collisions** (where forces pull apart) · a reconciled outcome. Length is earned by domain complexity, never by angle number.
 
@@ -50,7 +50,7 @@ Angles may carry **Pydantic invariant sketches** (FLEXIBLE by default — respon
 
 ## Presentation convention {#angle-presentation}
 
-Plain explanation first; models or short flows only where they improve understanding. Small Pydantic examples for domain shapes; explicit use cases for behavior; tables for ownership, comparisons, and repeated mappings. Visuals are optional and must be accompanied by an understandable text explanation — never forced. Label claims with DOC-MARK statuses (`map-and-markers.md#doc-mark`); label illustrative quantities SEED-ILLUSTRATIVE (never present an example as measured). Once a fork is resolved, the written angle records the SELECTED architecture and why — it never preserves a recommendation as though the choice were still pending.
+Plain explanation first; models or short flows only where they improve understanding. Small Pydantic examples for domain shapes; explicit use cases for behavior; tables for ownership, comparisons, and repeated mappings. Visuals are optional and must be accompanied by an understandable text explanation — never forced. Label claims with the positional marker statuses (`map-and-markers.md#doc-markers` — claim/Status/heading forms, D53/D70); label illustrative quantities SEED-ILLUSTRATIVE (never present an example as measured). Once a fork is resolved, the written angle records the SELECTED architecture and why — it never preserves a recommendation as though the choice were still pending.
 
 ## Anti-loosening — how the set stays honest {#anti-loosening}
 

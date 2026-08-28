@@ -20,7 +20,7 @@ The current→target map is an ANGLE — `YYYY-MM-DD-<milestone>-angle-NN-curren
 # MIG-MARK[SEAM][D381]: temporary adapter; collapses when TargetBook lands
 # MIG-MARK[TEST][D376]: golden pins regenerate after reshape; do not hand-maintain
 ```
-Source greps need a token no identifier can imitate, so code keeps the bracket. Classes are **closed** (RESHAPE · REPLACE · SEAM · TEST); a new class needs a D#. Every D# must resolve to a corpus entry. **A marker is removed with the fix, never resolved in place** — progress IS the count trend. Planting a marker is how an item finishes *now* and defers the clean fix without stalling; under show-must-go-on (D61), `MIG-MARK[MISMATCH-class]` sites are how merged code honestly contradicts a ruling until the re-ruling lands.
+Source greps need a token no identifier can imitate, so code keeps the bracket. Classes are **closed** (RESHAPE · REPLACE · SEAM · TEST · MISMATCH — the last added by D61); a new class needs a D#. Every D# must resolve to a corpus entry. **A marker is removed with the fix, never resolved in place** — progress IS the count trend. Planting a marker is how an item finishes *now* and defers the clean fix without stalling; under show-must-go-on (D61), `MIG-MARK[MISMATCH][D#]` sites are how merged code honestly contradicts a ruling until the re-ruling lands.
 
 ## Doc markers — three positional forms, plain vocabulary (D53/D70) {#doc-markers}
 

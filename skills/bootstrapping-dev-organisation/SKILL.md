@@ -26,7 +26,7 @@ Then put a **mapping table to the operator, one row per convention, three option
 | `docs/rfcs/` | angle/vision material | same three options |
 | `TODO.md` | the backlog | same — and read it before ruling: it often encodes milestone intent worth harvesting |
 
-Record every ruling in `orchestration/conventions.md` — the map future rooms read so they never guess which file is law here. **Two things are never negotiable away:** single-writer ownership per file, and the corpus floor's *roles* existing somewhere (the paths may be the project's own; the roles may not be dropped).
+Record every ruling in `docs/orchestration/conventions.md` — the map future rooms read so they never guess which file is law here. **Two things are never negotiable away:** single-writer ownership per file, and the corpus floor's *roles* existing somewhere (the paths may be the project's own; the roles may not be dropped).
 
 ## Phase 2 — Create the floor (per the rulings, by hand)
 
@@ -38,15 +38,15 @@ The probe gate and every charter cite map rows — **an empty corpus can charter
 
 ## Phase 4 — Launch (order matters; briefs per superdev:orchestrator's room-brief-template)
 
-1. **ORCHESTRATOR** (runs `superdev:orchestrator`; owns `orchestration/`) — send it the **activation message**: roster, ID blocks, gate ladder, conventions map, what to escalate.
+1. **ORCHESTRATOR** (runs `superdev:orchestrator`; owns `docs/orchestration/`) — send it the **activation message**: roster, ID blocks, gate ladder, conventions map, what to escalate.
 2. **FRONT DESK** (view-only; renders `decision_queue` + events; DESIGN column; conversations happen in the room that needs the operator, never at the desk).
-3. **ARCHITECT** (runs `superdev:system-design` in room mode; **launches idle** — its law: nothing between design checkpoints unless messaged; human-driven always).
+3. **ARCHITECT** (runs `superdev:system-design` in room mode; **launches idle** — its law: nothing between design checkpoints unless messaged; ruling gates resolve per the milestone MODE (canonical: system-design SKILL.md#mode-law); reserved forks and milestone close always human).
 4. **Item rooms: none yet.** They exist only when chartered.
 
 ## Phase 5 — The first milestone (who talks to whom about what)
 
 - **Content** comes from the corpus you just seeded, not from conversation: the operator + **ORCHESTRATOR** run its HIL co-plan — cut the milestone boundary from the map (rows, bridges, item order), ratify the graph, then charter (probe gate: each item charter needs a census — ad-hoc probe rooms make them).
-- **Later milestones** open from the **handoff** (milestone N may not close without next-milestone upfront design in it); the **backlog** feeds only this boundary conversation — the orchestrator brings items that now fit; the operator rules them in or leaves them parked. Nothing enters a milestone around this conversation.
+- **Later milestones** open from the **handoff** (milestone N may not close without the architect's next-milestone half being the NEW milestone document set itself (never a section of the handoff — D49/D68)); the **backlog** feeds only this boundary conversation — the orchestrator brings items that now fit; the operator rules them in or leaves them parked. Nothing enters a milestone around this conversation.
 - The desk never scopes milestones; it only shows you that the conversation is waiting.
 
 ## Red flags

@@ -37,7 +37,7 @@ against evidence and said so in the hand-off.
 
 If — and ONLY if — your launch brief names an orchestrator address, a reporting protocol
 (R0–R5), and a milestone-branch publish recipe, you are an ORCHESTRATED ROOM: follow the
-brief's reporting contract (R1 design-ready then WAIT for relayed ratification — the
+brief's reporting contract (R1 design-ready then WAIT at the gate for ratification per the milestone MODE (HUMAN: relayed human ruling; AUTONOMOUS: the orchestrator's flagged pick) — the
 orchestrator carries your doc to the human), produce its FILES-YOU-PRODUCE set, and
 self-publish via the brief's FF-CAS recipe to the milestone branch — never to main. See
 orchestrator/room-mechanics.md. Absent that contract, ignore this section entirely.

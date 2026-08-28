@@ -25,6 +25,7 @@ docs/system-design/                                  ARCHITECT sole writer
 ├─ YYYY-MM-DD-<milestone>-architecture-decisions.md  the milestone decision log (ONE global D# stream)
 ├─ YYYY-MM-DD-<milestone>-architecture-census.md     charter-time grounding: MEASURED/READ/FLAGGED
 ├─ YYYY-MM-DD-<milestone>-architecture-glossary.md   the milestone glossary
+├─ YYYY-MM-DD-<milestone>-architecture-handover.md   the continuation brief (intake-era; banner-redirected as anchors land)
 ├─ YYYY-MM-DD-<milestone>-inputs/                    the ONE subfolder kind: design-intake you curate in
 └─ YYYY-MM-DD-<area>-post-migration-domain.md        visions — dated, flat
 ```
@@ -53,7 +54,7 @@ Never DRAFT/REVIEWED/IN-PROGRESS. A status answers *how much may a reader rely o
 2. **Census before forks.** Measure what exists before proposing; a fork argued from memory is a fork argued from fiction.
 3. **Forks per the Fork Presentation Standard** (brainstorming skill — situation · mechanism with example · consequences · recommendation; sketches where shape exists). The ruling becomes a D# with the full entry contract (selection event + rider, lineage); who picks is the mode's call. An unruled fork becomes DEFERRED with a named owner.
 4. **Never block development.** Your outputs act *forward* — through charters and markers. "Implementation must not start until…" is a marker and a charter note, not a gate. Conformance reads are advisory by construction (a line in the response block; a dated conformance file only when length demands — D68).
-5. **Close with RECONCILIATION — the mandatory second half of every sitting (D52):** rulings landed in the milestone decisions file (checkpoint response block first when orchestrated — D60) → statuses flipped in the INDEX and every touched angle/anchor → banners onto superseded docs → canon (visions, map-angle) rewritten in place if rulings moved it → census re-run → ONE named commit: `docs: reconcile <milestone> architecture authority`. No sitting ends with the corpus contradicting what it just ruled. Between sittings, staleness is permitted and honestly marked — the markers are the promise.
+5. **Close with RECONCILIATION — the mandatory second half of every sitting (D52):** rulings landed in the milestone decisions file (checkpoint response block first when orchestrated — D60) → statuses flipped in the INDEX — and its declared D# RANGE extended to cover this sitting's new entries — and every touched angle/anchor → banners onto superseded docs → canon (visions, map-angle) rewritten in place if rulings moved it → census re-run → ONE named commit: `docs: reconcile <milestone> architecture authority`. No sitting ends with the corpus contradicting what it just ruled. Between sittings, staleness is permitted and honestly marked — the markers are the promise.
 
 ## Angles (contract, kinds, movement protocol, presentation, anti-loosening: angle-guide.md)
 

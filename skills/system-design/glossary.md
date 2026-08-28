@@ -7,7 +7,7 @@ One table, one meaning per word, across every skill that touches the development
 |---|---|
 | **corpus** | the design law's teaching surface as files: `docs/system-design/` — FLAT (D69), filenames carry milestone+type; the RECONCILED surface |
 | **system angle** | one deliberately partial view through the whole system — a `…-angle-NN-<slug>.md` file in the flat corpus, under the five-kind contract and the anti-loosening machinery (INDEX file, sweep, staleness grep) |
-| **item angle** | the same idea at item scale: lives beside its item's spec, operator's template, no INDEX/sweep obligations. Overlap with system angles is expected |
+| **item angle** | the same idea at item scale: lives beside its item's spec, operator's template; no INDEX obligations, and the brainstorm SESSION's reconcile sweep DOES apply to it (the corpus-level angle sweep does not). Overlap with system angles is expected |
 | **vision** | a post-migration domain document (`…-post-migration-domain.md`, flat); the grounding source wherever the map says code will change |
 | **design session / sitting** | one ruling sitting (who rules = the mode law): census-first, forks per the Fork Presentation Standard, RECONCILIATION as the mandatory close (statuses, banners, canon, the named reconcile commit) |
 
