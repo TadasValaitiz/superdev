@@ -217,3 +217,6 @@ All angles reconciled: ⑤ D57 · ⑥ D58–D60 · ⑦ D61 · ⑧ D62 · ⑨ D63
 - **Alternatives:** nested `milestones/<slug>/{angles/,anchors/,…}` (D47's shape — cleaner ls, but migration would break every relative link in a live corpus for zero content gain); flat-with-symlinks (fragile, tooling-hostile).
 - **Rests on:** D47/D48 (amended), D52, D55, D63 (amended: no restructuring migration remains — the corpus is already home). **Affects:** angle-01 text; system-design skill floor at implementation; census script globs; bootstrapping floor step.
 - **Revisit-when:** a second concurrent milestone makes the flat directory genuinely ambiguous to navigate (then: revisit foldering for NEW milestones only; never move the old).
+
+## D69 — Affects extension (set review, 2026-08-28)
+The original Affects line named only angle-01 text; the set review measured the true blast radius: angles 01–04 all carried nested-path residue (brief-block reads, inputs/, conformance paths, milestone-folder phrasing) — all corrected at commit b6c7cc7. Lesson for future amendments: an Affects list is a claim to verify by grep, not to estimate.

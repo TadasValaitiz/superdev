@@ -26,6 +26,9 @@ anchors are acceptable for same-directory companions, file:line for anything far
 # Angle N — <one-phrase name>
 
 **Purpose:** <one reader-oriented sentence: understand X without reading Y — Y is the decision log unless another document is the real dependency.>
+**Authority:** <the document's own trust level, stated in its first lines (BR12): e.g.
+"teaches ruled design — the log is the law" for a reconciled companion; "DRAFT — governs
+nothing yet" before its angle's rulings land; "RECONCILABLE, NOT LOCKED" for a proposal.>
 **Formal anchors:** [decision log](./<file>.md) D#… · <governing design §…> — the GOVERNING D#s only, not every D# touched.
 **Series:** N of M — at close-time M is often unknown: write `N of ? (open)` and retro-fill at the session's reconcile sweep. A solo angle is `1 of 1 (solo)`.
 
