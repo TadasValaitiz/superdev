@@ -84,7 +84,7 @@ under one global identity.
 
 ## Visible collisions
 
-- Stable port versus arbitrary Codex listeners: default stability wins; explicit override is an operator decision.
+- Stable port versus explicit gateway listeners: default stability wins; explicit override is an operator decision.
 - Persistent service versus upgrades: Angle 4 permits idle-only automatic replacement.
 
 ## Flexible and deferred

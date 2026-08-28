@@ -411,7 +411,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   ordinary maintenance.
 - **Anti-patterns:** no double-read race; no TUI bypass path advertised; no proxy-generated
   success for a request Codex did not accept; no auth credential logging.
-- **Rests on:** R7/R8; D4/D6/D8/D10; required spec-review finding; MEASURED 0.150.1
+- **Rests on:** R7/R8; D4/D6/D8/D9/D10; required spec-review finding; MEASURED 0.150.1
   `thread/list` schema with runtime `status.type=active` and `sourceKinds: []` meaning all sources.
 - **Affects:** service topology, listener meaning, app-server argv, gateway, maintenance gate,
   active inventory, CLI/security projection, transport/live tests.

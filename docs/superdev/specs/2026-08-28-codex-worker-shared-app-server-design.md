@@ -121,7 +121,7 @@ codex-worker CLI ── protected Unix RPC ── GlobalWorkerService
 listener, exposure/auth projection, worker/session/active-turn counts, migration state,
 and durable paths.
 **Depends on:** §5.2 transport, §5.3 registry.
-**Serves:** R1, R2, R7, R8 · **Governed by:** D3, D6, D8, D10, D17 · **Realizes:** UC1, UC3–UC6, UC8.
+**Serves:** R1, R2, R7, R8 · **Governed by:** D3, D6, D8, D9, D10, D17 · **Realizes:** UC1, UC3–UC6, UC8.
 
 ### 5.2 WebSocket app-server transport
 
@@ -161,7 +161,7 @@ handler, notification callback, `shutdown`; transport errors keep method/context
 secrets.
 **Depends on:** the installed Codex version's generated app-server schema (currently 0.150.1);
 `websockets`; §5.1 ownership.
-**Serves:** R3, R10, R11 · **Governed by:** D1, D4, D12, D13, D16, D17 · **Realizes:** UC2, UC10.
+**Serves:** R3, R10, R11 · **Governed by:** D1, D4, D9, D12, D13, D16, D17 · **Realizes:** UC2, UC10.
 
 ### 5.3 Domain model, global identity, and migration
 
@@ -449,7 +449,7 @@ regressions that still govern the new topology.
 | AH5 | An occupied default port produces one typed refusal, preserves the peer, and never falls back. | UC5 / R2 | fast + live |  |
 | AH6 | Idle version replacement restarts durably, while any active turn blocks replacement without interruption. | UC6 / R7, R8 | fast + live |  |
 | AH7 | Real legacy registries import uniquely, deduplicate identically, and expose divergent names with every identity and explicit resolution. | UC7 / R9 | fast + live fixture |  |
-| AH8 | Stop/restart is absent from normal skill completion, refuses active work, and force reports every affected worker under supervised use. | UC8 / R7 | fast + checkride |  |
+| AH8 | Stop/restart is absent from normal skill completion, refuses active work, and force reports every affected thread—including `unmapped_tui` rows—under supervised use. | UC8 / R7 | fast + checkride |  |
 | AH9 | Callback delivery still reaches the captured Claude room while global lookup and TUI control remain independent of Claude session identity. | UC9 / R6 | live |  |
 | AH10 | Installed Python 3.9 UV tool and all existing command families operate from unrelated directories through the global service. | UC10 / R10, R11 | package + live |  |
 | AH11 | The global service binds the exact connectable public listener override and status honestly reports non-loopback/auth exposure without leaking credentials. | UC10 / R11 | fast + live fixture |  |

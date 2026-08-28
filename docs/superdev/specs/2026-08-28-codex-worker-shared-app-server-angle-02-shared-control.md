@@ -73,7 +73,7 @@ Python 3.9.6 probe imported both sides with websockets 15.0.1. **This means:** t
 remain small and protocol-focused, dependency drift is contained inside the UV tool, and every
 upgrade repeats the live two-client lane.
 
-### LOCKED — overload never replays a mutation
+### FLEXIBLE — overload never replays a mutation
 
 Codex WebSocket mode may refuse ingress with `-32001`. Reads use bounded backoff and jitter.
 An overloaded initialize closes the connection; a new connection gets exactly one fresh
@@ -123,5 +123,5 @@ expected-turn checks, durable cursors and typed race faults; replace only the pr
 
 ## Reconciled outcome
 
-Three LOCKED control laws and three FLEXIBLE transport seams give the human and automation equal
+Two LOCKED control laws and four FLEXIBLE transport seams give the human and automation equal
 access while keeping Codex app-server state authoritative.
