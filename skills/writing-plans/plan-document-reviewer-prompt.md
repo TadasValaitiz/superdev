@@ -16,6 +16,11 @@ Subagent (general-purpose):
     You are a plan document reviewer. Verify this plan is complete and ready for implementation.
 
     **Plan to review:** [PLAN_FILE_PATH]
+    **Angle companions + census (REQUIRED inputs when any exist — D71):** [ANGLE_AND_CENSUS_PATHS]
+    Full-set duty: walk each angle's "What X cannot do" and "Visible collisions" against
+    the task list — a task crossing a fence is BLOCKING; a spec-vs-angle contradiction is
+    BLOCKING (planning may not proceed over it); a context pack omitting an existing
+    companion is BLOCKING.
     **Anchor (design doc) for reference:** [SPEC_FILE_PATH] — its §3 Use cases (UC#)
     and §9 Acceptance hints (AH#) are the bar this plan discharges.
 

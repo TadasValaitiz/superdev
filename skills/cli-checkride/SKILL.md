@@ -46,7 +46,7 @@ diligence, not brilliance.
 5. **Commit the final transcript + verdict** with the work (`…-checkride.md`) — the ride is
    evidence, and it must be reconstructable later.
 5b. **Distill the ride into a scenario intent document** (D42/D43 — the reusable half; the
-   transcript is evidence, this is intent): `design/scenarios/<YYYY-MM-DD>-<item>-<slug>.md`
+   transcript is evidence, this is intent): `docs/superdev/scenarios/<YYYY-MM-DD>-<item>-<slug>.md`
    — operator goal · the journey at intent level (never exact commands) · what-good-looks-like
    criteria, including criteria born from this ride's findings. Date-stamped, append-only;
    no merging or refinement here (a later room owns that). One per changed surface; refresh =

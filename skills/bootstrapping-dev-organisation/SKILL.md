@@ -22,7 +22,7 @@ Then put a **mapping table to the operator, one row per convention, three option
 
 | found | canonical role it could play | adopt / bridge / discard |
 |---|---|---|
-| `docs/adr/` | the design D# log (`design/decisions.md`) | **adopt** = the existing path IS the canonical file (record the mapping); **bridge** = keep both with a pointer note and one writer; **discard** = leave it frozen as history, start the canonical file |
+| `docs/adr/` | the milestone decisions file (`docs/system-design/…-architecture-decisions.md`) | **adopt** = the existing path IS the canonical file (record the mapping); **bridge** = keep both with a pointer note and one writer; **discard** = leave it frozen as history, start the canonical file |
 | `docs/rfcs/` | angle/vision material | same three options |
 | `TODO.md` | the backlog | same — and read it before ruling: it often encodes milestone intent worth harvesting |
 
@@ -30,7 +30,7 @@ Record every ruling in `orchestration/conventions.md` — the map future rooms r
 
 ## Phase 2 — Create the floor (per the rulings, by hand)
 
-The canonical floor, with adopted paths substituted where ruled: `design/` (angles+INDEX, visions, map.md, decisions.md, residue/residue.jsonl, residue-collections/, conformance/, handoffs/, marker-census.md — see `superdev:system-design`) · `orchestration/` (cursor.md, residual_ledger.md, decision_queue.md, process-feedback.jsonl, conventions.md) · `frontdesk/digest.md` · `.superdev/sdd/progress.md` · `docs/backlog/` (or adopted equivalent). Assign **ID blocks** per future room in `orchestration/conventions.md`. Commit the floor.
+The canonical floor, with adopted paths substituted where ruled: `docs/system-design/` (FLAT, D69 — the milestone's INDEX/decisions/census/glossary files + angles + anchors + visions, filename convention per `superdev:system-design`; grandfather anything already on the ground — never move it) · `docs/orchestration/` (graph, cursor, residual ledger, typed residue + process-feedback ledgers, decision_queue.md, conventions.md, handovers/, handoffs/, execution/ — every file stamped OPERATIONAL RECORD) · `frontdesk/digest.md` · `.superdev/sdd/progress.md` · `docs/superdev/{specs,plans,scenarios}/` · `docs/backlog/` (or adopted equivalent). Assign **decision-number blocks** per future room in `conventions.md` (no shared append-only files exist — D51). Record the milestone MODE there at the co-plan. Commit the floor.
 
 ## Phase 3 — Seed the corpus (mandatory BEFORE any charter)
 

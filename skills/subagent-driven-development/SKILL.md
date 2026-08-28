@@ -20,7 +20,7 @@ Execute a plan by dispatching ONE carrying implementer per broad, role-carried a
 - **RESUME metadata is mandatory** in every implementer/reviewer report: worker kind · name/agent-id · exact resume command or address · session ref · territory one-liner. The controller tracks these as rows in the progress ledger (`.superdev/sdd/progress.md`) — no separate registry file.
 - **Roles:** carrying implementer · reviewer/adversary · **follow-up** — the short-lived third seat that lands checkpoint findings, quick fixes and cleanup after the arc's shape exists (the quick-fix lane's usual occupant).
 - **Auto-enter:** when writing-plans ends with the operator agreeing the execution shape, SDD auto-enters — no "shall I proceed"; the agreement WAS the flip (the room goes autonomous there).
-- **Design-class deviations file residue:** an arc that hits an architecture-vs-code discrepancy resolves it locally, plants a `MIG-MARK`, and appends a residue row (`design/residue/residue.jsonl`, own ID block) — never a local L1 ruling (see Decision Logging below).
+- **Design-class deviations — show must go on (D61):** an arc that hits an architecture-vs-code discrepancy COLLECTS it in the item's own files (decision log / spec deviations section) during grounding→planning; after planning, before execution, the room messages the orchestrator a summary + pointer (relayed to the architect immediately); then it implements against reality with `MIG-MARK` planted at the exact sites — never a local ruling, never a write into any shared file (no shared residue ledger exists; the orchestrator's ledger is built from your reports).
 
 ## Codex workers from Claude Code
 

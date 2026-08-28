@@ -10,7 +10,12 @@ design. This skill preserves that mechanism when no human is on the other side: 
 agent role asks the questions (the design authority), another answers them from
 evidence (the grounded oracle), and a scripted loop locks decisions round by round
 until the questioner declares saturation. The output is a design ready for human
-ratification — never a design that pretends it was ratified.
+ratification — never a design that pretends it was ratified. WHO ratifies is the
+milestone MODE's call (canonical law: superdev:system-design SKILL.md#mode-law): HUMAN
+mode — the operator, with the gate queuing as a desk DECIDE; AUTONOMOUS mode — the
+ORCHESTRATOR ratifies (reading the assumptions section first), as a flagged, revisitable
+pick; RESERVED forks (money/irreversibility, blast radius, taste) always wait for the
+operator in both modes.
 
 **Invoking this skill is the user's opt-in to multi-agent orchestration** — it is built
 on the Workflow tool. If the Workflow tool is unavailable in the current harness, fall
