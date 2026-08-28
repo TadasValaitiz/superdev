@@ -38,12 +38,25 @@
   `/readyz` reports listener readiness; initialize is per connection; thread start/resume and
   turn APIs drive the same server-owned threads. It labels WebSocket experimental and says
   non-local connections require WebSocket authentication plus TLS.
-- **MEASURED** in the preceding live brainstorm probe against the installed Codex: two
+- **MEASURED** in the preceding live brainstorm probe against the then-installed Codex 0.147.0:
+  two
   independently initialized WebSocket clients used one app-server; the second resumed the
   first client's thread and started a turn; both received the authoritative completion. The
   probe threads were deleted and the server was stopped. This evidence must be reproduced into
   a tracked live receipt before acceptance; the exploratory terminal transcript is not itself
-  a merge receipt.
+  a merge receipt. Codex was upgraded to 0.150.1 afterward; no claim is made that the old probe
+  proves the current binary.
+- **MEASURED** exact upstream checks used during reconciliation:
+  `codex --version`; `codex app-server --help`; `codex --help | rg -n -- '--remote|resume'`;
+  and `codex app-server generate-json-schema --out <private-temp-dir>`. The generated 0.150.1
+  schema reports `thread/list` pages containing `Thread.status`, including `type: active`, and
+  documents `sourceKinds: []` as all source kinds. This enables authoritative all-thread
+  inventory but is not atomic with a direct public listener, which motivated D17's gateway gate.
+- **MEASURED** isolated dependency probe:
+  `uv venv --python 3.9 <private-temp>/venv`, `uv pip install --python <venv-python>
+  'websockets>=14,<16'`, then importing `websockets.sync.client.connect` and
+  `websockets.sync.server.serve` returned Python `3.9.6`, websockets `15.0.1`, and
+  `sync-client-server-ok`. No user-global Python/UV tool state was changed.
 
 ## Durable state and migration pressure
 

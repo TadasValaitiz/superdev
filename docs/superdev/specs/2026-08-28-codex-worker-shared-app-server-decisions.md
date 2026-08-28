@@ -203,6 +203,12 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: add an internal WebSocket-to-stdio bridge — gains reuse of JSONL code / sacrifices another protocol process and recreates split ownership.
   - C: use Codex managed daemon plus a separate broker/bridge — gains native daemon lifecycle / sacrifices fixed endpoint simplicity and still needs two services.
 - **Decided:** A. The global broker owns one Codex child, health-checks its listener, then initializes one worker WebSocket connection. The TUI initializes another connection to the same listener. MEASURED probe: client B resumed client A's thread, started the next turn, and both clients received the same event sequence through `turn/completed`.
+- **Shape at selection:**
+  ```text
+  WorkerBroker ── WebSocket connection A ─┐
+                                          ├─ one Codex app-server process
+  Codex TUI ──── WebSocket connection B ─┘
+  ```
 - **Not shared TCP with separate state:** listener health is insufficient; the broker verifies child identity/version and its own initialized connection before publishing readiness.
 - **Extension law:** every transport implementation must preserve request correlation, server requests/approvals, bounded frames, close semantics, and notification delivery independently per connection.
 - **Anti-patterns:** no scraping TUI output; no second Codex child; no assuming listener acceptance proves compatible app-server identity.
@@ -220,10 +226,22 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: implement RFC 6455 locally — gains zero dependencies / sacrifices reliability and creates a large custom security surface.
   - C: shell out through another Codex/TUI command — gains no Python dependency / sacrifices structured lifecycle, approvals, and request correlation.
 - **Decided:** A, pinned to a Python-3.9-compatible major range. Import is isolated behind the WebSocket transport module; deterministic tests inject fake connections, while the UV/live lane proves the real dependency and framing.
+- **Shape at selection:**
+  ```toml
+  [project]
+  requires-python = ">=3.9"
+  dependencies = ["websockets>=14,<16"]
+  ```
+  ```text
+  codex_worker/websocket_transport.py -> websockets.sync.client
+  codex_worker/websocket_gateway.py   -> websockets.sync.server
+  tests -> injected fake Connection seams
+  ```
 - **Not a global Python dependency:** UV owns it inside the standalone `codex-worker` environment.
 - **Extension law:** dependency upgrades run the two-client live transport probe and Python 3.9 package lane.
 - **Anti-patterns:** no fallback homemade WebSocket when import fails; no unbounded `recv`; no secret headers in logs.
-- **Rests on:** D12; existing UV isolation requirement; Python 3.9 floor.
+- **Rests on:** D12; existing UV isolation requirement; Python 3.9 floor; A3 ratified by
+  isolated Python 3.9.6 + websockets 15.0.1 sync client/server import.
 - **Affects:** `pyproject.toml`, transport module, package/archive tests, live harness.
 - **Revisit-when:** Codex ships a stable stdio proxy for arbitrary WebSocket endpoints or Python gains an adequate standard client.
 
@@ -237,6 +255,14 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - B: newest-wins or automatic suffix rename — gains immediate names / sacrifices operator intent and silently changes identities.
   - C: import non-conflicts, record duplicate-name conflict sets, and require explicit resolution — gains service availability plus lossless recovery / sacrifices one maintenance step for conflicting names.
 - **Decided:** C. Identical name+thread records deduplicate. Unique names import. Divergent duplicate names become durable conflict entries; lookup returns every known session/thread/source and runnable resolution actions. Legacy directories are never deleted. Resolution selects one thread for the original name or assigns explicit new names to retained alternatives.
+- **Shape at selection:**
+  ```text
+  for each legacy (source_path, digest, name, session_id, thread_id):
+      unique name -> import copy
+      identical identity -> record dedup source
+      divergent identity -> LegacyConflict[name].candidates += record
+  lookup(conflicted name) -> refuse until explicit thread selection/new name
+  ```
 - **Not routine migration on every start:** one durable migration ledger makes discovery idempotent and records source digests.
 - **Extension law:** every future migration is copy/merge-first, digest-receipted, conflict-explicit, and leaves source data recoverable.
 - **Anti-patterns:** no mtime winner; no silent suffix; no overwrite; no source-directory cleanup during migration.
@@ -263,6 +289,19 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   `session_id` from resumable Codex `thread_id` and include attach/resume routes. Public
   `daemon shutdown` is removed; guarded stop/restart and migration status/resolve are explicit.
   Raw `--socket` remains the sole expert endpoint bypass.
+- **Creation defaults and validation rider:** absence of tier/model selects the existing
+  `medium` tier and `medium` effort; token budget still requires an initial goal; common commands
+  still reject `--socket`. `start --cwd` becomes required because the operator explicitly asked
+  that initial work use a deliberate working directory even when ambient Claude cwd is available.
+- **Shape at selection:**
+  ```text
+  codex-worker [--pretty] [--socket ABS_PATH] <family> ...
+  start --name N --cwd DIR (--prompt P|--prompt-file F) [creation policy] [--app-server-listen A]
+  run|status|messages|history|steer|interrupt --name N ...
+  daemon start|status|restart|stop ...
+  migration status|resolve ...
+  # no --instance; no public daemon shutdown
+  ```
 - **Supersession ledger:** D6 supersedes D2's wording that a selected worker owns the listener;
   the global service owns it. D6/D11 supersede D3's allowance for additional managed daemons
   and D5's instance-scoped configuration; one service generation owns one listener. D9
@@ -303,6 +342,13 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   idempotent observation/handshake operations only; mutations return a typed busy result rather
   than risking replay. Non-loopback auth configuration remains an explicit operator-owned
   Codex concern for this internal iteration; status never calls an unauthenticated listener safe.
+- **Shape at selection:**
+  ```text
+  open connection -> initialize once -> initialized -> ordinary calls
+  overloaded idempotent read -> bounded backoff+jitter -> retry same request
+  overloaded initialize -> close connection -> bounded reconnect -> fresh initialize
+  overloaded mutation -> typed busy; never replay
+  ```
 - **Shape receipt:** one JSON-RPC object per text frame, `/readyz` readiness, one initialize
   handshake per connection, per the official Codex App Server page fetched 2026-08-28.
 - **Not a security abstraction:** Codex Worker does not mint credentials, terminate TLS, or put
@@ -314,3 +360,56 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Rests on:** D3, D4, D9, D12; MEASURED Codex 0.150.1 help; READ official transport/auth/overload documentation.
 - **Affects:** listener validator, connection factory, retry policy, readiness, status security projection, live matrix.
 - **Revisit-when:** Codex documents a remotely attachable stdio proxy or stable idempotency keys for mutating calls.
+
+## D17 — Put a maintenance-aware WebSocket gateway in front of a private app-server socket
+**When:** 2026-08-28T17:05:00Z · **Phase:** spec review · **Status:** provisional (autonomous fix to an independently found safety gap; supersedes the public-listener parts of D5/D9/D12/D16)
+**Decided by:** author after required spec reviewer proved direct-listener maintenance cannot exclude a concurrent TUI turn
+
+- **Trigger:** the app-server's subscriptions are per connection. A TUI can start a turn on an
+  unregistered thread between an inventory read and process termination. A direct Codex-owned
+  public listener offers no drain gate, so R7/R8 cannot honestly promise active-work-safe stop
+  or version replacement.
+- **Options weighed:**
+  - A: call `thread/list` twice and accept the race — gains a small implementation / sacrifices
+    the operator-locked no-active-interruption promise.
+  - B: remove guarded maintenance and require force for every restart — gains honesty / sacrifices
+    automatic idle upgrade and safe ordinary maintenance.
+  - C: service-owned public WebSocket gateway to a private Codex Unix-WebSocket listener — gains
+    a gate over every external mutation and preserves one app-server/thread authority / sacrifices
+    literal listener pass-through and adds a bounded forwarding component.
+- **Decided:** C. The Python service owns the public `ws://IP:PORT` listener. Each external TUI
+  connection maps one-to-one to a private Unix-WebSocket app-server connection; the broker uses
+  its own private initialized connection. A maintenance gate atomically blocks new worker
+  mutations and gateway request forwarding, waits forwarded mutations to settle, then pages
+  authoritative `thread/list` with `sourceKinds: []`. Only an empty active set permits ordinary
+  stop/replacement. Force still reports the active set before termination.
+- **Shape at selection:**
+  ```text
+                       ┌─ broker private WS connection ─┐
+  worker Unix RPC ─────┤                                │
+                       │   private unix:// app-server   │
+  Codex TUI ─ public ws gateway ─ one backend WS/client ┘
+
+  maintenance:
+    acquire gate -> block new mutating requests -> settle forwarded mutations
+    -> page thread/list(sourceKinds=[]) -> active? refuse : close clients/stop
+  ```
+- **Gateway request law:** while draining, client JSON-RPC requests are fail-closed except an
+  explicit read/interrupt allowlist; client responses to server-initiated approvals/input and
+  notifications continue so active turns can finish. Unknown request methods are blocked.
+- **Listener refinement:** the public override is `ws://IP:PORT`; `wss://` belongs at a TLS
+  reverse proxy because Codex 0.150.1 does not accept it as a server listener. Unix and stdio
+  remain private/internal transports, not public attach routes in this iteration.
+- **Not a second Codex state authority:** the gateway forwards frames and gates requests; it
+  neither interprets conversation contents nor creates a second app-server/thread store.
+- **Extension law:** every new client-initiated mutating method enters the explicit gate table
+  before release; unknown methods fail closed during drain. Inventory failure always refuses
+  ordinary maintenance.
+- **Anti-patterns:** no double-read race; no TUI bypass path advertised; no proxy-generated
+  success for a request Codex did not accept; no auth credential logging.
+- **Rests on:** R7/R8; D4/D6/D8/D10; required spec-review finding; MEASURED 0.150.1
+  `thread/list` schema with runtime `status.type=active` and `sourceKinds: []` meaning all sources.
+- **Affects:** service topology, listener meaning, app-server argv, gateway, maintenance gate,
+  active inventory, CLI/security projection, transport/live tests.
+- **Revisit-when:** Codex exposes an atomic drain-and-stop API or a managed public listener whose
+  maintenance contract includes every client/thread.

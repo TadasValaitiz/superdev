@@ -2,7 +2,7 @@
 
 **Purpose:** Understand how upgrades, dangerous stops, and legacy per-instance state preserve active and durable work.
 **Authority:** teaches ruled design — the decision log is the law.
-**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D8, D10, D14 · [design §5.6](./2026-08-28-codex-worker-shared-app-server-design.md)
+**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D8, D10, D14, D17 · [design §5.6](./2026-08-28-codex-worker-shared-app-server-design.md)
 **Series:** 4 of 4
 
 > **Status guide:** LOCKED operator-ruled · MISMATCH current code behaves differently today · FLEXIBLE implementation detail may move inside the ruled boundary · DEFERRED explicitly owned by another design.
@@ -36,8 +36,9 @@ rolling upgrades and mixed-version fleets are outside this internal tool.
 ### LOCKED — stop and restart are supervised maintenance
 
 Normal skill completion leaves the service running. `daemon stop` and `daemon restart` first
-inventory active turns and refuse with `service_busy`. `--force` is available only as a loud,
-human-supervised override and enumerates affected worker identities before termination.
+drain new worker/gateway mutations, settle forwarded requests, then page every app-server thread
+source for active status. They refuse with `service_busy`. `--force` is available only as a
+loud, human-supervised override and enumerates affected thread and known worker identities.
 
 **This means:** callbacks, caller exits and test cleanup cannot accidentally terminate someone
 else's work; the skill documents stop as dangerous; and the service remains immediately usable

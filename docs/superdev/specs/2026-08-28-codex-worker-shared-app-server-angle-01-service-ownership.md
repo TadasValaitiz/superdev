@@ -2,7 +2,7 @@
 
 **Purpose:** Understand why every worker and terminal attaches to one long-lived service instead of creating per-Claude daemons.
 **Authority:** teaches ruled design — the decision log is the law.
-**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D1, D3, D5, D6 · [design §5.1](./2026-08-28-codex-worker-shared-app-server-design.md)
+**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D1, D3, D5, D6, D17 · [design §5.1](./2026-08-28-codex-worker-shared-app-server-design.md)
 **Series:** 1 of 4
 
 > **Status guide:** LOCKED operator-ruled · MISMATCH current code behaves differently today · FLEXIBLE implementation detail may move inside the ruled boundary · DEFERRED explicitly owned by another design.
@@ -37,8 +37,9 @@ tool design.
 
 A caller runs `codex-worker start`. The client validates its request, resolves the single
 global runtime, and under one lifecycle lock either reuses an exact-ready service or starts
-one Codex app-server listening at `ws://127.0.0.1:4500`. The worker broker connects to that
-listener just like another app-server client.
+one Codex app-server on a private Unix-WebSocket plus a public gateway at
+`ws://127.0.0.1:4500`. The broker uses a private initialized connection; the human TUI uses
+the gateway.
 
 **This means:** five callers can arrive concurrently without producing five servers; a caller
 exit cannot tear down another caller's work; and the first successful start establishes the
@@ -85,5 +86,5 @@ under one global identity.
 
 ## Reconciled outcome
 
-Three LOCKED ownership rules and one FLEXIBLE supervision seam compose one machine-local
+Two LOCKED ownership rules and one FLEXIBLE supervision seam compose one machine-local
 Codex substrate: durable, deterministic, and independent of any Claude room.

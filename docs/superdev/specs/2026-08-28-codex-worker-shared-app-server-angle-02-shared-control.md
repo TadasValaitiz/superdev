@@ -2,7 +2,7 @@
 
 **Purpose:** Understand how Codex Worker automation and a human Codex TUI can observe and control the same thread without a lease protocol.
 **Authority:** teaches ruled design — the decision log is the law.
-**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D1, D4, D12, D13, D16 · [design §5.2 and §5.4](./2026-08-28-codex-worker-shared-app-server-design.md)
+**Formal anchors:** [decision log](./2026-08-28-codex-worker-shared-app-server-decisions.md) D1, D4, D12, D13, D16, D17 · [design §5.2 and §5.4](./2026-08-28-codex-worker-shared-app-server-design.md)
 **Series:** 2 of 4
 
 > **Status guide:** LOCKED operator-ruled · MISMATCH current code behaves differently today · FLEXIBLE implementation detail may move inside the ruled boundary · DEFERRED explicitly owned by another design.
@@ -13,8 +13,10 @@ When a human terminal and Claude-driven worker both attach to one Codex thread, 
 
 ## The mental model
 
-The app-server is a multiplayer event authority. Every connection has its own subscription,
-but all operations address the same server-owned thread and turn state.
+The app-server is a multiplayer event authority behind a transparent lobby door. Every client
+gets a one-to-one backend connection and its own subscription, but all operations address the
+same server-owned thread and turn state. The lobby can briefly stop new work for maintenance;
+it cannot rewrite a conversation result.
 
 It is not:
 
@@ -63,11 +65,36 @@ The worker may use one reconnecting transport per service or a managed set of co
 Subscription restoration must be explicit after reconnect. **This means:** transport recovery
 can change while thread identity and server authority remain fixed.
 
+### FLEXIBLE — a maintained WebSocket library carries the framing contract
+
+The isolated UV tool installs the Python-3.9-compatible `websockets` sync client/server rather
+than hand-rolling masks, fragmentation, ping/pong, close and bounded frames. A measured isolated
+Python 3.9.6 probe imported both sides with websockets 15.0.1. **This means:** the gateway can
+remain small and protocol-focused, dependency drift is contained inside the UV tool, and every
+upgrade repeats the live two-client lane.
+
+### LOCKED — overload never replays a mutation
+
+Codex WebSocket mode may refuse ingress with `-32001`. Reads use bounded backoff and jitter.
+An overloaded initialize closes the connection; a new connection gets exactly one fresh
+initialize/initialized handshake. A mutation returns busy without replay. **This means:** a
+retry cannot create a duplicate turn, and connection initialization never happens twice on one
+transport.
+
+### FLEXIBLE — the gateway closes the maintenance race
+
+The public gateway accepts `ws://IP:PORT`; the Codex child remains on a private Unix-WebSocket.
+During maintenance it blocks new/unknown mutating requests, waits already-forwarded mutations,
+then pages `thread/list` across every source. Client responses needed by active approvals and
+interrupt/read operations still pass. **This means:** a TUI-created thread is included even
+without a worker record, and ordinary stop cannot race a new public turn.
+
 ## What shared control cannot do
 
 It cannot prevent a human and Claude from issuing contradictory instructions, determine which
 intent is wiser, or guarantee both commands succeed. It does not transfer callback ownership,
-Claude room identity, or filesystem cwd merely because the TUI attached.
+Claude room identity, or filesystem cwd merely because the TUI attached. It does not terminate
+TLS or make a non-loopback plain-WebSocket listener safe.
 
 ## Current mismatch
 
@@ -87,5 +114,5 @@ expected-turn checks, durable cursors and typed race faults; replace only the pr
 
 ## Reconciled outcome
 
-Two LOCKED control laws and one FLEXIBLE transport seam give the human and automation equal
+Two LOCKED control laws and three FLEXIBLE transport seams give the human and automation equal
 access while keeping Codex app-server state authoritative.

@@ -1,6 +1,6 @@
 # Codex Worker Shared App-Server — CLI Surface
 
-**Status:** FLEXIBLE exact surface under operator-locked global topology; D15 provisional pending review
+**Status:** FLEXIBLE exact surface under operator-locked global topology; D15/D17 provisional pending review
 **Authority:** Public command and JSON contract for the design in
 [`2026-08-28-codex-worker-shared-app-server-design.md`](./2026-08-28-codex-worker-shared-app-server-design.md).
 The decision log remains authoritative for reasoning and drift arbitration.
@@ -11,9 +11,11 @@ The decision log remains authoritative for reasoning and drift arbitration.
 codex-worker [--pretty] [--socket ABSOLUTE_PATH] COMMAND ...
 ```
 
-- `--instance` is removed. `CODEX_WORKER_INSTANCE` is ignored and diagnosed when present.
-- `--socket` remains an expert/testing bypass to an explicitly managed RPC endpoint. It
-  never selects or creates another public service and never implies an app-server address.
+- `--instance` is removed with a local usage error and migration guidance.
+  `CODEX_WORKER_INSTANCE` has no routing effect and produces no ambient warning.
+- `--socket` remains an expert/testing bypass for raw model/session/turn operations and raw
+  daemon status. It is invalid for common worker commands and managed lifecycle/migration.
+  It never selects or creates another public service and never implies an attach address.
 - Without `--socket`, every operational command addresses one machine-local global service.
 - Every client invocation emits exactly one JSON object on stdout. Local usage errors exit 2;
   typed operational refusals exit 1; success exits 0. `daemon serve` remains stdout-silent.
@@ -25,17 +27,18 @@ The global service owns exactly one Codex app-server listener. Its default is:
 ws://127.0.0.1:4500
 ```
 
-An explicit remotely attachable listener (`ws://`, `wss://`, `unix://`, or `unix://PATH`)
-is passed through unchanged to Codex. `stdio://` and `off` are rejected because no second
-client can attach. A live generation's listener is immutable: a different requested listener
-produces `service_config_conflict`, never a second service or silent restart.
+An explicit public `ws://IP:PORT` listener is preserved unchanged by the service gateway.
+The Codex child itself listens on an owner-only Unix-WebSocket path. `wss://` belongs at an
+operator-owned TLS reverse proxy; `stdio://`, `off`, and public Unix paths are rejected for
+this human-attach surface. A live generation's public listener is immutable: a different
+request produces `service_config_conflict`, never a second service or silent restart.
 
 ## 2. Common worker commands
 
 | Command | Purpose | Args (all) | Command model | Gate | Status |
 |---|---|---|---|---|---|
-| `start` | create worker + first turn | `--name NAME` required; exactly one of `--prompt TEXT` / `--prompt-file PATH`; `--cwd ABS_PATH` required; mutually exclusive `--tier medium\|very-smart` / `--model ID`; `--effort EFFORT` default `medium`; `--read-only`; `--goal TEXT`; `--token-budget POSITIVE_INT`; `--no-callback`; `--output-schema PATH`; `--timeout NONNEGATIVE_SECONDS`; `--app-server-listen ADDRESS` | `StartWorkerCommand` | RECORD | EXISTS-REWORK |
-| `run` | continue worker | `--name NAME` required; exactly one prompt input; `--output-schema PATH`; `--timeout NONNEGATIVE_SECONDS` | `RunWorkerCommand` | RECORD | EXISTS-KEEP |
+| `start` | create worker + first turn | `--name NAME` required (1–128 chars; no control/NUL/path separator); exactly one of `--prompt NONEMPTY_TEXT` / `--prompt-file READABLE_UTF8_PATH`; `--cwd EXISTING_ABS_DIR` required; mutually exclusive `--tier medium\|very-smart` (default `medium`) / `--model NONEMPTY_ID`; `--effort NONEMPTY_SUPPORTED_EFFORT` default `medium`; `--read-only` default false/full; `--goal NONEMPTY_TEXT<=4000` optional; `--token-budget POSITIVE_INT` optional and requires `--goal`; `--no-callback`; `--output-schema READABLE_JSON_OBJECT_PATH`; `--timeout FINITE_NONNEGATIVE_SECONDS` optional/no deadline; `--app-server-listen ws://IP:PORT` optional/fixed default; top-level `--pretty`; `--socket` invalid | `StartWorkerCommand` | RECORD | EXISTS-REWORK |
+| `run` | continue worker | `--name NAME` required; exactly one prompt input with the same validation; `--output-schema READABLE_JSON_OBJECT_PATH`; `--timeout FINITE_NONNEGATIVE_SECONDS` optional/no deadline; top-level `--pretty`; `--socket` invalid | `RunWorkerCommand` | RECORD | EXISTS-KEEP |
 | `message` | proactive callback | `--name NAME` required; exactly one of `--message TEXT` / `--message-file PATH`; `--priority now\|next\|later` default `next`; `--cc-agent-name NAME` | `MessageWorkerCommand` | RECORD | EXISTS-KEEP |
 | `status` | inspect worker | `--name NAME` required | `StatusWorkerCommand` | READ | EXISTS-REWORK |
 | `messages` | recent messages | `--name NAME` required; `--tail POSITIVE_INT` default `1` | `MessagesWorkerCommand` | READ | EXISTS-KEEP |
@@ -45,6 +48,11 @@ produces `service_config_conflict`, never a second service or silent restart.
 | `goal set` | update native goal | `--name NAME` required; at least one of `--goal TEXT`, `--status active\|paused\|blocked\|usageLimited\|budgetLimited\|complete`, `--token-budget POSITIVE_INT` | `SetGoalCommand` | RECORD | EXISTS-KEEP |
 | `goal show` | inspect native goal | `--name NAME` required | `ShowGoalCommand` | READ | EXISTS-KEEP |
 | `limits` | inspect provider limits | no command args | `LimitsCommand` | READ | EXISTS-KEEP |
+
+Unless a row states otherwise, common rows accept top-level `--pretty`, reject top-level
+`--socket`, apply the same 1–128-character worker-name validator, and reject unknown args.
+Prompt/message files must be readable UTF-8 and non-empty; local validation happens before the
+global service is contacted or started.
 
 ### `start`
 
@@ -71,6 +79,9 @@ existing name continues that worker only through `run`; `start` refuses the coll
 `--cwd` remains explicit for the initial message. The Claude ambient working directory may
 be shown as a suggestion but is not silently substituted when the flag is absent. Claude
 environment values are callback metadata only; `CLAUDE_EFFORT` is never inherited.
+When neither policy selector is present, `--tier medium` is the SEED-DEFAULT. A token budget
+without an initial goal is a local exit-2 error. These laws preserve the existing validation
+contract except for the operator-requested explicit initial cwd.
 
 ### `run`
 
@@ -127,7 +138,7 @@ mature worker, goal, limit or callback vocabulary.
 |---|---|---|---|---|---|
 | `daemon start` | ensure global service | `--app-server-listen ADDRESS` optional, default `ws://127.0.0.1:4500` | `StartServiceCommand` | RECORD | EXISTS-REWORK |
 | `daemon status` | inspect without starting | no command args | `StatusServiceCommand` | READ | EXISTS-REWORK |
-| `daemon serve` | internal foreground server | `--state ABS_PATH` optional platform default; `--codex-bin PATH_OR_NAME` default `codex`; `--event-limit POSITIVE_INT` default `1000`; `--app-server-listen ADDRESS` optional fixed default | `ServeServiceCommand` | RECORD | EXISTS-REWORK |
+| `daemon serve` | hidden internal foreground server | `--state ABS_PATH` optional platform default; `--codex-bin PATH_OR_NAME` default `codex`; `--event-limit POSITIVE_INT` default `1000`; `--app-server-listen ws://IP:PORT` optional fixed default | `ServeServiceCommand` | RECORD | INTERNAL (suppressed from public family help) |
 | `daemon restart` | supervised restart | `--app-server-listen ADDRESS` optional; `--force` | `RestartServiceCommand` | FILTER + RECORD | NEW |
 | `daemon stop` | supervised stop | `--force` | `StopServiceCommand` | FILTER + RECORD | EXISTS-REWORK |
 | `daemon shutdown` | old unguarded shutdown | none | — | — | REMOVED |
@@ -151,7 +162,10 @@ The status result includes:
   "status": "ready",
   "service_version": "7.11.0",
   "pid": 12345,
+  "app_server_pid": 12346,
   "listener": "ws://127.0.0.1:4500",
+  "exposure": "loopback",
+  "auth": "none",
   "attach_command": "codex --remote ws://127.0.0.1:4500",
   "worker_count": 2,
   "active_turn_count": 0,
@@ -293,7 +307,7 @@ concurrently and receive results in completion order.
 
 If another process owns `127.0.0.1:4500`, ordinary start returns `address_in_use`. The process
 is preserved and no alternate port is selected. An operator may deliberately choose another
-Codex-supported listener with `--app-server-listen` before the service generation starts.
+WebSocket address with `--app-server-listen` before the service generation starts.
 
 ### Upgrade and maintenance
 
@@ -307,8 +321,8 @@ never infer that permission from task completion, caller exit, or stale callback
 - Old instance arguments are an intentional breaking removal; a local usage error points to
   global names and migration status rather than silently honoring the old scope.
 - Legacy durable data is migrated or quarantined, never silently discarded.
-- `stdio://` remains an app-server transport capability, not a remotely attachable endpoint;
-  the shared-control product path is WebSocket.
+- `stdio://` and private Unix WebSocket remain internal app-server transports; the public
+  shared-control product path is the service-owned WebSocket gateway.
 - Non-loopback or otherwise exposed listener security is the operator's responsibility for
   this internal tool; status must label the exposure honestly.
 
