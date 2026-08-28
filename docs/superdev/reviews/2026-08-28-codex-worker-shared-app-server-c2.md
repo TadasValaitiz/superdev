@@ -255,3 +255,62 @@ remaining_tests=536; failures=0; errors=0; exit 0
 Thus the honest full-gate receipt is **539 discovered; 536 GREEN; 3 expected D19
 failures**. All focused/process/structural/reviewer claims in the recovery erratum remain
 valid; Task 5 continues to own the version reconciliation.
+
+### Combined C2 Critical remediation — 2026-08-29
+
+A subsequent combined-C2 review found one Critical lifecycle escape: both
+`WorkerFacade.start --goal` and `WorkerFacade.goal_set` constructed
+`NativeCodexProxy(...).goal_set` directly. That bypassed Task 3's shared maintenance gate;
+the review's drain probe could emit `thread/goal/set` while the gate had zero active
+mutations.
+
+The repair adds `goal_set` to the narrow façade `BrokerPort` and routes both paths through
+the existing `WorkerBroker.goal_set`, whose `ServiceMaintenanceGate.mutation` owns the
+native write. The direct goal-write error path now projects the already-resolved record, so
+drain refusal carries its existing `session_id` and `thread_id` just as `start --goal`
+does. Focused REDs showed the two direct calls, missing direct-goal IDs, and a deterministic
+session-create → drain → `start --goal` interleaving; GREEN regressions now prove active
+mutation count one for both goal entrypoints, refusal before native effect during drain,
+preserved IDs/no turn start, and an AST guard against direct native goal-write escapes.
+
+```text
+$ PYTHONWARNINGS=error python3 -m unittest -q \
+    test_broker test_facade test_facade_integration test_rpc_cli
+Ran 196 tests in 32.627s — OK
+
+$ PYTHONWARNINGS=error python3 -m unittest -v \
+    test_rpc_cli.ManagedProcessLifecycleTests.test_concurrent_clients_share_one_daemon_without_crossing_results \
+    test_facade_integration.FacadeIntegrationTests.test_five_fresh_processes_converge_on_one_daemon_without_crossing_outputs \
+    test_facade_integration.FacadeIntegrationTests.test_goal_failure_refuses_before_starting_a_turn
+Ran 3 tests in 6.851s — OK
+
+$ PYTHONWARNINGS=error python3 -m unittest -v \
+    test_facade.FacadeTests.test_goal_writes_have_no_direct_native_proxy_escape_hatch \
+    test_service_domain.ServiceDomainArchitectureGuards \
+    test_websocket_transport.WebSocketTransportTests.test_websockets_dependency_import_is_lazy_with_negative_control \
+    test_websocket_gateway.GatewayTests.test_websockets_server_import_is_lazy_ast_guard \
+    test_tool_preflight.ToolPreflightTests.test_installed_layout_without_external_codex_is_one_typed_refusal \
+    test_tool_preflight.ToolPreflightTests.test_symlinked_venv_python_spawns_lexical_sibling_launcher
+Ran 13 tests in 1.247s — OK
+
+$ PYTHONWARNINGS=error python3 -m unittest discover -s tests/codex-worker -p 'test_*.py' -q
+Ran 542 tests in 44.186s
+FAILED (failures=3: Task 5 D19 version assertions only)
+```
+
+The exact D19 receipt remains `542 discovered / 539 GREEN / 3 expected failures`; no
+version declaration changed. After the ID correction, the same focused lane reran
+`196 tests in 33.025s — OK`; full discovery reran `542 tests in 44.432s` with the same
+three D19 failures only. Python 3.9.6 `compileall`, `bash -n`, and `git diff --check` are
+green. This initial remediation receipt preceded the re-review below; combined C2 approval
+is not claimed.
+
+### C2 Critical/Important re-review closure — 2026-08-29
+
+The same C2 reviewer re-reviewed commit `d60bc0d` after the gate and known-ID repairs.
+It independently reran four focused façade selectors and an actual
+`WorkerBroker` + `ServiceMaintenanceGate` drain probe. The probe confirmed that a drained
+direct goal mutation preserves the resolved `session_id` and `thread_id` while producing
+zero native `thread/goal/set` writes. Verdict: **Ready** — Critical: none; Important:
+none; Minor: none. This closes the reported gate escape and its follow-up ID projection;
+it does not claim Task 5's installed/live C3 checkride or broader combined approval.

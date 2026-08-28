@@ -46,6 +46,9 @@ class BrokerPort(Protocol):
     def turn_history(self, selector: IdentifierSelector,
                      cursor: Optional[str] = None,
                      limit: Optional[int] = None) -> dict: ...
+    def goal_set(self, thread_id: str, objective: Optional[str] = None,
+                 status: Optional[str] = None,
+                 token_budget: Optional[int] = None) -> dict: ...
     def daemon_status(self) -> dict: ...
     def turn_steer(self, selector: IdentifierSelector, prompt: str,
                    expected_turn_id: Optional[str] = None) -> dict: ...
@@ -129,7 +132,7 @@ class WorkerFacade:
             self._bind_callback(record, request.no_callback, capture)
             if request.goal is not None:
                 try:
-                    NativeCodexProxy(self.deps.broker.codex).goal_set(
+                    self.deps.broker.goal_set(
                         record.thread_id, request.goal, "active", request.token_budget)
                 except BaseException as exc:
                     return Err(self._effect_fault(exc, record, request.name))
@@ -267,11 +270,11 @@ class WorkerFacade:
             if isinstance(record, FacadeFault): return Err(record)
             stopped = self._attached_fault(record, request.name)
             if stopped: return Err(stopped)
-            result = NativeCodexProxy(self.deps.broker.codex).goal_set(
+            result = self.deps.broker.goal_set(
                 record.thread_id, request.objective, request.status, request.token_budget)
             return Ok(GoalResponse(self._worker(record), "present", self._goal(result["goal"])))
         except BaseException as exc:
-            return Err(self._effect_fault(exc, None, request.name))
+            return Err(self._effect_fault(exc, record, request.name))
 
     def goal_show(self, request: GoalShowRequest) -> Result[GoalResponse, FacadeFault]:
         try:

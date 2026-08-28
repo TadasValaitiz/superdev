@@ -1,3 +1,4 @@
+import ast
 import sys
 import json
 import shlex
@@ -25,6 +26,7 @@ from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
 from codex_worker.callback_store import CallbackStore
 from codex_worker.callback_dispatcher import TerminalCallbackDispatcher
+from codex_worker.websocket_gateway import ServiceMaintenanceGate
 
 
 class _CallbackDispatcher:
@@ -79,6 +81,9 @@ class _Broker:
 
     def daemon_status(self):
         return {"ready": True}
+
+    def goal_set(self, thread_id, objective=None, status=None, token_budget=None):
+        return self.codex.goal_set(thread_id, objective, status, token_budget)
 
     def start_session(self, spec):
         self.calls.append("session_start")
@@ -671,6 +676,99 @@ class FacadeTests(unittest.TestCase):
         })
         self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[-2:],
                          ["resume", record.thread_id])
+
+    def test_goal_mutations_enter_broker_gate_and_drain_refuses_before_native_effect(self):
+        gate = ServiceMaintenanceGate()
+        observed = []
+
+        def broker_goal_set(thread_id, objective=None, status=None, token_budget=None):
+            with gate.mutation("thread/goal/set"):
+                observed.append((thread_id, objective, status, token_budget,
+                                 gate.active_mutations))
+                return {"goal": {
+                    "threadId": thread_id, "objective": objective or "existing",
+                    "status": status or "active", "tokenBudget": token_budget,
+                    "tokensUsed": 0, "timeUsedSeconds": 0,
+                    "createdAt": 1, "updatedAt": 2,
+                }}
+
+        self.broker.goal_set = broker_goal_set
+        self.native.goal_set = lambda *args, **kwargs: self.fail(
+            "facade must not call the native goal proxy directly")
+        facade = self._facade()
+
+        started = facade.start(StartWorkerRequest(
+            "gated", "begin", self.cwd, goal="finish", token_budget=7))
+        self.assertIsInstance(started, Ok)
+        set_result = facade.goal_set(GoalSetRequest(
+            "gated", objective="pause", status="paused", token_budget=8))
+        self.assertIsInstance(set_result, Ok)
+        self.assertEqual(observed, [
+            (started.value.worker.thread_id, "finish", "active", 7, 1),
+            (started.value.worker.thread_id, "pause", "paused", 8, 1),
+        ])
+
+        with gate.drain():
+            blocked = facade.goal_set(GoalSetRequest("gated", objective="blocked"))
+
+        self.assertIsInstance(blocked, Err)
+        self.assertEqual((blocked.error.code, blocked.error.kind),
+                         (FacadeFaultCode.CODEX_FAILURE, "codex_failure"))
+        record = self.registry.resolve_name("gated")
+        self.assertEqual(blocked.error.known_ids, {
+            "name": "gated", "session_id": record.session_id,
+            "thread_id": record.thread_id, "turn_id": None,
+        })
+        self.assertEqual(len(observed), 2)
+
+    def test_start_goal_refuses_when_drain_begins_after_session_creation(self):
+        gate = ServiceMaintenanceGate()
+        drain = gate.drain()
+        original_start_session = self.broker.start_session
+
+        def start_session_then_drain(spec):
+            result = original_start_session(spec)
+            drain.__enter__()
+            return result
+
+        def broker_goal_set(thread_id, objective=None, status=None, token_budget=None):
+            with gate.mutation("thread/goal/set"):
+                self.fail("drain must reject the goal write before any native effect")
+
+        self.broker.start_session = start_session_then_drain
+        self.broker.goal_set = broker_goal_set
+        self.native.goal_set = lambda *args, **kwargs: self.fail(
+            "facade must not call the native goal proxy directly")
+        try:
+            result = self._facade().start(StartWorkerRequest(
+                "drain-race", "begin", self.cwd, goal="finish"))
+        finally:
+            drain.__exit__(None, None, None)
+
+        record = self.registry.resolve_name("drain-race")
+        self.assertIsInstance(result, Err)
+        self.assertEqual((result.error.code, result.error.kind),
+                         (FacadeFaultCode.CODEX_FAILURE, "codex_failure"))
+        self.assertEqual(result.error.details["reason"],
+                         "service is draining; request blocked: thread/goal/set")
+        self.assertEqual(result.error.known_ids, {
+            "name": "drain-race", "session_id": record.session_id,
+            "thread_id": record.thread_id, "turn_id": None,
+        })
+        self.assertNotIn("turn_start", self.broker.calls)
+
+    def test_goal_writes_have_no_direct_native_proxy_escape_hatch(self):
+        source = (ROOT / "skills" / "subagent-driven-development" / "scripts" /
+                  "codex_worker" / "facade.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        direct_writes = [node for node in ast.walk(tree)
+                         if isinstance(node, ast.Call)
+                         and isinstance(node.func, ast.Attribute)
+                         and node.func.attr == "goal_set"
+                         and isinstance(node.func.value, ast.Call)
+                         and isinstance(node.func.value.func, ast.Name)
+                         and node.func.value.func.id == "NativeCodexProxy"]
+        self.assertEqual(direct_writes, [])
 
     def test_output_schema_reaches_turn_start_spec_exactly(self):
         schema = {"type": "object", "required": ["answer"]}
