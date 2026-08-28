@@ -1,5 +1,6 @@
 """Pure projections from Codex items to the public worker result models."""
 import json
+import shlex
 from dataclasses import replace
 from typing import Dict, List, Optional, Sequence
 
@@ -10,6 +11,22 @@ from .commands import (
 )
 from .models import ItemRecord, TurnSnapshot
 from .callback_domain import CallbackEvent
+from .service_domain import AttachView, validate_public_listener
+
+
+def build_attach_view(listener: str, thread_id: str) -> AttachView:
+    """Project one exact public gateway route without exposing private transport."""
+    validated = validate_public_listener(listener)
+    if not isinstance(thread_id, str) or not thread_id:
+        raise ValueError("thread_id must be non-empty")
+    remote = shlex.quote(validated)
+    thread = shlex.quote(thread_id)
+    return AttachView(
+        validated,
+        thread_id,
+        "codex --remote %s" % remote,
+        "codex --remote %s resume %s" % (remote, thread),
+    )
 
 
 def build_worker_message_event(worker: WorkerView, message: str, priority, event_id: str,

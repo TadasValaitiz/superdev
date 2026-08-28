@@ -170,6 +170,27 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(dispatcher.test_projector.calls, 1)
         self.assertEqual(len(transport.sent), 1)
 
+    def test_duplicate_authoritative_terminal_notification_enqueues_once(self):
+        transport = _Transport()
+        enqueue_calls = []
+        original_enqueue = self.store.enqueue_terminal
+        def counted_enqueue(session_id, event):
+            enqueue_calls.append(event.event_id)
+            return original_enqueue(session_id, event)
+        self.store.enqueue_terminal = counted_enqueue
+        dispatcher = self._dispatcher(transport)
+        dispatcher.start(); self.addCleanup(dispatcher.shutdown)
+        dispatcher.observe_turn(self.worker.session_id, "turn-duplicate", self.context)
+        notification = {"method": "turn/completed", "params": {
+            "threadId": self.worker.thread_id,
+            "turn": {"id": "turn-duplicate", "status": "completed"},
+        }}
+        self.runtime.on_notification(notification)
+        self.runtime.on_notification(notification)
+        dispatcher.abandon_completion(self.worker.session_id, "turn-duplicate")
+        self._wait(lambda: len(transport.sent) == 1)
+        self.assertEqual(len(enqueue_calls), 1)
+
     def test_one_projection_is_reused_by_client_and_callback_then_context_is_released(self):
         transport = _Transport()
         enqueue_calls = []

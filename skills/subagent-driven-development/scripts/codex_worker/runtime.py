@@ -61,6 +61,7 @@ class _SessionRuntime:
     observed_start_turn_id: Optional[str] = None
     latest_turn: Optional[TurnSnapshot] = None
     terminal_turns: "OrderedDict[str, TurnSnapshot]" = field(default_factory=OrderedDict)
+    published_terminal_ids: "OrderedDict[str, None]" = field(default_factory=OrderedDict)
     publishing_terminal_ids: set = field(default_factory=set)
     next_cursor: int = 1
     events: Deque[EventRecord] = field(default_factory=deque)
@@ -95,11 +96,22 @@ class RuntimeStore:
         with runtime.condition:
             runtime.terminal_turns.pop(turn_id, None)
 
-    def _retain_terminal(self, runtime: _SessionRuntime, snapshot: TurnSnapshot) -> None:
+    def _retain_terminal(self, runtime: _SessionRuntime, snapshot: TurnSnapshot,
+                         publishing: bool = True) -> None:
         runtime.terminal_turns[snapshot.turn_id] = copy_turn_snapshot(snapshot)
         runtime.terminal_turns.move_to_end(snapshot.turn_id)
-        runtime.publishing_terminal_ids.add(snapshot.turn_id)
+        if publishing:
+            runtime.publishing_terminal_ids.add(snapshot.turn_id)
         self._trim_terminals(runtime)
+
+    def _mark_terminal_published(self, runtime: _SessionRuntime, turn_id: str) -> bool:
+        if turn_id in runtime.published_terminal_ids:
+            runtime.published_terminal_ids.move_to_end(turn_id)
+            return False
+        runtime.published_terminal_ids[turn_id] = None
+        while len(runtime.published_terminal_ids) > self._event_limit:
+            runtime.published_terminal_ids.popitem(last=False)
+        return True
 
     def _trim_terminals(self, runtime: _SessionRuntime) -> None:
         while len(runtime.terminal_turns) > self._event_limit:
@@ -244,10 +256,14 @@ class RuntimeStore:
                 turn_id = turn.get("id") if isinstance(turn, dict) else None
                 if not isinstance(turn_id, str):
                     return
+                if (turn_id in runtime.published_terminal_ids
+                        and not runtime.awaiting_start_response):
+                    # A delayed start notification cannot resurrect a turn whose
+                    # terminal state was already committed authoritatively.
+                    return
                 runtime.start_pending = False
                 runtime.active_turn_id = turn_id
                 retained = runtime.items.get(turn_id)
-                runtime.items.clear()
                 if retained:
                     runtime.items[turn_id] = retained
                 if runtime.awaiting_start_response:
@@ -258,20 +274,32 @@ class RuntimeStore:
                 turn_id = turn.get("id") if isinstance(turn, dict) else None
                 if not isinstance(turn_id, str):
                     return
+                if (turn_id in runtime.published_terminal_ids
+                        and runtime.active_turn_id != turn_id):
+                    return
                 status = turn.get("status") if isinstance(turn.get("status"), str) else "unknown"
                 error = self._turn_error(status, turn.get("error"))
-                if runtime.awaiting_start_response:
-                    # Terminal notification identity is the final authority.
+                pending_identity = runtime.observed_start_turn_id
+                belongs_to_pending = (
+                    runtime.awaiting_start_response
+                    and pending_identity in (None, turn_id)
+                    and runtime.active_turn_id in (None, turn_id)
+                )
+                if belongs_to_pending:
+                    # Terminal-before-response remains authoritative for the
+                    # same reserved start, but a delayed predecessor cannot
+                    # overwrite an already-observed successor identity.
                     runtime.observed_start_turn_id = turn_id
-                runtime.start_pending = False
-                runtime.active_turn_id = None
+                    runtime.start_pending = False
+                if runtime.active_turn_id == turn_id:
+                    runtime.active_turn_id = None
                 items = list(runtime.items.pop(turn_id, []))
-                runtime.items.clear()
                 runtime.latest_turn = TurnSnapshot(
                     turn_id, status, error, items
                 )
-                terminal = runtime.latest_turn
-                self._retain_terminal(runtime, terminal)
+                should_publish = self._mark_terminal_published(runtime, turn_id)
+                self._retain_terminal(runtime, runtime.latest_turn, should_publish)
+                terminal = runtime.latest_turn if should_publish else None
                 self._append_event(runtime, "turn_completed", turn_id, error=error)
                 runtime.condition.notify_all()
             elif method == "item/completed":
@@ -312,6 +340,111 @@ class RuntimeStore:
             with runtime.condition:
                 runtime.publishing_terminal_ids.discard(terminal.turn_id)
                 self._trim_terminals(runtime)
+
+    @staticmethod
+    def _snapshot_from_authoritative_turn(turn: object,
+                                          item_limit: int) -> TurnSnapshot:
+        if not isinstance(turn, dict) or set(("id", "status")) - set(turn):
+            raise CodexProtocolError("authoritative turn is malformed")
+        turn_id = turn.get("id")
+        provider_status = turn.get("status")
+        statuses = {
+            "inProgress": "in_progress",
+            "completed": "completed",
+            "failed": "failed",
+            "interrupted": "interrupted",
+        }
+        if (not isinstance(turn_id, str) or not turn_id
+                or provider_status not in statuses):
+            raise CodexProtocolError("authoritative turn identity or status is malformed")
+        raw_items = turn.get("items", [])
+        if not isinstance(raw_items, list):
+            raise CodexProtocolError("authoritative turn items are malformed")
+        items = []
+        for value in raw_items:
+            if (not isinstance(value, dict) or not isinstance(value.get("id"), str)
+                    or not value["id"] or not isinstance(value.get("type"), str)
+                    or not value["type"]):
+                raise CodexProtocolError("authoritative turn item is malformed")
+            items.append(ItemRecord(
+                value["id"], value["type"],
+                {key: item for key, item in value.items()
+                 if key not in ("id", "type")},
+            ))
+        raw_error = turn.get("error")
+        if raw_error is not None and not isinstance(raw_error, dict):
+            raise CodexProtocolError("authoritative turn error is malformed")
+        error = RuntimeStore._turn_error(provider_status, raw_error)
+        return TurnSnapshot(turn_id, statuses[provider_status], error,
+                            items[-item_limit:])
+
+    def reconcile_thread(self, thread: JsonObject) -> RuntimeStatus:
+        """Reconcile one subscribed thread read without fabricating events/messages."""
+        if not isinstance(thread, dict):
+            raise CodexProtocolError("authoritative thread is malformed")
+        thread_id = thread.get("id")
+        runtime = self._by_thread(thread_id if isinstance(thread_id, str) else None)
+        if runtime is None:
+            raise CodexProtocolError("authoritative thread is not attached")
+        status = thread.get("status")
+        if not isinstance(status, dict):
+            raise CodexProtocolError("authoritative thread status is malformed")
+        status_type = status.get("type")
+        if status_type == "active":
+            if (set(status) != {"type", "activeFlags"}
+                    or not isinstance(status.get("activeFlags"), list)
+                    or any(not isinstance(flag, str) or not flag
+                           for flag in status["activeFlags"])):
+                raise CodexProtocolError("authoritative active status is malformed")
+        elif status_type in ("idle", "notLoaded", "systemError"):
+            if set(status) != {"type"}:
+                raise CodexProtocolError("authoritative inactive status is malformed")
+        else:
+            raise CodexProtocolError("authoritative thread status type is unknown")
+        raw_turns = thread.get("turns")
+        if not isinstance(raw_turns, list):
+            raise CodexProtocolError("authoritative thread turns are malformed")
+        snapshots = [self._snapshot_from_authoritative_turn(value, self._event_limit)
+                     for value in raw_turns]
+        active = [value for value in snapshots if value.status == "in_progress"]
+        if status_type == "active" and len(active) != 1:
+            raise CodexProtocolError("active thread must identify exactly one active turn")
+        if status_type != "active" and active:
+            raise CodexProtocolError("inactive thread contains an active turn")
+        latest_terminal = next((value for value in reversed(snapshots)
+                                if value.status != "in_progress"), None)
+        terminal_to_publish = None
+        with runtime.condition:
+            runtime.attached = True
+            runtime.active_turn_id = active[0].turn_id if active else None
+            runtime.items.clear()
+            if active:
+                runtime.items[active[0].turn_id] = list(active[0].items)
+            if runtime.awaiting_start_response and active:
+                # Only an explicitly active authoritative turn can bind an
+                # in-flight start response. Idle history may describe an older
+                # turn and must not poison the pending response identity.
+                runtime.observed_start_turn_id = active[0].turn_id
+            if latest_terminal is not None:
+                runtime.latest_turn = copy_turn_snapshot(latest_terminal)
+                should_publish = self._mark_terminal_published(
+                    runtime, latest_terminal.turn_id)
+                self._retain_terminal(runtime, latest_terminal, should_publish)
+                if should_publish:
+                    terminal_to_publish = copy_turn_snapshot(latest_terminal)
+            runtime.condition.notify_all()
+            projected = RuntimeStatus(
+                runtime.attached,
+                runtime.active_turn_id,
+                None if runtime.latest_turn is None
+                else copy_turn_snapshot(runtime.latest_turn),
+            )
+        if terminal_to_publish is not None:
+            self._publish_terminal(runtime.record.session_id, terminal_to_publish)
+            with runtime.condition:
+                runtime.publishing_terminal_ids.discard(terminal_to_publish.turn_id)
+                self._trim_terminals(runtime)
+        return projected
 
     def status(self, session_id: str) -> RuntimeStatus:
         runtime = self._get(session_id)

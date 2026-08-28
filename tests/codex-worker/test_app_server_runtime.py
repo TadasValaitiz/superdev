@@ -343,12 +343,14 @@ class RuntimeStoreTests(unittest.TestCase):
         with self.assertRaises(CodexProtocolError):
             self.store.reconcile_start(self.session.session_id, "turn-response")
 
-    def test_terminal_notification_identity_supersedes_started_identity(self):
+    def test_delayed_foreign_terminal_does_not_supersede_started_identity(self):
         self.store.reserve_start(self.session.session_id)
         self.store.on_notification(self.started("turn-started"))
         self.store.on_notification(self.completed("turn-terminal"))
-        with self.assertRaises(CodexProtocolError):
-            self.store.reconcile_start(self.session.session_id, "turn-started")
+        self.store.reconcile_start(self.session.session_id, "turn-started")
+        status = self.store.status(self.session.session_id)
+        self.assertEqual(status.active_turn_id, "turn-started")
+        self.assertEqual(status.latest_turn.turn_id, "turn-terminal")
 
     def test_completion_notification_owns_terminal_identity_and_error(self):
         self.store.on_notification(self.started("turn-failed"))
