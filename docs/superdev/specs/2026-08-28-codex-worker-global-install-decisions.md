@@ -272,8 +272,9 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   process-construction-stamped peer is reused, while an incompatible peer is gracefully stopped and respawned under
   the selected instance lock. Durable state is preserved; unrelated instances and raw
   socket lifecycles are not stopped. Managed raw families probe the selected peer's
-  stamped version without autostart before their requested RPC, refuse mismatch without
-  invoking that RPC, and leave explicit `--socket` behavior unchanged.
+  stamped version without autostart before their requested RPC. Only exact-ready may
+  proceed; stopped, malformed, or otherwise failed probes refuse typed, as does mismatch,
+  without invoking the requested RPC. Explicit `--socket` behavior is unchanged.
 - **Rests on:** D1–D5, D11, one mutable UV tool, and per-room `CLAUDE_PLUGIN_ROOT`.
 - **Affects:** spec §5.2–§5.3, CLI §1/§3, skill preflight, managed daemon readiness.
 - **Revisit-when:** simultaneous operation across different cached Superdev versions is

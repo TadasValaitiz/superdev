@@ -34,7 +34,9 @@ gracefully replaced with durable mappings preserved, while unrelated instances a
 socket lifecycles are left alone. That identity is stamped once when the daemon process
 starts, so an in-place UV metadata change cannot relabel an old process. Advanced raw
 commands using `--instance` probe it without autostart and refuse mismatch before the
-requested RPC; explicit `--socket` behavior remains unchanged.
+requested RPC. Only an exact-ready probe can proceed; stopped, malformed, and failed
+probes refuse typed without the requested RPC. Explicit `--socket` behavior remains
+unchanged.
 
 Package lifecycle commands are maintenance opportunities, not routine dispatch
 ceremony. A local checkout may be installed directly for release validation; an

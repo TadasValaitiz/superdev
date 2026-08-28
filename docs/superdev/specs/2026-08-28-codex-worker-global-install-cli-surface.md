@@ -59,8 +59,9 @@ and trusted-preflight recovery. Managed daemon status also carries `worker_versi
 managed autostart reuses only an exact process-stamped peer and gracefully replaces an
 incompatible peer for the selected instance while preserving durable state (D12).
 Managed raw families selected with `--instance` perform the same status/version probe
-without autostart, then either proceed to the requested RPC, preserve the existing
-stopped-daemon refusal, or return typed mismatch without invoking the requested RPC.
+without autostart. Only exact-ready proceeds to the requested RPC. Stopped, malformed,
+or otherwise failed probes preserve typed daemon unavailability; version skew returns
+typed mismatch. Every refusal occurs without invoking the requested RPC.
 Explicit `--socket` behavior is unchanged. Local argument validation retains precedence
 and exits 2 before this guard.
 

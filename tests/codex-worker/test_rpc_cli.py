@@ -896,6 +896,27 @@ class CliTests(unittest.TestCase):
         self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
         spawn.assert_not_called()
 
+    def test_managed_raw_failed_status_refuses_before_target_rpc(self):
+        for failure in ("malformed", "probe_error"):
+            with self.subTest(failure=failure):
+                self.rpc_calls = []
+
+                def failed_peer(socket_path, method, params, timeout):
+                    self.rpc_calls.append((method, params, timeout))
+                    if method != "daemon/status":
+                        return {"result": {"unexpected": method}}
+                    if failure == "malformed":
+                        return {"result": ["not", "a", "status", "object"]}
+                    raise RuntimeError("status probe failed")
+
+                completed = self.run_cli(
+                    ["--instance", "managed-failed", "session", "list"],
+                    fake_rpc=failed_peer,
+                    include_socket=False,
+                )
+                self.assert_json_error(completed, 1, "daemon_unavailable")
+                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()
         args = parser.parse_args(["message", "--name", "build-1", "--message", "progress"])
@@ -1443,7 +1464,10 @@ class CliTests(unittest.TestCase):
         class Manager:
             deps = type("Deps", (), {"paths": type("Paths", (), {"socket_path": Path(self.socket_path)})()})()
             def status(inner):
-                return type("Response", (), {"to_dict": lambda self: {"status": "stopped"}})()
+                return type("Response", (), {
+                    "status": "ready", "last_error": None,
+                    "to_dict": lambda self: {"status": "ready"},
+                })()
             def stop(inner):
                 return type("Response", (), {"to_dict": lambda self: {"status_after": "stopped"}})()
 

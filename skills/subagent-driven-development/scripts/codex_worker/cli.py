@@ -667,6 +667,8 @@ def _managed_raw_endpoint(explicit_instance):
                 "reason": "Deliberately replace only this incompatible managed runtime",
             }],
         )
+    if getattr(status, "status", None) != "ready":
+        raise daemon_unavailable_fault(socket_path)
     return socket_path
 
 
