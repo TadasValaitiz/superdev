@@ -65,6 +65,9 @@ ruling carries:
 4. **A recommendation with its reasoning** — evidence over taste where evidence exists.
 
 A/B labels are for REFERRING to options, never a substitute for presenting them.
+A fork awaiting a ruling is presented IN FULL at every asking — "as presented
+earlier" is never a substitute; the operator rules on what is in front of them
+now, not on scrollback.
 Compression is for the trivial end only: if a fork honestly fits in three lines, it is
 probably not worth the operator's attention — decide it yourself, state the call in one
 sentence, and log it (the decision log records it either way). Spend the operator's

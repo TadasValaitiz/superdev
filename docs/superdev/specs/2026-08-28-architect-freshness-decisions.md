@@ -97,3 +97,20 @@ documentation up to date; briefs carrying milestone-architecture context.
 - **Why:** the bench room independently discovered the same standard ("present enough architecture and code context for the operator to reason without having written the implementation") — practice validated it before we wrote it.
 - **Verification:** D46 — fresh-eyes review dispatched over both files, not TDD.
 - **Revisit-when:** operator reports sessions dragging from over-presented trivial forks (then tighten the triviality threshold).
+
+## Session agenda (ratified 2026-08-28, per the new angle-first flow)
+
+Closed: ① spaces/corpus (D47–D51) · ② reconciliation (D52) · ③ markers (D53) · ④ execution proposal (D54/D55) · meta: brainstorming skill fix (D56).
+Open, in order: ⑤ briefs as architecture carriers · ⑥ the checkpoint conversation (orchestrator↔architect) · ⑦ item room skills · ⑧ milestone close & handoff (incl. sediment-removal duty) · ⑨ migration & bootstrap (calibration rollout) · ⑩ census tooling folded into the implementation plan unless raised.
+Amendments to this agenda are logged here as they occur.
+
+## D57 — Brief anatomy: five parts including 3–5 verbatim load-bearing rulings   (phase: brainstorm, status: locked)
+
+- **Decision:** every item-room brief's architecture section carries: (1) as-of line naming the last reconcile commit SHA; (2) MAJOR reads — governing anchors/angles at file/section precision, the item's execution-proposal entry, and the VISION (never legacy code) wherever the map says RESHAPE/REPLACE; (3) NARROW reads listed for on-need; (4) **3–5 load-bearing rulings quoted VERBATIM** from the anchors' LOCKED lines, each citing its D# — the one sanctioned duplication in the system; (5) rulings newer than the reconcile SHA as D# pointers only, never retold.
+- **Alternatives:** pointers-only (B) — doctrinally pure, but re-runs the measured failure: the calibration O-log (ten live workers) recorded that verbatim quoting prevented drift where extraction-by-the-worker did not.
+- **Why:** paraphrase is the drift entry-point; quotes are frozen at brief time, scoped, short-lived (item rooms live days), and stale-detectable (each cites its D#, supersession flips the status).
+- **Revisit-when:** a room ships against a quoted ruling superseded mid-item (then: reconcile events push a CORRECTION message to live rooms whose briefs cite the flipped D#).
+
+## Standard amendment (from live failure, this session)
+
+Fork Presentation Standard gains: **a re-ask is a full re-presentation** — a fork awaiting a ruling is presented complete at every asking; "as presented earlier" is never a substitute. Applied to the skill.
