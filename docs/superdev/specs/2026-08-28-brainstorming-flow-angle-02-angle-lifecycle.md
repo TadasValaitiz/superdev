@@ -2,7 +2,7 @@
 
 **Purpose:** understand where angles are born, worked, written, reviewed, and reconciled inside a brainstorm — and how today's skill drops them — without reading the skill or the decision log.
 **Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D56, D65, D66, D67 · [the study](./2026-08-28-bench-experience-study.md) Parts 1 & 3 · [experience design](./2026-08-28-brainstorming-experience-design.md) BR2–BR8, BR11, BR13.
-**Series:** 2 of 3 (brainstorming flow).
+**Series:** 2 of 4 (brainstorming flow).
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it · MISMATCH current skill text behaves differently today ·

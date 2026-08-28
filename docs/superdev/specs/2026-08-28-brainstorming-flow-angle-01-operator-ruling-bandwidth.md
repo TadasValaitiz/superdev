@@ -2,7 +2,7 @@
 
 **Purpose:** understand why the quality of a brainstorm is bounded by what reaches the operator's eyes at the moment of ruling — and what a fork must carry to be rulable — without reading the skill or the decision log.
 **Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D56, D66 · [the study](./2026-08-28-bench-experience-study.md) Part 2 · [experience design](./2026-08-28-brainstorming-experience-design.md) BR9/BR10.
-**Series:** 1 of 3 (brainstorming flow).
+**Series:** 1 of 4 (brainstorming flow).
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it · MISMATCH current skill text behaves differently today ·

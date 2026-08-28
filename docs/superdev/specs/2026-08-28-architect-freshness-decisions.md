@@ -227,3 +227,12 @@ The original Affects line named only angle-01 text; the set review measured the 
 - **Decision:** three recognized positional forms: (1) claim marker `**LOCKED:** …` line-initial; (2) section status `**Status:** LOCKED …`; (3) **heading marker** `### LOCKED — …` (any heading level; status word leads, em-dash separates). The census regex matches all three; everything else in D53 (plain vocabulary, flexible payload, MIG-MARK bracket in code) unchanged.
 - **Rests on:** D53; MEASURED — bench angle-19 headings. **Affects:** census script (Task 5a), map-and-markers.md, item-angle-template (already conformant).
 - **Revisit-when:** a fourth form emerges in practice (then: the census script's self-test corpus is the gate for admitting it).
+
+## D71 — Plans answer to the whole document set; angles govern where the spec is silent   (phase: plan, status: locked)
+**Decided by:** operator (live, in-session; caught that writing-plans consumes a single anchor and ruled the full-set contract, with an angle companion to carry it)
+
+- **Trigger:** the writing-plans skill's own text plans against "the spec"/"the anchor" alone — context pack, self-review, and plan reviewer all omit angle companions and census. Drift from this session's changes: angles became first-class carriers of collisions/cannot-do/mismatch AFTER writing-plans was last written, so planning still assumes the spec distills everything.
+- **Decision:** a plan answers to the UNION: decision log (the law) · spec (the anchor) · every angle companion · census. Where the spec is SILENT and an angle speaks, the ANGLE GOVERNS — its content is ruled design that the spec's compression dropped, not optional commentary. Where spec and angle CONTRADICT, the plan may not pick: that is a failed reconcile sweep, routed back per the drift protocol before planning proceeds. Mechanics: context pack lists every companion; task Read-first lines cite governing angle sections; self-review walks each angle's cannot-do + collisions against the task list; the plan reviewer receives the angles.
+- **Not a precedence inversion:** the log still outranks everything; an angle "governs" by TEACHING a ruling (citing its D#) — a plan citing an angle is citing the D# through it.
+- **Affects:** writing-plans SKILL.md + plan-document-reviewer-prompt.md (Task 5c); brainstorming-flow angle 4 (new).
+- **Revisit-when:** angle count per item grows enough that "read all companions" breaks planning budgets (then: the spec gains a per-area angle index so Read-first can slice).

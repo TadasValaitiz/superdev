@@ -2,7 +2,7 @@
 
 **Purpose:** follow a single brainstorm from the operator's first message to the implementation handoff, showing what exists on disk at every station — without reading the skill.
 **Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D56, D65, D66 · [experience design](./2026-08-28-brainstorming-experience-design.md) BR1, BR11, BR12, BU1–BU5 · angles 1–2 of this series (bandwidth; lifecycle).
-**Series:** 3 of 3 (brainstorming flow).
+**Series:** 3 of 4 (brainstorming flow).
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it · MISMATCH current skill text behaves differently today ·

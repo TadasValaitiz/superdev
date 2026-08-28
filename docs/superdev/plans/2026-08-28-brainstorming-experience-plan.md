@@ -119,7 +119,7 @@ room-brief-template.md → the five-part ARCHITECTURE CONTEXT block with FLAT pa
 the corrected block from freshness-angle-03). durable-state.md → ledger paths + the
 OPERATIONAL RECORD stamp.
 **5c — cross-wiring:** self-brainstorming SKILL.md (mode-resolved ratification gate);
-writing-plans Mode text (cites the canonical law); brainstorming SKILL.md steps 1/8 path+
+writing-plans FULL-SET contract (D71: context pack lists every angle companion + census; task Read-first cites governing angle sections; self-review walks each angle's cannot-do + collisions against the task list; plan-document-reviewer-prompt.md receives the angles) + Mode text (cites the canonical law); brainstorming SKILL.md steps 1/8 path+
 transport fixes (done early if blocker-driven); SDD SKILL.md room paragraph → D61 flow;
 cli-checkride §5b → docs/superdev/scenarios/; test-driven-development/test-clearance.md
 design/visions reference → flat vision filenames; glossary.md (two surfaces, reconcile
