@@ -55,7 +55,11 @@ item-angle-template.md.
 `spec-document-reviewer-prompt.md`, `item-angle-template.md`.
 - [ ] SKILL.md step 5: add the close-time clause — closing an angle that carried real
   collisions WRITES its companion then (movement step), step 8 keeps only the naming/template
-  pointer (no batching); step 10: reviewer dispatch lists angle companions as required inputs;
+  pointer (no batching); the DEPTH BAR travels with it (and into item-angle-template.md):
+  a companion is a TEACHING document readable without the log — its body is a Concrete
+  journey with one `### LOCKED — <claim>` subsection per ruling, each explained in prose
+  with a worked example; a companion that only cites D#s is an index, not an angle
+  (measured: bench angles avg ~2,750 words; cite-only companions ~380); step 10: reviewer dispatch lists angle companions as required inputs;
   step 11: the gate message hands the operator spec + companions as file:// links.
 - [ ] spec-document-reviewer-prompt.md: add **Angles:** input line + a cross-check row
   (companions contradict neither spec nor log; every companion collision appears in spec areas
