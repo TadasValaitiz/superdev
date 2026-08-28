@@ -56,9 +56,13 @@ loaded plugin's manifest before contacting a worker runtime. A version unequal t
 installed distribution returns the standard typed error envelope with code `-32038`,
 kind `tool_version_mismatch`, both versions, the loaded root, and actionable coordination
 and trusted-preflight recovery. Managed daemon status also carries `worker_version`;
-managed autostart reuses only an exact peer and gracefully replaces an incompatible peer
-for the selected instance while preserving durable state (D12). Raw socket lifecycle is
-unchanged. Local argument validation retains precedence and exits 2 before this guard.
+managed autostart reuses only an exact process-stamped peer and gracefully replaces an
+incompatible peer for the selected instance while preserving durable state (D12).
+Managed raw families selected with `--instance` perform the same status/version probe
+without autostart, then either proceed to the requested RPC, preserve the existing
+stopped-daemon refusal, or return typed mismatch without invoking the requested RPC.
+Explicit `--socket` behavior is unchanged. Local argument validation retains precedence
+and exits 2 before this guard.
 
 ## 2. UV tool lifecycle — distribution operations
 

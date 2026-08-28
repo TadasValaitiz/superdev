@@ -399,7 +399,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if getattr(args, "common", False):
             socket_path = _common_endpoint(args.instance, autostart=method in ("worker/start", "worker/run"))
         else:
-            socket_path = (str(_instance_manager(args.instance).deps.paths.socket_path)
+            socket_path = (_managed_raw_endpoint(args.instance)
                            if args.instance else args.socket or default_socket_path())
         response = rpc_call(socket_path, method, params, timeout=_client_timeout(method, params))
     except FacadeFault as fault:
@@ -637,6 +637,37 @@ def _common_endpoint(explicit_instance, autostart):
             }],
         )
     return str(manager.deps.paths.socket_path)
+
+
+def _managed_raw_endpoint(explicit_instance):
+    """Probe a managed raw target without changing its no-autostart lifecycle."""
+    manager = _instance_manager(explicit_instance)
+    status = manager.status()
+    socket_path = str(manager.deps.paths.socket_path)
+    if getattr(status, "status", None) == "stopped":
+        raise daemon_unavailable_fault(socket_path)
+    candidate_error = getattr(status, "last_error", None)
+    last_error = candidate_error if isinstance(candidate_error, dict) else {}
+    if last_error.get("reason") == "worker_version_mismatch":
+        selected = shlex.quote(manager.identity.value)
+        raise FacadeFault(
+            FacadeFaultCode.TOOL_VERSION_MISMATCH,
+            "Managed codex-worker daemon does not match the installed command",
+            "tool_version_mismatch",
+            details={
+                "reason": "managed_daemon_version_differs",
+                "expected_version": last_error.get("expected_version"),
+                "actual_version": last_error.get("actual_version"),
+                "socket_path": socket_path,
+            },
+            known_ids={"instance": manager.identity.value, "name": None,
+                       "session_id": None, "thread_id": None, "turn_id": None},
+            next_actions=[{
+                "command": "codex-worker --instance %s daemon start" % selected,
+                "reason": "Deliberately replace only this incompatible managed runtime",
+            }],
+        )
+    return socket_path
 
 
 def _daemon_launcher():

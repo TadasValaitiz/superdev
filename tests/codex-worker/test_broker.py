@@ -244,6 +244,16 @@ class WorkerBrokerTests(unittest.TestCase):
             {"id": "fake-model-b", "is_default": False, "supported_efforts": ["high", "medium"]},
         ])
 
+    def test_daemon_version_is_immutable_when_installed_metadata_changes(self):
+        with mock.patch("codex_worker.broker.distribution_version", return_value="7.10.0"):
+            broker = WorkerBroker(
+                self.registry, self.codex, self.runtime, str(Path(self.cwd) / "worker.sock"),
+                self.state_path, daemon_pid=1234,
+            )
+        with mock.patch("codex_worker.broker.distribution_version", return_value="7.10.1"):
+            status = broker.daemon_status()
+        self.assertEqual(status["worker_version"], "7.10.0")
+
     def test_session_start_validates_live_model_and_persists_immutable_cwd(self):
         with self.assertRaises(ModelSelectionError):
             self.broker.session_start(self.cwd, name="bad", model="not-live")

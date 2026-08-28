@@ -67,7 +67,12 @@ incidents are preserved without weakening or relabelling their outputs.
 
 ## Release relationship
 
-This checkride evaluated the complete implementation at 7.9.0. The coupled 7.10.0
-release changes only declared identity and release notes; package/version gates and a
-fresh current-user installed-command ride verify that exact release candidate after the
-bump.
+The original independently evaluated checkride covered the complete implementation at
+7.9.0. The coupled 7.10.0 release then changed declared identity and release notes and
+ran package/version plus current-user installed-command verification. Final review later
+added D12 runtime/cached-room compatibility behavior, so “changes only declared identity”
+is no longer accurate. The tracked `d12-reride/executor-transcript.md` is partial executor
+evidence only: it is not an evaluator PASS and its copied audit fixtures were not run
+because that archive omitted them. D12 acceptance therefore rests on the fresh
+warning-strict, focused regression, package, audit, and syntax gates recorded in AH6 and
+the implementation report until a complete independently evaluated reride is produced.

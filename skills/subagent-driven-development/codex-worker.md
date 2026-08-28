@@ -31,7 +31,10 @@ using other cached versions before repair. Thereafter every operational invocati
 safe diagnostic. Rerun this loaded root's trusted preflight only after coordination.
 Managed daemons also report their worker version: the selected incompatible runtime is
 gracefully replaced with durable mappings preserved, while unrelated instances and raw
-socket lifecycles are left alone.
+socket lifecycles are left alone. That identity is stamped once when the daemon process
+starts, so an in-place UV metadata change cannot relabel an old process. Advanced raw
+commands using `--instance` probe it without autostart and refuse mismatch before the
+requested RPC; explicit `--socket` behavior remains unchanged.
 
 Package lifecycle commands are maintenance opportunities, not routine dispatch
 ceremony. A local checkout may be installed directly for release validation; an

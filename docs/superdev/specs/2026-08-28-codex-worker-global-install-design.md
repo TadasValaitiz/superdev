@@ -100,7 +100,7 @@ dispatches any Codex work.
   plus the UV-bin path that must precede it. There is no source-launcher fallback.
 - **Depends on:** §5.1 package, the loaded skill filesystem locator, optional
   `CLAUDE_PLUGIN_ROOT`, and UV tool-bin configuration.
-- **Serves:** R1, R2, R3, R7 · **Governed by:** D1, D2, D3, D5, D6 · **Realizes:** UC1, UC2
+- **Serves:** R1, R2, R3, R7 · **Governed by:** D1, D2, D3, D5, D6, D12 · **Realizes:** UC1, UC2
 
 ### 5.3 Short-command operating contract
 
@@ -115,11 +115,15 @@ preflight, which is the friction reduction the design exists to deliver.
   `codex-worker <distribution-version>\n` to stdout, writes nothing to stderr, and exits
   0 without starting or contacting a daemon.
 - **Runtime compatibility:** Managed-daemon readiness includes the daemon distribution
-  version. Exact peers are reused; an incompatible peer for the selected instance is
+  version stamped once at process construction. Exact peers are reused; an incompatible
+  peer for the selected instance is
   gracefully stopped and replaced under the lifecycle lock without deleting durable
-  state. Other managed instances and explicitly selected raw sockets are not stopped.
+  state. Managed raw families (`--instance`) probe the same stamped identity without
+  autostart before their requested RPC and return typed mismatch without invoking that
+  RPC; explicit `--socket` behavior is unchanged. Other managed instances and explicitly
+  selected raw sockets are not stopped.
 - **Depends on:** successful §5.2 preflight.
-- **Serves:** R1, R3, R6, R7 · **Governed by:** D1, D2, D5 · **Realizes:** UC1, UC4
+- **Serves:** R1, R3, R6, R7 · **Governed by:** D1, D2, D5, D12 · **Realizes:** UC1, UC4
 
 ### 5.4 Distribution and verification boundary
 
@@ -231,7 +235,7 @@ installation, completing the story from bundled source to real terminal use.
 | AH3 | A developer can install the current source non-editably, move the source away, and see both the imported package and short command remain owned by UV's environment. | UC3 / R2, R4, R6 | fast | **MEASURED:** `20260828T080522.992380Z-86858-package-independence` used real UV with Python 3.9, moved the copied 7.10.0 source to `source-away`, imported from UV site-packages, and returned `codex-worker 7.10.0`; the checkride independently records a literal install/move/probe chain. |
 | AH4 | From an unrelated repository, the short command starts a named read-only worker that reports Git status without a long path. | UC4 / R1, R4, R6 | live checkride | **MEASURED:** evaluator PASS plus release run `20260828T080553.084680Z-87907-external-status-worker`: exactly one `status-checker-abc` from `/Users/tadas/Projects/ai-ethics/ai-trading-calibration`, read-only/no-callback; independently measured before/after both report branch `main`, staged/unstaged false, pre-existing untracked `.claude/settings.local.json`, clean false. |
 | AH5 | Missing UV, installation failure, stale/incompatible command, and absent external Codex each produce an honest recovery path. | UC1, UC2 / R3, R5, R7 | fast + checkride | **MEASURED:** final evaluator PASS reconstructs absent, simulated lower/higher versions over real repair, idempotence, shadow, missing UV, forced exit-47 install failure, and absent external Codex; preservation hashes and honesty labels are literal in the executor transcript. Deterministic pressure matrix remains in `test_tool_preflight.py`. |
-| AH6 | Existing common/raw commands, daemon durability, and both plugin packages remain intact. | UC1–UC4 / R6 | fast + package | **MEASURED 7.10.0 candidate:** warning-strict worker discovery 395 tests PASS; bump-version TOML fixture PASS; marketplace, Codex archive, and Codex sync gates each independently PASS; compileall and installer `bash -n` exit 0. |
+| AH6 | Existing common/raw commands, daemon durability, and both plugin packages remain intact. | UC1–UC4 / R6 | fast + package | **MEASURED 7.10.0+D12 candidate:** warning-strict worker discovery 402 tests PASS; managed raw model/stateful mismatch and immutable process-version regressions PASS; bump-version TOML fixture PASS; marketplace, Codex archive, and Codex sync gates each independently PASS; compileall and installer `bash -n` exit 0. |
 | AH7 | Reinstalling the UV tool leaves an existing named worker/session mapping observable afterward. | UC2, UC4 / R2, R4, R6 | live | **MEASURED:** checkride D11 journey preserves exact IDs and runtime-only stops; release run `20260828T080530.887690Z-86961-durable-reinstall` preserves all five durable file digests and exact session `dd0ea2a0-9d65-4a54-9f64-6105e8b00f53` / thread `01a04767-177e-7452-8a62-98ed7ab99f97` through 7.10.0 reinstall, run/reattach, and status. |
 
 ## 10. Drift protocol

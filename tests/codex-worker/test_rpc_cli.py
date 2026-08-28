@@ -847,6 +847,55 @@ class CliTests(unittest.TestCase):
         self.assert_json_error(completed, 1, "tool_version_mismatch")
         serve.assert_not_called()
 
+    def test_managed_raw_families_refuse_old_daemon_before_requested_rpc(self):
+        for command, requested_method in (
+                (["model", "list"], "model/list"),
+                (["session", "list"], "session/list")):
+            with self.subTest(command=command):
+                self.rpc_calls = []
+
+                def old_peer(socket_path, method, params, timeout):
+                    self.rpc_calls.append((method, params, timeout))
+                    if method == "daemon/status":
+                        return {"result": {
+                            "ready": True,
+                            "worker_version": "0.0.1",
+                            "daemon_pid": 1234,
+                            "codex_pid": 5678,
+                            "session_count": 1,
+                        }}
+                    return {"result": {"unexpected": requested_method}}
+
+                completed = self.run_cli(
+                    ["--instance", "managed-old"] + command,
+                    fake_rpc=old_peer,
+                    include_socket=False,
+                )
+                payload = self.assert_json_error(completed, 1, "tool_version_mismatch")
+                details = payload["error"]["data"]["details"]
+                self.assertEqual(details["actual_version"], "0.0.1")
+                self.assertEqual(details["expected_version"], cli.distribution_version())
+                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+                self.assertIn(
+                    "--instance managed-old daemon start",
+                    payload["error"]["data"]["next_actions"][0]["command"],
+                )
+
+    def test_managed_raw_stopped_daemon_preserves_no_autostart_refusal(self):
+        def stopped_peer(socket_path, method, params, timeout):
+            self.rpc_calls.append((method, params, timeout))
+            raise OSError("stopped")
+
+        with mock.patch.object(cli, "_spawn_daemon") as spawn:
+            completed = self.run_cli(
+                ["--instance", "managed-stopped", "model", "list"],
+                fake_rpc=stopped_peer,
+                include_socket=False,
+            )
+        self.assert_json_error(completed, 1, "daemon_unavailable")
+        self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+        spawn.assert_not_called()
+
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()
         args = parser.parse_args(["message", "--name", "build-1", "--message", "progress"])
@@ -1018,6 +1067,9 @@ class CliTests(unittest.TestCase):
         manager = type("Manager", (), {
             "deps": type("Deps", (), {
                 "paths": type("Paths", (), {"socket_path": Path(self.socket_path)})(),
+            })(),
+            "status": lambda self: type("Status", (), {
+                "status": "ready", "last_error": None,
             })(),
         })()
         cli._instance_manager = lambda selected: manager
