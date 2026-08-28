@@ -4,6 +4,7 @@ from enum import Enum
 import math
 from pathlib import Path
 import re
+import shlex
 import uuid
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
@@ -85,6 +86,10 @@ class FacadeFaultCode(int, Enum):
     CALLBACK_SEND_FAILED = -32036
     CALLBACK_PAYLOAD_TOO_LARGE = -32037
     TOOL_VERSION_MISMATCH = -32038
+    ADDRESS_IN_USE = -32039
+    SERVICE_BUSY = -32040
+    LEGACY_NAME_CONFLICT = -32041
+    SERVICE_CONFIG_CONFLICT = -32042
 
 
 FACADE_FAULT_KINDS = {
@@ -112,6 +117,10 @@ FACADE_FAULT_KINDS = {
     FacadeFaultCode.CALLBACK_SEND_FAILED: "callback_send_failed",
     FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE: "callback_payload_too_large",
     FacadeFaultCode.TOOL_VERSION_MISMATCH: "tool_version_mismatch",
+    FacadeFaultCode.ADDRESS_IN_USE: "address_in_use",
+    FacadeFaultCode.SERVICE_BUSY: "service_busy",
+    FacadeFaultCode.LEGACY_NAME_CONFLICT: "legacy_name_conflict",
+    FacadeFaultCode.SERVICE_CONFIG_CONFLICT: "service_config_conflict",
 }
 
 
@@ -236,6 +245,7 @@ _LITERALS = {
     "LimitsResponse": {"availability": {"available"}},
     "DaemonStatusResponse": {"status": {"stopped", "starting", "ready", "stopping", "failed"}},
     "DaemonStopResponse": {"status_before": {"stopped", "starting", "ready", "stopping", "failed"}, "status_after": {"stopped"}, "durable_state": {"preserved"}},
+    "ServiceStatusResponse": {"status": {"stopped", "starting", "ready", "stopping", "failed"}, "exposure": {"loopback", "non_loopback"}, "auth": {"none"}, "durable_state": {"preserved"}},
 }
 
 
@@ -441,6 +451,54 @@ class DaemonStatusRequest(StrictModel): pass
 class DaemonStopRequest(StrictModel): pass
 
 
+@dataclass(frozen=True)
+class StartServiceRequest(StrictModel):
+    listener: Optional[str] = None
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.listener is not None:
+            from .service_domain import validate_public_listener
+            validate_public_listener(self.listener)
+
+
+@dataclass(frozen=True)
+class StatusServiceRequest(StrictModel): pass
+
+
+@dataclass(frozen=True)
+class StopServiceRequest(StrictModel):
+    force: bool = False
+
+
+@dataclass(frozen=True)
+class RestartServiceRequest(StrictModel):
+    listener: Optional[str] = None
+    force: bool = False
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.listener is not None:
+            from .service_domain import validate_public_listener
+            validate_public_listener(self.listener)
+
+
+@dataclass(frozen=True)
+class MigrationStatusRequest(StrictModel): pass
+
+
+@dataclass(frozen=True)
+class ResolveLegacyConflictRequest(StrictModel):
+    name: str
+    thread_id: str
+    as_name: Optional[str] = None
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_worker_name(self.name)
+        if not self.thread_id:
+            raise ValueError("thread_id must be non-empty")
+        if self.as_name is not None:
+            validate_worker_name(self.as_name)
+
+
 def _positive(value: Any, name: str) -> None:
     if type(value) is not int or value <= 0: raise ValueError("%s must be a positive integer" % name)
 
@@ -452,10 +510,11 @@ def _validate_turn_options(schema: Optional[JsonObject], timeout: Optional[float
 
 @dataclass(frozen=True)
 class WorkerView(StrictModel):
-    instance: str; name: str; session_id: str; thread_id: str; cwd: str; tier: Optional[Tier]; model: str; effort: str; access: AccessMode
+    name: str; session_id: str; thread_id: str; cwd: str; tier: Optional[Tier]; model: str; effort: str; access: AccessMode
+    attach: Optional[JsonObject] = None
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not self.instance or not self.session_id or not self.thread_id or not self.model or not self.effort:
+        if not self.session_id or not self.thread_id or not self.model or not self.effort:
             raise ValueError("worker identity and configuration strings must be non-empty")
         try:
             uuid.UUID(self.session_id)
@@ -463,6 +522,18 @@ class WorkerView(StrictModel):
             raise ValueError("session_id must be a UUID") from exc
         validate_worker_name(self.name)
         validate_canonical_cwd(self.cwd)
+        if self.attach is not None:
+            from .service_domain import AttachView
+            AttachView.from_dict(self.attach)
+
+    @classmethod
+    def from_dict(cls, value: JsonObject):
+        legacy_fields = {item.name for item in fields(cls)} - {"attach"}
+        if isinstance(value, dict) and "instance" in value:
+            value = {key: item for key, item in value.items() if key != "instance"}
+        if isinstance(value, dict) and set(value) == legacy_fields:
+            value = dict(value, attach=None)
+        return super().from_dict(value)
 @dataclass(frozen=True)
 class TurnView(StrictModel): turn_id: str; status: str; error: Optional[JsonObject]
 @dataclass(frozen=True)
@@ -523,6 +594,110 @@ class DaemonStatusResponse(StrictModel): instance: InstanceView; status: str; da
 class DaemonStopResponse(StrictModel): instance: InstanceView; status_before: str; status_after: str; daemon_pid: Optional[int]; codex_pid: Optional[int]; durable_state: str; worker_count: int
 
 
+@dataclass(frozen=True)
+class ServiceStatusResponse(StrictModel):
+    status: str
+    service_version: str
+    pid: Optional[int]
+    app_server_pid: Optional[int]
+    listener: str
+    exposure: str
+    auth: str
+    attach_command: str
+    worker_count: int
+    active_turn_count: int
+    migration: JsonObject
+    durable_state: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from .service_domain import MigrationStatusView, validate_public_listener
+        validate_public_listener(self.listener)
+        if not self.service_version or not self.attach_command:
+            raise ValueError("service version and attach command must be non-empty")
+        for value in (self.pid, self.app_server_pid):
+            if value is not None and (type(value) is not int or value <= 0):
+                raise ValueError("service pids must be positive when present")
+        for value in (self.worker_count, self.active_turn_count):
+            if type(value) is not int or value < 0:
+                raise ValueError("service counts must be non-negative")
+        migration = MigrationStatusView.from_dict(self.migration)
+        if self.status not in ("ready", "stopping", "stopped"):
+            raise ValueError("invalid service status")
+        if self.exposure not in ("loopback", "non_loopback") or self.auth != "none":
+            raise ValueError("invalid service exposure or authentication")
+        if self.durable_state != "preserved":
+            raise ValueError("service durable state must be preserved")
+        if self.attach_command != "codex --remote %s" % shlex.quote(self.listener):
+            raise ValueError("service attach command does not match listener")
+        if self.status == "ready" and (
+                self.pid is None or self.app_server_pid is None or not migration.ready):
+            raise ValueError("ready service requires processes and complete migration")
+        if self.status == "stopped" and (
+                self.pid is not None or self.app_server_pid is not None
+                or self.active_turn_count != 0):
+            raise ValueError("stopped service cannot report live processes or activity")
+        if self.status == "stopping" and (
+                self.pid is None or self.active_turn_count != 0):
+            raise ValueError("stopping service requires daemon identity and no activity")
+
+
+@dataclass(frozen=True)
+class RestartServiceResponse(StrictModel):
+    maintenance: JsonObject
+    service: ServiceStatusResponse
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from .models import MaintenanceResult
+        impact = MaintenanceResult.from_dict(self.maintenance)
+        if impact.action != "restart" or impact.status != "completed":
+            raise ValueError("restart response requires completed restart impact")
+
+
+@dataclass(frozen=True)
+class MigrationStatusResponse(StrictModel):
+    status: str
+    ready: bool
+    imported_count: int
+    deduplicated_count: int
+    conflict_count: int
+    sources: List[JsonObject]
+    conflicts: List[JsonObject]
+    resolution_actions: List[JsonObject]
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from .service_domain import MigrationStatusView
+        MigrationStatusView.from_dict({
+            "status": self.status, "ready": self.ready,
+            "imported_count": self.imported_count,
+            "deduplicated_count": self.deduplicated_count,
+            "conflict_count": self.conflict_count,
+            "sources": self.sources, "conflicts": self.conflicts})
+        for action in self.resolution_actions:
+            if (not isinstance(action, dict)
+                    or set(action) != {"command", "reason"}
+                    or any(not isinstance(value, str) or not value
+                           for value in action.values())):
+                raise ValueError("invalid migration resolution action")
+
+    @classmethod
+    def from_status(cls, status):
+        actions = []
+        for conflict in status.conflicts:
+            for candidate in conflict.candidates:
+                actions.append({
+                    "command": "codex-worker migration resolve --name %s --thread %s" % (
+                        shlex.quote(conflict.name), shlex.quote(candidate.thread_id)),
+                    "reason": "Select this preserved legacy thread for the global name",
+                })
+        return cls(status.status.value, status.ready, status.imported_count,
+                   status.deduplicated_count, status.conflict_count,
+                   [value.to_dict() for value in status.sources],
+                   [value.to_dict() for value in status.conflicts], actions)
+
+
 # Internal service Result carriers; RPC uses the explicit façade and raw wire envelopes above.
 T = TypeVar("T"); E = TypeVar("E")
 @dataclass(frozen=True)
@@ -537,7 +712,7 @@ class FacadeFault(Exception):
     code: int; message: str; kind: str; retryable: bool = False; source: str = "codex-worker"; details: JsonObject = None; known_ids: JsonObject = None; next_actions: List[JsonObject] = None
     def __post_init__(self) -> None:
         details = {} if self.details is None else self.details
-        known_ids = {"instance": None, "name": None, "session_id": None, "thread_id": None, "turn_id": None} if self.known_ids is None else self.known_ids
+        known_ids = {"name": None, "session_id": None, "thread_id": None, "turn_id": None} if self.known_ids is None else self.known_ids
         next_actions = [] if self.next_actions is None else self.next_actions
         try:
             code = FacadeFaultCode(self.code)
@@ -552,7 +727,7 @@ class FacadeFault(Exception):
         if not isinstance(details, dict): raise ValueError("details must be an object")
         _json(details, "details")
         if not isinstance(known_ids, dict): raise ValueError("known_ids must be an object")
-        required_ids = {"instance", "name", "session_id", "thread_id", "turn_id"}
+        required_ids = {"name", "session_id", "thread_id", "turn_id"}
         if set(known_ids) != required_ids or any(value is not None and not isinstance(value, str) for value in known_ids.values()):
             raise ValueError("invalid known_ids")
         if not isinstance(next_actions, list): raise ValueError("next_actions must be a list")
@@ -574,6 +749,7 @@ class FacadeFault(Exception):
         if set(data) != required: raise ValueError("invalid façade fault data")
         return cls(value["code"], value["message"], data["kind"], data["retryable"], data["source"], data["details"], data["known_ids"], data["next_actions"])
     @classmethod
-    def worker_not_found(cls, name: str, instance: str):
+    def worker_not_found(cls, name: str, instance: Optional[str] = None):
+        del instance
         validate_worker_name(name)
-        return cls(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found", known_ids={"instance": instance, "name": name, "session_id": None, "thread_id": None, "turn_id": None}, next_actions=[{"command": "codex-worker start --name %s" % name, "reason": "Create this worker in the selected instance"}])
+        return cls(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found", known_ids={"name": name, "session_id": None, "thread_id": None, "turn_id": None}, next_actions=[{"command": "codex-worker start --name %s" % name, "reason": "Create this worker in the global service"}])

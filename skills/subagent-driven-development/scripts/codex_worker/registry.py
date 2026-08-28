@@ -7,6 +7,7 @@ import tempfile
 import threading
 import uuid
 import re
+import shlex
 from pathlib import Path
 from typing import List, Optional, Sequence
 
@@ -33,7 +34,7 @@ class LegacyNameConflict(RegistryConflict):
         self.candidates = [dict(candidate) for candidate in candidates]
         self.next_actions = [
             {"command": "codex-worker migration resolve --name %s --thread %s" %
-             (name, candidate["thread_id"]),
+             (shlex.quote(name), shlex.quote(candidate["thread_id"])),
              "reason": "Select this preserved legacy thread for the global name"}
             for candidate in self.candidates
         ]

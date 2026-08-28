@@ -195,6 +195,24 @@ class MigrationStatusView(StrictModel):
             raise ValueError("migration conflicts must be uniquely sorted")
 
 
+@dataclass(frozen=True)
+class MigrationResolveView(StrictModel):
+    name: str
+    session_id: str
+    thread_id: str
+    attach: AttachView
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_worker_name(self.name)
+        try:
+            uuid.UUID(self.session_id)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError("session_id must be a UUID") from exc
+        if self.thread_id != self.attach.thread_id:
+            raise ValueError("resolved thread and attach identity must match")
+
+
 def derive_service_paths(platform: str, state_home: Path, temp_root: Path,
                          uid: int) -> ServicePaths:
     """Derive the one machine-local service layout without ambient session state."""

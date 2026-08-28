@@ -347,6 +347,24 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertTrue(harness.connections[0][3].closed)
         self.assertIsNotNone(harness.processes[0].poll())
 
+    def test_termination_refuses_to_unlink_substituted_private_socket_inode(self):
+        harness = ServiceHarness()
+        service = self.make_service(harness)
+        service.start()
+        process = harness.processes[0]
+        process.returncode = 0
+        process.socket.close()
+        service.paths.private_codex_socket.unlink()
+        replacement = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        replacement.bind(str(service.paths.private_codex_socket))
+        os.chmod(service.paths.private_codex_socket, 0o600)
+        self.addCleanup(replacement.close)
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            with self.assertRaisesRegex(PermissionError, "changed after readiness"):
+                lifecycle.terminate_owned(lease)
+        self.assertTrue(service.paths.private_codex_socket.exists())
+
     def test_load_bearing_service_seams_and_frozen_status_are_exact(self):
         self.assertEqual(list(inspect.signature(GlobalWorkerService.start).parameters), ["self"])
         self.assertEqual(list(inspect.signature(GlobalWorkerService.status).parameters), ["self"])

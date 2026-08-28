@@ -1,6 +1,7 @@
 """Transport-independent named-worker orchestration service."""
 from dataclasses import dataclass
 import datetime
+import os
 import shlex
 import uuid
 from typing import Callable, Optional, Protocol, runtime_checkable
@@ -15,13 +16,18 @@ from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatu
                        SteerWorkerRequest, Tier, TurnView, WorkerHistoryRequest,
                        WorkerHistoryResponse, WorkerMessagesRequest, WorkerMessagesResponse,
                        WorkerStatusRequest, WorkerStatusResponse, WorkerView,
-                       FACADE_FAULT_KINDS)
-from .instance import InstanceIdentity
-from .models import IdentifierSelector, RpcFault, SessionRecord
-from .registry import RegistryError
+                       FACADE_FAULT_KINDS, MigrationStatusRequest,
+                       MigrationStatusResponse,
+                       ResolveLegacyConflictRequest, RestartServiceRequest,
+                       ServiceStatusResponse, StatusServiceRequest, StopServiceRequest)
+from .models import ActiveInventory, IdentifierSelector, RpcFault, SessionRecord
+from .registry import LegacyNameConflict, RegistryError
 from .runtime import SessionDetached, UnknownSession, WaitTimeout
 from .callback_store import CallbackBinding
 from .callback_dispatcher import TerminalProjectionContext
+from .models import MaintenanceResult
+from .service_domain import (MigrationResolveView, MigrationStatusView,
+                             ServiceConfig, DEFAULT_PUBLIC_LISTENER)
 
 
 _TIER_MODELS = {Tier.MEDIUM: "gpt-5.6-terra", Tier.VERY_SMART: "gpt-5.6-sol"}
@@ -37,6 +43,9 @@ class BrokerPort(Protocol):
     def start_session(self, spec: SessionStartSpec) -> dict: ...
     def start_turn(self, spec: TurnStartSpec) -> dict: ...
     def session_resume(self, selector: IdentifierSelector) -> dict: ...
+    def turn_history(self, selector: IdentifierSelector,
+                     cursor: Optional[str] = None,
+                     limit: Optional[int] = None) -> dict: ...
     def daemon_status(self) -> dict: ...
     def turn_steer(self, selector: IdentifierSelector, prompt: str,
                    expected_turn_id: Optional[str] = None) -> dict: ...
@@ -80,7 +89,6 @@ class CallbackTransportPort(Protocol):
 
 @dataclass(frozen=True)
 class FacadeDeps:
-    instance: InstanceIdentity
     registry: RegistryPort
     broker: BrokerPort
     runtime: RuntimePort
@@ -90,6 +98,7 @@ class FacadeDeps:
     callback_dispatcher: Optional[CallbackDispatcherPort] = None
     callback_transport: Optional[CallbackTransportPort] = None
     event_id: Callable[[], str] = lambda: str(uuid.uuid4())
+    listener: str = DEFAULT_PUBLIC_LISTENER
 
 
 class WorkerFacade:
@@ -178,7 +187,8 @@ class WorkerFacade:
                                FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE)
                     and record is not None):
                 fault = FacadeFault(fault.code, fault.message, fault.kind, fault.retryable,
-                                    fault.source, fault.details, self._known(record),
+                                    fault.source, self._details(fault.details, record),
+                                    self._known(record),
                                     self._callback_fault_actions(fault.code, record))
             return Err(fault)
 
@@ -226,10 +236,10 @@ class WorkerFacade:
             if isinstance(record, FacadeFault): return Err(record)
             stopped = self._attached_fault(record, request.name)
             if stopped: return Err(stopped)
-            proxy = NativeCodexProxy(self.deps.broker.codex)
             pages, cursor = [], None
             while len([turn for page in pages for turn in page]) < request.tail:
-                page = proxy.turns_list(record.thread_id, cursor, request.tail)
+                page = self.deps.broker.turn_history(
+                    IdentifierSelector(session_id=record.session_id), cursor, request.tail)
                 if cursor is not None and page["nextCursor"] == cursor:
                     raise FacadeFault(FacadeFaultCode.CODEX_PROTOCOL_ERROR,
                                       "Codex history pagination did not progress",
@@ -383,6 +393,12 @@ class WorkerFacade:
 
     def _resolve_policy(self, name):
         try: record = self.deps.registry.resolve_name(name)
+        except LegacyNameConflict as exc:
+            return FacadeFault(
+                FacadeFaultCode.LEGACY_NAME_CONFLICT,
+                "Legacy worker name has multiple preserved threads",
+                "legacy_name_conflict", details={"candidates": exc.candidates},
+                known_ids=self._known(name=name), next_actions=exc.next_actions)
         except RegistryError as exc:
             if str(exc) == "unknown worker name": return self._not_found_fault(name)
             return self._registry_fault(exc, name)
@@ -413,9 +429,11 @@ class WorkerFacade:
             return Err(self._effect_fault(exc, record, request.name))
 
     def _worker(self, record: SessionRecord) -> WorkerView:
-        return WorkerView(self.deps.instance.value, record.name, record.session_id, record.thread_id,
+        from .projection import build_attach_view
+        attach = build_attach_view(self.deps.listener, record.thread_id)
+        return WorkerView(record.name, record.session_id, record.thread_id,
                           record.cwd, Tier(record.tier) if record.tier else None, record.model,
-                          record.effort, AccessMode(record.access))
+                          record.effort, AccessMode(record.access), attach.to_dict())
 
     def _attached_fault(self, record, name):
         try:
@@ -444,14 +462,14 @@ class WorkerFacade:
     def _initial_prompt(self, prompt, record):
         block = (
             "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker --instance %s message --name %s --message \"<prose>\"\n"
+            "codex-worker message --name %s --message \"<prose>\"\n"
             "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
             "This command does not wait for a reply; Claude may later use steer or run."
-        ) % (shlex.quote(self.deps.instance.value), shlex.quote(record.name))
+        ) % shlex.quote(record.name)
         return prompt + "\n\n" + block
 
     def _command(self, suffix):
-        return "codex-worker --instance %s %s" % (shlex.quote(self.deps.instance.value), suffix)
+        return "codex-worker %s" % suffix
 
     def _callback_fault_actions(self, code, record):
         name = shlex.quote(record.name)
@@ -484,20 +502,30 @@ class WorkerFacade:
         return [status]
 
     def _raw_resume_command(self, thread_id):
-        return self._command("session resume --thread %s" % shlex.quote(thread_id))
+        return "codex --remote %s resume %s" % (
+            shlex.quote(self.deps.listener), shlex.quote(thread_id))
 
     def _raw_resume_action(self, thread_id):
         return {"command": self._raw_resume_command(thread_id),
                 "reason": "Recover through the advanced raw session path"}
 
+    def _details(self, details, record=None, thread_id=None):
+        value = dict(details) if isinstance(details, dict) else {}
+        resolved_thread = thread_id or (record.thread_id if record is not None else None)
+        if isinstance(resolved_thread, str):
+            from .projection import build_attach_view
+            value["attach"] = build_attach_view(
+                self.deps.listener, resolved_thread).to_dict()
+        return value
+
     def _not_found_fault(self, name):
         return FacadeFault(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found",
                            known_ids=self._known(name=name), next_actions=[{
                                "command": self._command("start --name %s" % name),
-                               "reason": "Create this worker in the selected instance"}])
+                               "reason": "Create this worker in the global service"}])
 
     def _known(self, record=None, name=None, turn_id=None):
-        return {"instance": self.deps.instance.value, "name": name or (record.name if record else None),
+        return {"name": name or (record.name if record else None),
                 "session_id": record.session_id if record else None,
                 "thread_id": record.thread_id if record else None, "turn_id": turn_id}
 
@@ -509,6 +537,7 @@ class WorkerFacade:
                 {"command": self._command("run --name %s" % record.name), "reason": "Continue the existing worker"},
                 {"command": self._command("start --name <different-name>"), "reason": "Create an independent worker"}]
         return FacadeFault(FacadeFaultCode.WORKER_NAME_EXISTS, "Worker name already exists", "worker_name_exists",
+                           details=self._details({}, record),
                            known_ids=self._known(record), next_actions=actions)
 
     def _legacy_actions(self, record):
@@ -520,16 +549,19 @@ class WorkerFacade:
 
     def _legacy_fault(self, record):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Worker policy is incomplete in legacy state", "registry_error",
-                           details={"policy_state": "incomplete_legacy"}, known_ids=self._known(record),
+                           details=self._details({"policy_state": "incomplete_legacy"}, record),
+                           known_ids=self._known(record),
                            next_actions=self._legacy_actions(record))
 
     def _registry_fault(self, exc, name, record=None):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Could not read worker registry", "registry_error",
-                           details={"reason": str(exc)}, known_ids=self._known(record, name=name))
+                           details=self._details({"reason": str(exc)}, record),
+                           known_ids=self._known(record, name=name))
 
     def _timeout_fault(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TIMEOUT_ACTIVE, "Timed out while worker turn remains active", "timeout_active",
-                           retryable=True, known_ids=self._known(record, turn_id=turn_id), next_actions=[
+                           retryable=True, details=self._details({}, record),
+                           known_ids=self._known(record, turn_id=turn_id), next_actions=[
                                {"command": self._command("status --name %s" % record.name), "reason": "Inspect active work"},
                                {"command": self._command("messages --name %s" % record.name), "reason": "Read retained narration"},
                                {"command": self._command("interrupt --name %s" % record.name), "reason": "Cancel only if deliberate"}])
@@ -539,15 +571,17 @@ class WorkerFacade:
             return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
                                known_ids=self._known(), next_actions=[
                                    {"command": self._command("daemon status"),
-                                    "reason": "Inspect the selected instance"},
+                                    "reason": "Inspect the global service"},
                                    {"command": self._command("start --name <name> --prompt <text>"),
-                                    "reason": "Start a named worker to launch the selected instance"}])
+                                    "reason": "Start a named worker to launch the global service"}])
         return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+                           details=self._details({}, record),
                            known_ids=self._known(record, name), next_actions=[
                                {"command": self._command("run --name %s --prompt <text>" % name), "reason": "Resume deliberately"}])
 
     def _turn_not_active(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TURN_NOT_ACTIVE, "Turn is not active", "turn_not_active",
+                           details=self._details({}, record),
                            known_ids=self._known(record, turn_id=turn_id), next_actions=[
                                {"command": self._command("status --name %s" % record.name), "reason": "Inspect the latest turn"}])
 
@@ -564,7 +598,12 @@ class WorkerFacade:
         ]
 
     def _effect_fault(self, exc, record, name, limits=False):
-        if isinstance(exc, FacadeFault): return exc
+        if isinstance(exc, FacadeFault):
+            if record is None:
+                return exc
+            return FacadeFault(exc.code, exc.message, exc.kind, exc.retryable,
+                               exc.source, self._details(exc.details, record),
+                               exc.known_ids, exc.next_actions)
         if isinstance(exc, WaitTimeout): return self._timeout_fault(record, exc.turn_id)
         if isinstance(exc, ModelSelectionError):
             details = exc.details or {}
@@ -575,7 +614,8 @@ class WorkerFacade:
                 code,
                 "Requested effort is unsupported" if code == FacadeFaultCode.EFFORT_UNSUPPORTED
                 else "Requested model is unavailable",
-                self._kind(code), details=details, known_ids=self._known(record, name),
+                self._kind(code), details=self._details(details, record),
+                known_ids=self._known(record, name),
                 next_actions=[{
                     "command": self._command("model list"),
                     "reason": "Inspect the current live model catalog; no fallback has run",
@@ -597,16 +637,18 @@ class WorkerFacade:
                     except (UnknownSession, SessionDetached):
                         pass
                 next_actions = self._active_turn_actions(known["name"])
-                return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
+                return FacadeFault(code, exc.message, self._kind(code),
+                                   details=self._details(exc.details, record, known["thread_id"]),
                                    known_ids=known, next_actions=next_actions)
             next_actions = []
             if isinstance(known["thread_id"], str):
                 next_actions.append(self._raw_resume_action(known["thread_id"]))
-            return FacadeFault(code, exc.message, self._kind(code), details=exc.details or {},
+            return FacadeFault(code, exc.message, self._kind(code),
+                               details=self._details(exc.details, record, known["thread_id"]),
                                known_ids=known, next_actions=next_actions)
         if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name, record)
         code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
-        details = {"reason": str(exc)}
+        details = self._details({"reason": str(exc)}, record)
         if limits:
             details.update({"capacity": "unknown", "inference": "do_not_infer"})
         return FacadeFault(code, "Codex operation failed" if not limits else "Codex limits are unavailable",
@@ -615,3 +657,132 @@ class WorkerFacade:
     @staticmethod
     def _kind(code):
         return FACADE_FAULT_KINDS[code]
+
+
+@runtime_checkable
+class ServicePort(Protocol):
+    def status(self): ...
+
+
+@runtime_checkable
+class MaintenancePort(Protocol):
+    def stop(self, force: bool) -> MaintenanceResult: ...
+    def restart(self, listener: str, force: bool) -> MaintenanceResult: ...
+
+
+@runtime_checkable
+class MigrationPort(Protocol):
+    def scan_and_apply(self) -> MigrationStatusView: ...
+    def resolve(self, name: str, thread_id: str,
+                as_name: Optional[str]) -> SessionRecord: ...
+
+
+@dataclass(frozen=True)
+class ServiceFacadeDeps:
+    service: ServicePort
+    broker: object
+    maintenance: MaintenancePort
+    migrator: MigrationPort
+    config: ServiceConfig
+
+
+class ServiceFacade:
+    """Strict public projection over global service lifecycle and migration."""
+    def __init__(self, deps: ServiceFacadeDeps):
+        if not isinstance(deps, ServiceFacadeDeps):
+            raise TypeError("deps must be ServiceFacadeDeps")
+        self.deps = deps
+
+    def status(self, request: StatusServiceRequest):
+        del request
+        try:
+            service = self.deps.service.status()
+            daemon = self.deps.broker.daemon_status()
+            inventory = (self.deps.broker.list_active_threads()
+                         if service.ready else ActiveInventory())
+            migration = self.deps.migrator.scan_and_apply()
+            status = "ready" if service.ready else "stopping"
+            return Ok(ServiceStatusResponse(
+                status, service.worker_version, daemon.get("daemon_pid", os.getpid()),
+                service.codex_pid, service.listener, service.exposure.value,
+                service.authentication.value,
+                "codex --remote %s" % shlex.quote(service.listener),
+                daemon.get("session_count", 0), inventory.active_count,
+                migration.to_dict(), "preserved"))
+        except BaseException as exc:
+            return Err(self._fault(exc, "service_status_failed"))
+
+    def stop(self, request: StopServiceRequest):
+        try:
+            return self._maintenance_result(
+                self.deps.maintenance.stop(request.force))
+        except BaseException as exc:
+            return Err(self._fault(exc, "service_stop_failed"))
+
+    def restart(self, request: RestartServiceRequest):
+        try:
+            listener = request.listener or self.deps.config.listener
+            return self._maintenance_result(
+                self.deps.maintenance.restart(listener, request.force))
+        except BaseException as exc:
+            return Err(self._fault(exc, "service_restart_failed"))
+
+    def migration_status(self, request: MigrationStatusRequest):
+        del request
+        try:
+            return Ok(MigrationStatusResponse.from_status(
+                self.deps.migrator.scan_and_apply()))
+        except BaseException as exc:
+            return Err(self._fault(exc, "migration_status_failed"))
+
+    def migration_resolve(self, request: ResolveLegacyConflictRequest):
+        try:
+            record = self.deps.migrator.resolve(
+                request.name, request.thread_id, request.as_name)
+            from .projection import build_attach_view
+            attach = build_attach_view(self.deps.config.listener, record.thread_id)
+            return Ok(MigrationResolveView(
+                record.name, record.session_id, record.thread_id, attach))
+        except BaseException as exc:
+            return Err(self._fault(exc, "migration_resolve_failed"))
+
+    @staticmethod
+    def _maintenance_result(result: MaintenanceResult):
+        if not isinstance(result, MaintenanceResult):
+            raise TypeError("maintenance returned an invalid result")
+        if result.status == "refused":
+            active = [item.to_dict() for item in result.inventory.items]
+            return Err(FacadeFault(
+                FacadeFaultCode.SERVICE_BUSY,
+                "Global service has active work", "service_busy",
+                details={"action": result.action, "active": active,
+                         "workers": result.workers.to_dict(),
+                         "durable_state": result.durable_state},
+                next_actions=[
+                    {"command": "codex-worker daemon status",
+                     "reason": "Inspect every active global thread"},
+                    {"command": "codex-worker status --name <worker>",
+                     "reason": "Wait for named active work to finish"},
+                ]))
+        return Ok(result)
+
+    @staticmethod
+    def _fault(exc: BaseException, reason: str) -> FacadeFault:
+        if isinstance(exc, FacadeFault):
+            return exc
+        if isinstance(exc, LegacyNameConflict):
+            return FacadeFault(
+                FacadeFaultCode.LEGACY_NAME_CONFLICT,
+                "Legacy worker name has multiple preserved threads",
+                "legacy_name_conflict", details={"candidates": exc.candidates},
+                next_actions=exc.next_actions)
+        if isinstance(exc, RpcFault):
+            details = dict(exc.details) if isinstance(exc.details, dict) else {}
+            details.setdefault("reason", reason)
+            return FacadeFault(FacadeFaultCode.CODEX_FAILURE,
+                               "Global service operation failed", "codex_failure",
+                               details=details)
+        return FacadeFault(
+            FacadeFaultCode.CODEX_FAILURE,
+            "Global service operation failed", "codex_failure",
+            details={"reason": reason, "cause": type(exc).__name__})

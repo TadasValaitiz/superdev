@@ -198,6 +198,14 @@ class WorkerBrokerTests(unittest.TestCase):
                                  self.idle_thread("idle-thread")],
                        "nextCursor": None, "backwardsCursor": "back"},
         }
+        self.codex.thread_reads = {
+            "worker-thread": {"thread": {
+                "id": "worker-thread", "status": {"type": "active"},
+                "turns": [{"id": "worker-turn", "status": "inProgress"}]}},
+            "tui-thread": {"thread": {
+                "id": "tui-thread", "status": {"type": "active"},
+                "turns": [{"id": "tui-turn", "status": "inProgress"}]}},
+        }
 
         inventory = self.broker.list_active_threads()
 
@@ -209,14 +217,18 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(inventory.items[0].origin, "worker")
         self.assertEqual(inventory.items[1].origin, "unmapped_tui")
         self.assertIsNone(inventory.items[1].worker)
+        self.assertEqual([item.turn_id for item in inventory.items],
+                         ["worker-turn", "tui-turn"])
         self.assertEqual(self.codex.calls, [
             ("thread/list", {"sourceKinds": []}),
             ("thread/list", {"sourceKinds": [], "cursor": "page-2"}),
+            ("thread/read", {"threadId": "worker-thread", "includeTurns": True}),
+            ("thread/read", {"threadId": "tui-thread", "includeTurns": True}),
         ])
 
     def test_activity_and_maintenance_models_are_strict_frozen_round_trips(self):
         inventory = ActiveInventory([
-            ActiveThreadItem("tui-thread", "unmapped_tui", None, None,
+            ActiveThreadItem("tui-thread", "unmapped_tui", None, None, "tui-turn",
                              ["waitingOnApproval"]),
         ])
         result = MaintenanceResult.completed("stop", inventory, True)
@@ -290,10 +302,16 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertFalse(self.codex.shutdown_called)
 
     def test_maintenance_refuses_any_active_item_and_force_reports_unmapped_before_termination(self):
+        self.registry.create_worker(
+            "idle-thread", self.cwd, "idle-worker", "medium",
+            "fake-model-a", "medium", "full")
         self.codex.thread_pages = {None: {
             "data": [self.active_thread("tui-thread")],
             "nextCursor": None, "backwardsCursor": None,
         }}
+        self.codex.thread_reads["tui-thread"] = {"thread": {
+            "id": "tui-thread", "status": {"type": "active"},
+            "turns": [{"id": "tui-turn", "status": "inProgress"}]}}
 
         class Lifecycle:
             def __init__(self, gate):
@@ -308,6 +326,9 @@ class WorkerBrokerTests(unittest.TestCase):
         refused = coordinator.stop(force=False)
         self.assertEqual(refused.status, "refused")
         self.assertEqual(refused.inventory.items[0].origin, "unmapped_tui")
+        self.assertEqual(refused.workers.to_dict(), {
+            "active_names": [], "idle_names": ["idle-worker"],
+            "active_count": 0, "idle_count": 1, "total_count": 1})
         self.assertEqual(lifecycle.terminated, 0)
 
         forced = coordinator.stop(force=True)
@@ -323,6 +344,9 @@ class WorkerBrokerTests(unittest.TestCase):
             "data": [self.active_thread("tui-thread")],
             "nextCursor": None, "backwardsCursor": None,
         }}
+        self.codex.thread_reads["tui-thread"] = {"thread": {
+            "id": "tui-thread", "status": {"type": "active"},
+            "turns": [{"id": "tui-turn", "status": "inProgress"}]}}
 
         class Lifecycle:
             def __init__(self, gate): self.gate, self.terminated = gate, 0

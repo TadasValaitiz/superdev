@@ -578,15 +578,38 @@ class WorkerBroker:
             raise self._codex_fault(exc) from exc
         items = []
         for thread_id, active_flags in active.items():
+            turn_id = self._inventory_turn_id(thread_id)
             record = by_thread.get(thread_id)
             if record is None:
                 items.append(ActiveThreadItem(
-                    thread_id, "unmapped_tui", None, None, active_flags))
+                    thread_id, "unmapped_tui", None, None, turn_id, active_flags))
             else:
                 items.append(ActiveThreadItem(
                     thread_id, "worker", record.name, record.session_id,
-                    active_flags))
+                    turn_id, active_flags))
         return ActiveInventory(items)
+
+    def _inventory_turn_id(self, thread_id: str) -> str:
+        try:
+            result = self.codex.call("thread/read", {
+                "threadId": thread_id, "includeTurns": True})
+            thread = result.get("thread") if isinstance(result, dict) else None
+            turns = thread.get("turns") if isinstance(thread, dict) else None
+            active = ([turn for turn in turns
+                       if isinstance(turn, dict) and turn.get("status") == "inProgress"]
+                      if isinstance(turns, list) else [])
+            if (thread is None or thread.get("id") != thread_id
+                    or not isinstance(thread.get("status"), dict)
+                    or thread["status"].get("type") != "active"
+                    or len(active) != 1
+                    or not isinstance(active[0].get("id"), str)
+                    or not active[0]["id"]):
+                raise CodexCallError(
+                    "protocol_error", "thread/read",
+                    {"message": "active inventory turn identity is ambiguous"})
+            return active[0]["id"]
+        except CodexCallError as exc:
+            raise self._codex_fault(exc) from exc
 
     @staticmethod
     def _validate_inventory_page(result: object) -> None:
@@ -984,8 +1007,15 @@ class MaintenanceCoordinator:
             raise ValueError("force must be bool")
         with self._gate.drain() as lease:
             inventory = self._broker.list_active_threads()
+            from .models import WorkerImpact
+            records = self._broker.registry.list()
+            all_names = {record.name for record in records if record.name is not None}
+            active_names = {item.worker for item in inventory.items
+                            if item.worker is not None}
+            workers = WorkerImpact(sorted(active_names), sorted(all_names - active_names))
             if inventory.items and not force:
-                return MaintenanceResult.refused(inventory, action, listener)
+                return MaintenanceResult.refused(
+                    inventory, action, listener, workers)
             self._lifecycle.terminate_owned(lease)
             return MaintenanceResult.completed(
-                action, inventory, force, listener)
+                action, inventory, force, listener, workers)

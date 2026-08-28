@@ -15,7 +15,9 @@ from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
 from .commands import (FacadeFault, GoalSetRequest, GoalShowRequest, InterruptWorkerRequest,
                        LimitsRequest, Ok, RunWorkerRequest, StartWorkerRequest,
                        MessageWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest, WorkerMessagesRequest,
-                       WorkerStatusRequest)
+                       WorkerStatusRequest, MigrationStatusRequest,
+                       ResolveLegacyConflictRequest, RestartServiceRequest,
+                       StatusServiceRequest, StopServiceRequest)
 
 JsonId = Optional[Union[str, int]]
 
@@ -134,7 +136,7 @@ class RpcRequestHandler(socketserver.StreamRequestHandler):
             try:
                 method, params = self._validate_request(payload)
                 result = self.server.dispatch(method, params)  # type: ignore[attr-defined]
-                shutdown_accepted = method == "daemon/shutdown"
+                shutdown_accepted = method in ("service/stop", "service/restart")
                 self._write(encode_response(request_id, result=result))
             except RpcFault as fault:
                 self._write(encode_response(request_id, fault=fault))
@@ -195,6 +197,14 @@ COMMON_METHODS = {
     "account/limits": ("limits", LimitsRequest),
 }
 
+SERVICE_METHODS = {
+    "service/status": ("status", StatusServiceRequest),
+    "service/stop": ("stop", StopServiceRequest),
+    "service/restart": ("restart", RestartServiceRequest),
+    "migration/status": ("migration_status", MigrationStatusRequest),
+    "migration/resolve": ("migration_resolve", ResolveLegacyConflictRequest),
+}
+
 
 class FacadeRpcFault(RpcFault):
     """RPC adapter preserving the façade's richer refusal data unchanged."""
@@ -209,12 +219,14 @@ class FacadeRpcFault(RpcFault):
 class RpcServer(ThreadingUnixServer):
     """Threaded one-request-per-connection JSON-RPC server over an AF_UNIX path."""
 
-    def __init__(self, socket_path: str, broker: Any, facade: Any = None):
+    def __init__(self, socket_path: str, broker: Any, facade: Any = None,
+                 service_facade: Any = None):
         if not isinstance(socket_path, str) or not socket_path:
             raise SocketPathUnsafe("socket_path must be a non-empty string")
         self.socket_path = socket_path
         self.broker = broker
         self.facade = facade
+        self.service_facade = service_facade
         self._shutdown_started = False
         self._bound_stat = None
         self._lock_fd = None  # type: Optional[int]
@@ -278,6 +290,24 @@ class RpcServer(ThreadingUnixServer):
             except ValueError as exc:
                 raise _fault(-32602, "Invalid params", "invalid_params", details={"reason": str(exc)}) from exc
             result = getattr(self.facade, operation)(request)
+            if isinstance(result, Ok):
+                return result.value.to_dict()
+            fault = result.error
+            if isinstance(fault, FacadeFault):
+                raise FacadeRpcFault(fault)
+            raise _fault(-32603, "Internal error", "internal_error")
+        service = SERVICE_METHODS.get(method)
+        if service is not None:
+            if self.service_facade is None:
+                raise _fault(-32601, "Method not found", "method_not_found",
+                             details={"method": method})
+            operation, request_type = service
+            try:
+                request = request_type.from_dict(params)
+            except ValueError as exc:
+                raise _fault(-32602, "Invalid params", "invalid_params",
+                             details={"reason": str(exc)}) from exc
+            result = getattr(self.service_facade, operation)(request)
             if isinstance(result, Ok):
                 return result.value.to_dict()
             fault = result.error
@@ -565,10 +595,6 @@ def _daemon_status(broker: Any, params: JsonObject) -> JsonObject:
     return _no_params(broker, params, broker.daemon_status)
 
 
-def _daemon_shutdown(broker: Any, params: JsonObject) -> JsonObject:
-    return _no_params(broker, params, broker.shutdown)
-
-
 def _model_list(broker: Any, params: JsonObject) -> JsonObject:
     return _no_params(broker, params, broker.model_list)
 
@@ -642,7 +668,6 @@ def _turn_interrupt(broker: Any, params: JsonObject) -> JsonObject:
 
 _DISPATCH = {
     "daemon/status": _daemon_status,
-    "daemon/shutdown": _daemon_shutdown,
     "model/list": _model_list,
     "session/start": _session_start,
     "session/resume": _session_resume,
@@ -655,3 +680,18 @@ _DISPATCH = {
     "turn/steer": _turn_steer,
     "turn/interrupt": _turn_interrupt,
 }  # type: Dict[str, Callable[[Any, JsonObject], JsonObject]]
+
+
+class _ValidationBroker:
+    """No-I/O sink used to reuse the server's exact raw parameter validators."""
+
+    def __getattr__(self, unused_name: str):
+        return lambda *unused_args, **unused_kwargs: {}
+
+
+def validate_raw_params(method: str, params: JsonObject) -> None:
+    """Validate a raw CLI request without selecting or contacting an endpoint."""
+    validator = _DISPATCH.get(method)
+    if validator is None:
+        raise ValueError("unsupported raw method: %s" % method)
+    validator(_ValidationBroker(), params)

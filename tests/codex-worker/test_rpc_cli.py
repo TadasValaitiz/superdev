@@ -23,6 +23,7 @@ from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.cli import build_parser, _params_for
 from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                                    resolve_instance)
+from codex_worker.service_domain import derive_service_paths
 from codex_worker.commands import (
     AccessMode,
     AgentMessageView,
@@ -168,6 +169,20 @@ def _pid_exists(pid):
     return True
 
 
+def _websockets_pythonpath():
+    """Use uv's already-downloaded test dependency without mutating an install."""
+    cache = Path.home() / ".cache" / "uv" / "archive-v0"
+    for metadata in sorted(cache.glob("*/websockets-15.*.dist-info")):
+        return str(metadata.parent)
+    raise AssertionError("websockets 15 must already exist in the uv cache")
+
+
+def _unused_loopback_listener():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return "ws://127.0.0.1:%d" % probe.getsockname()[1]
+
+
 class RpcServerTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
@@ -183,8 +198,8 @@ class RpcServerTests(unittest.TestCase):
             with contextlib.suppress(Exception):
                 server.server_close()
 
-    def start_server(self, broker=None, facade=None):
-        server = RpcServer(self.socket_path, broker or FakeBroker(), facade)
+    def start_server(self, broker=None, facade=None, service_facade=None):
+        server = RpcServer(self.socket_path, broker or FakeBroker(), facade, service_facade)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         server._test_thread = thread
@@ -419,18 +434,15 @@ class RpcServerTests(unittest.TestCase):
         self.assertEqual(response["id"], "null-params")
         self.assertEqual(response["error"]["code"], -32602)
 
-    def test_shutdown_disconnect_still_stops_wrapper(self):
+    def test_unguarded_shutdown_method_is_absent_and_wrapper_remains(self):
         broker = FakeBroker()
         server = self.start_server(broker)
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(1.0)
-            client.connect(self.socket_path)
-            client.sendall(b'{"jsonrpc":"2.0","id":"bye","method":"daemon/shutdown","params":{}}\n')
-        deadline = time.time() + 3.0
-        while time.time() < deadline and server._test_thread.is_alive():
-            time.sleep(0.05)
-        self.assertTrue(broker.shutdown_called)
-        self.assertFalse(server._test_thread.is_alive())
+        response = self.send_raw(
+            b'{"jsonrpc":"2.0","id":"bye","method":"daemon/shutdown","params":{}}\n')
+        self.assertEqual(response["error"]["code"], -32601)
+        self.assertFalse(broker.shutdown_called)
+        self.assertTrue(server._test_thread.is_alive())
+        self.assertTrue(self.ping(server))
 
     def test_rpc_rejects_unknown_params_and_non_finite_raw_json(self):
         self.start_server()
@@ -603,6 +615,39 @@ class RpcServerTests(unittest.TestCase):
         self.assertEqual(response["error"]["code"], -32602)
         self.assertEqual(response["error"]["data"]["kind"], "invalid_params")
 
+    def test_service_and_migration_rpc_use_strict_requests_and_public_faults(self):
+        calls = []
+        class ServiceFacade:
+            def status(self, request):
+                calls.append(("status", request.to_dict()))
+                return Ok(type("View", (), {"to_dict": lambda self: {"status": "ready"}})())
+            def stop(self, request):
+                calls.append(("stop", request.to_dict()))
+                return Err(FacadeFault(FacadeFaultCode.SERVICE_BUSY,
+                    "Global service has active work", "service_busy",
+                    details={"active": [{"origin": "unmapped_tui"}]},
+                    next_actions=[{"command": "codex-worker daemon status",
+                                   "reason": "Inspect active work"}]))
+            def migration_status(self, request):
+                calls.append(("migration_status", request.to_dict()))
+                return Ok(type("View", (), {"to_dict": lambda self: {"status": "complete"}})())
+            def migration_resolve(self, request):
+                calls.append(("migration_resolve", request.to_dict()))
+                return Ok(type("View", (), {"to_dict": lambda self: {"thread_id": request.thread_id}})())
+        server = self.start_server(service_facade=ServiceFacade())
+        self.assertEqual(rpc_call(server.socket_path, "service/status", {}, 1)["result"],
+                         {"status": "ready"})
+        refused = rpc_call(server.socket_path, "service/stop", {"force": False}, 1)
+        self.assertEqual(refused["error"]["code"], -32040)
+        self.assertEqual(refused["error"]["data"]["details"]["active"][0]["origin"],
+                         "unmapped_tui")
+        self.assertNotIn("--force", json.dumps(refused["error"]["data"]["next_actions"]))
+        self.assertEqual(rpc_call(server.socket_path, "migration/status", {}, 1)["result"],
+                         {"status": "complete"})
+        resolved = rpc_call(server.socket_path, "migration/resolve", {
+            "name": "legacy-a", "thread_id": "thread-a", "as_name": None}, 1)
+        self.assertEqual(resolved["result"]["thread_id"], "thread-a")
+
     def test_encode_response_preserves_the_shared_rpc_sum_type_serializer(self):
         encoded = encode_response("x", fault=RpcFault(-32001, "unknown", "unknown_session"))
         self.assertEqual(json.loads(encoded.decode("utf-8")), {
@@ -614,7 +659,7 @@ class RpcServerTests(unittest.TestCase):
 
     def test_common_rpc_success_families_have_exact_public_shapes(self):
         worker = WorkerView(
-            "instance-a", "worker-a", "00000000-0000-0000-0000-000000000001",
+            "worker-a", "00000000-0000-0000-0000-000000000001",
             "thread-a", str(Path(self.tempdir.name).resolve()), Tier.MEDIUM,
             "fake-model-a", "medium", AccessMode.FULL,
         )
@@ -703,6 +748,8 @@ class RpcServerTests(unittest.TestCase):
             -32035: "callback_target_unsafe", -32036: "callback_send_failed",
             -32037: "callback_payload_too_large",
             -32038: "tool_version_mismatch",
+            -32039: "address_in_use", -32040: "service_busy",
+            -32041: "legacy_name_conflict", -32042: "service_config_conflict",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)
@@ -716,7 +763,7 @@ class RpcServerTests(unittest.TestCase):
             })
 
     def test_registry_storage_fault_rpc_adapter_preserves_all_known_recovery_ids(self):
-        known = {"instance": "instance-a", "name": "worker-a",
+        known = {"name": "worker-a",
                  "session_id": "session-a", "thread_id": "thread-a", "turn_id": None}
         fault = FacadeFault(FacadeFaultCode.REGISTRY_ERROR,
                             "Could not persist callback binding", "registry_error",
@@ -738,7 +785,6 @@ class CliCase:
 def documented_client_argv_cases(cwd, session_id, thread_id, prompt_file):
     return [
         CliCase("daemon/status", ["daemon", "status"], {}),
-        CliCase("daemon/shutdown", ["daemon", "shutdown"], {}),
         CliCase("model/list", ["model", "list"], {}),
         CliCase("session/start", ["session", "start", "--cwd", cwd, "--name", "builder",
                                   "--model", "fake-model"],
@@ -789,7 +835,7 @@ class CliTests(unittest.TestCase):
         cli._serve = lambda *args, **kwargs: forbidden.append("serve")
         try:
             completed = self.run_cli(
-                ["--pretty", "--instance", "chosen", "--version"],
+                ["--pretty", "--version"],
                 include_socket=False,
             )
         finally:
@@ -802,6 +848,46 @@ class CliTests(unittest.TestCase):
         self.assertEqual(forbidden, [])
         with self.assertRaises(json.JSONDecodeError):
             json.loads(completed.stdout)
+
+    def test_global_parser_removes_instance_shutdown_and_adds_guarded_service_migration(self):
+        parser = build_parser()
+        restart = parser.parse_args(["daemon", "restart", "--force",
+                                     "--app-server-listen", "ws://localhost:4600"])
+        self.assertEqual((restart.method, restart.force, restart.app_server_listen),
+                         ("service/restart", True, "ws://localhost:4600"))
+        resolve = parser.parse_args(["migration", "resolve", "--name", "legacy-a",
+                                     "--thread", "thread-a", "--as-name", "legacy-b"])
+        self.assertEqual(resolve.method, "migration/resolve")
+        for argv in (["--instance", "old", "status", "--name", "a"],
+                     ["daemon", "shutdown"]):
+            completed = self.run_cli(list(argv), fake_rpc=self.fake_rpc_success,
+                                     include_socket=False)
+            payload = self.assert_json_error(completed, 2, "invalid_params")
+            if "--instance" in argv:
+                self.assertIn("migration status",
+                              payload["error"]["data"]["details"]["reason"])
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_global_common_autoensure_and_explicit_socket_raw_bypass(self):
+        managed = []
+        class Manager:
+            deps = type("Deps", (), {"paths": type("Paths", (), {
+                "rpc_socket": Path(self.socket_path)})()})()
+            def ensure_running(inner, listener=None):
+                managed.append(("ensure", listener)); return type("S", (), {"status": "ready"})()
+            def status(inner):
+                managed.append(("status", None)); return type("S", (), {
+                    "status": "ready", "service_version": cli.distribution_version(),
+                    "to_dict": lambda self: {"status": "ready"}})()
+        with mock.patch.object(cli, "_service_manager", return_value=Manager()), \
+                mock.patch.object(cli, "rpc_call", side_effect=self.fake_rpc_success):
+            common = self.run_cli(["status", "--name", "worker-a"],
+                                  include_socket=False)
+            self.assertEqual(common.returncode, 0, common.stderr)
+            raw = self.run_cli(["--socket", self.socket_path, "model", "list"],
+                               include_socket=False)
+            self.assertEqual(raw.returncode, 0, raw.stderr)
+        self.assertEqual(managed, [("ensure", None)])
 
     def test_loaded_plugin_version_skew_is_typed_before_any_runtime_contact(self):
         plugin = Path(self.tempdir.name) / "cached-plugin"
@@ -853,69 +939,56 @@ class CliTests(unittest.TestCase):
                 (["session", "list"], "session/list")):
             with self.subTest(command=command):
                 self.rpc_calls = []
-
-                def old_peer(socket_path, method, params, timeout):
-                    self.rpc_calls.append((method, params, timeout))
-                    if method == "daemon/status":
-                        return {"result": {
-                            "ready": True,
-                            "worker_version": "0.0.1",
-                            "daemon_pid": 1234,
-                            "codex_pid": 5678,
-                            "session_count": 1,
-                        }}
-                    return {"result": {"unexpected": requested_method}}
-
-                completed = self.run_cli(
-                    ["--instance", "managed-old"] + command,
-                    fake_rpc=old_peer,
-                    include_socket=False,
-                )
+                manager = type("Manager", (), {
+                    "deps": type("Deps", (), {"paths": type("Paths", (), {
+                        "rpc_socket": Path(self.socket_path)})()})(),
+                    "status": lambda self: type("Status", (), {
+                        "status": "ready", "service_version": "0.0.1"})(),
+                })()
+                with mock.patch.object(cli, "_service_manager", return_value=manager):
+                    completed = self.run_cli(command, fake_rpc=self.fake_rpc_success,
+                                             include_socket=False)
                 payload = self.assert_json_error(completed, 1, "tool_version_mismatch")
                 details = payload["error"]["data"]["details"]
                 self.assertEqual(details["actual_version"], "0.0.1")
                 self.assertEqual(details["expected_version"], cli.distribution_version())
-                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+                self.assertEqual(self.rpc_calls, [])
                 self.assertIn(
-                    "--instance managed-old daemon start",
+                    "codex-worker daemon status",
                     payload["error"]["data"]["next_actions"][0]["command"],
                 )
 
     def test_managed_raw_stopped_daemon_preserves_no_autostart_refusal(self):
-        def stopped_peer(socket_path, method, params, timeout):
-            self.rpc_calls.append((method, params, timeout))
-            raise OSError("stopped")
-
-        with mock.patch.object(cli, "_spawn_daemon") as spawn:
+        manager = type("Manager", (), {
+            "deps": type("Deps", (), {"paths": type("Paths", (), {
+                "rpc_socket": Path(self.socket_path)})()})(),
+            "status": lambda self: type("Status", (), {
+                "status": "stopped", "service_version": None})(),
+        })()
+        with mock.patch.object(cli, "_spawn_daemon") as spawn, \
+                mock.patch.object(cli, "_service_manager", return_value=manager):
             completed = self.run_cli(
-                ["--instance", "managed-stopped", "model", "list"],
-                fake_rpc=stopped_peer,
+                ["model", "list"],
+                fake_rpc=self.fake_rpc_success,
                 include_socket=False,
             )
         self.assert_json_error(completed, 1, "daemon_unavailable")
-        self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+        self.assertEqual(self.rpc_calls, [])
         spawn.assert_not_called()
 
     def test_managed_raw_failed_status_refuses_before_target_rpc(self):
-        for failure in ("malformed", "probe_error"):
-            with self.subTest(failure=failure):
-                self.rpc_calls = []
-
-                def failed_peer(socket_path, method, params, timeout):
-                    self.rpc_calls.append((method, params, timeout))
-                    if method != "daemon/status":
-                        return {"result": {"unexpected": method}}
-                    if failure == "malformed":
-                        return {"result": ["not", "a", "status", "object"]}
-                    raise RuntimeError("status probe failed")
-
-                completed = self.run_cli(
-                    ["--instance", "managed-failed", "session", "list"],
-                    fake_rpc=failed_peer,
-                    include_socket=False,
-                )
-                self.assert_json_error(completed, 1, "daemon_unavailable")
-                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+        manager = type("Manager", (), {
+            "deps": type("Deps", (), {"paths": type("Paths", (), {
+                "rpc_socket": Path(self.socket_path)})()})(),
+            "status": lambda self: type("Status", (), {
+                "status": "error", "service_version": cli.distribution_version()})(),
+        })()
+        with mock.patch.object(cli, "_service_manager", return_value=manager):
+            completed = self.run_cli(["session", "list"],
+                                     fake_rpc=self.fake_rpc_success,
+                                     include_socket=False)
+        self.assert_json_error(completed, 1, "daemon_unavailable")
+        self.assertEqual(self.rpc_calls, [])
 
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()
@@ -959,17 +1032,17 @@ class CliTests(unittest.TestCase):
         class Manager:
             def require_external_codex(self):
                 raise AssertionError("a ready managed peer must not require client PATH codex")
-            def ensure_running(self):
+            def ensure_running(self, listener=None):
                 return type("Status", (), {"to_dict": lambda self: {
                     "status": "ready", "instance": {"instance": "chosen"},
                 }})()
-        original = cli._instance_manager
-        cli._instance_manager = lambda instance: Manager()
+        original = cli._service_manager
+        cli._service_manager = lambda: Manager()
         try:
             completed = self.run_cli(
-                ["--instance", "chosen", "daemon", "start"], include_socket=False)
+                ["daemon", "start"], include_socket=False)
         finally:
-            cli._instance_manager = original
+            cli._service_manager = original
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(json.loads(completed.stdout)["result"]["status"], "ready")
         self.assertEqual(completed.stderr, "")
@@ -1002,7 +1075,7 @@ class CliTests(unittest.TestCase):
         finally:
             cli._common_endpoint = original_endpoint
         self.assert_json_error(stopped, 1, "daemon_stopped")
-        self.assertEqual(calls, [False])
+        self.assertEqual(calls, [True])
 
     def fake_codex_bin(self):
         fake_codex = ROOT / "tests" / "codex-worker" / "fake_codex.py"
@@ -1062,7 +1135,7 @@ class CliTests(unittest.TestCase):
         cases = documented_client_argv_cases(
             self.cwd, self.session_id, self.thread_id, self.prompt_file
         )
-        self.assertEqual(len(cases), 13)
+        self.assertEqual(len(cases), 12)
         self.assertEqual({case.method for case in cases}, cli.DOCUMENTED_CLIENT_METHODS)
         for case in cases:
             with self.subTest(argv=case.argv):
@@ -1080,26 +1153,27 @@ class CliTests(unittest.TestCase):
                     "result": {"method": case.method, "params": case.expected_params},
                 })
 
-    def test_every_advanced_client_accepts_explicit_instance_and_preserves_raw_response(self):
+    def test_every_managed_raw_client_preserves_raw_response(self):
         cases = [case for case in documented_client_argv_cases(
             self.cwd, self.session_id, self.thread_id, self.prompt_file
-        ) if case.method not in {"daemon/status", "daemon/shutdown"}]
-        original_manager = cli._instance_manager
+        ) if case.method != "daemon/status"]
+        original_manager = cli._service_manager
         manager = type("Manager", (), {
             "deps": type("Deps", (), {
-                "paths": type("Paths", (), {"socket_path": Path(self.socket_path)})(),
+                "paths": type("Paths", (), {"rpc_socket": Path(self.socket_path)})(),
             })(),
             "status": lambda self: type("Status", (), {
                 "status": "ready", "last_error": None,
+                "service_version": cli.distribution_version(),
             })(),
         })()
-        cli._instance_manager = lambda selected: manager
+        cli._service_manager = lambda: manager
         try:
             for case in cases:
                 with self.subTest(method=case.method):
                     self.rpc_calls = []
                     completed = self.run_cli(
-                        ["--instance", "chosen"] + case.argv,
+                        case.argv,
                         fake_rpc=self.fake_rpc_success, include_socket=False,
                     )
                     self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -1108,13 +1182,14 @@ class CliTests(unittest.TestCase):
                         "result": {"method": case.method, "params": case.expected_params},
                     })
         finally:
-            cli._instance_manager = original_manager
+            cli._service_manager = original_manager
 
     def test_common_wait_timeout_maps_to_socket_timeout_without_cancelling(self):
         cases = [
-            (["start", "--name", "a", "--prompt", "go"], None),
+            (["start", "--name", "a", "--prompt", "go", "--cwd", self.cwd], None),
             (["run", "--name", "a", "--prompt", "go"], None),
-            (["start", "--name", "a", "--prompt", "go", "--timeout", "0"], 5.0),
+            (["start", "--name", "a", "--prompt", "go", "--cwd", self.cwd,
+              "--timeout", "0"], 5.0),
             (["run", "--name", "a", "--prompt", "go", "--timeout", "2.5"], 7.5),
         ]
         for argv, expected_timeout in cases:
@@ -1149,13 +1224,13 @@ class CliTests(unittest.TestCase):
 
         manager = type("Manager", (), {
             "status": lambda self: Result(status),
-            "stop": lambda self: Result(stopped),
+            "stop": lambda self, force=False: stopped,
         })()
-        original = cli._instance_manager
-        cli._instance_manager = lambda selected: manager
+        original = cli._service_manager
+        cli._service_manager = lambda: manager
         try:
-            for argv, result in ((["--instance", "chosen", "daemon", "status"], status),
-                                 (["--instance", "chosen", "daemon", "stop"], stopped)):
+            for argv, result in ((["daemon", "status"], status),
+                                 (["daemon", "stop"], stopped)):
                 with self.subTest(argv=argv):
                     completed = self.run_cli(argv, include_socket=False)
                     self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -1163,7 +1238,7 @@ class CliTests(unittest.TestCase):
                         "jsonrpc": "2.0", "id": "cli", "result": result,
                     })
         finally:
-            cli._instance_manager = original
+            cli._service_manager = original
 
     def test_rpc_error_is_structured_and_exit_one(self):
         def fake_rpc_error(socket_path, method, params, timeout):
@@ -1200,40 +1275,14 @@ class CliTests(unittest.TestCase):
             "kind", "retryable", "source", "details", "known_ids", "next_actions",
         })
 
-    def test_main_unsafe_managed_lock_is_one_json_without_traceback(self):
-        identity = resolve_instance("unsafe-main-lock", {})
-        root = Path(self.tempdir.name)
-        paths = derive_instance_paths(identity, sys.platform, root / "state", root / "tmp",
-                                      os.getuid())
-        paths.lock_path.parent.mkdir(parents=True, mode=0o700)
-        paths.lock_path.symlink_to(paths.lock_path.parent / "target")
-        manager = InstanceManager(InstanceDeps(
-            paths, "/launcher", "codex", lambda *args: None,
-            lambda *args: (_ for _ in ()).throw(OSError("absent")), time.monotonic,
-        ), identity)
-        original = cli._instance_manager
-        cli._instance_manager = lambda selected: manager
-        try:
-            completed = self.run_cli(
-                ["--instance", identity.value, "start", "--name", "worker-a",
-                 "--prompt", "go", "--cwd", self.cwd], include_socket=False,
-            )
-        finally:
-            cli._instance_manager = original
-        payload = self.assert_json_error(completed, 1, "daemon_start_failed")
-        data = payload["error"]["data"]
-        self.assertEqual(data["known_ids"], {
-            "instance": identity.value, "name": None, "session_id": None,
-            "thread_id": None, "turn_id": None,
-        })
-        self.assertEqual(data["details"], {
-            "reason": "unsafe_start_lock", "cause": None,
-            "socket_path": str(paths.socket_path),
-            "offending_path": str(paths.lock_path),
-            "log_path": str(paths.log_path), "durable_state": "preserved",
-        })
-        self.assertEqual(len(data["next_actions"]), 3)
-        self.assertNotIn("Traceback", completed.stderr)
+    def test_legacy_instance_environment_has_no_routing_effect(self):
+        with mock.patch.dict(os.environ, {"CODEX_WORKER_INSTANCE": "hostile; no"}), \
+                mock.patch.object(cli, "rpc_call", side_effect=self.fake_rpc_success), \
+                mock.patch.object(cli, "_common_endpoint", return_value=self.socket_path):
+            completed = self.run_cli(["status", "--name", "worker-a"],
+                                     include_socket=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertNotIn("hostile", completed.stdout)
 
     def test_pretty_is_rejected_for_foreground_serve(self):
         completed = self.run_cli(["--pretty", "daemon", "serve"])
@@ -1245,6 +1294,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertTrue(completed.stdout.startswith("usage: codex-worker"))
         self.assertNotIn('"jsonrpc"', completed.stdout)
+
+        daemon = self.run_cli(["daemon", "--help"])
+        self.assertEqual(daemon.returncode, 0)
+        self.assertNotIn("serve", daemon.stdout)
+        self.assertNotIn("shutdown", daemon.stdout)
+        self.assertNotIn("instance", daemon.stdout)
 
     def test_usage_errors_emit_one_json_object_and_exit_two(self):
         identifier = self.run_cli(["session", "show", "--session", self.session_id,
@@ -1451,27 +1506,31 @@ class CliTests(unittest.TestCase):
 
     def test_endpoint_selector_matrix_and_absolute_socket_validation(self):
         valid = [
-            (["--instance", "chosen", "start", "--name", "a", "--prompt", "go"], False),
-            (["--instance", "chosen", "model", "list"], False),
+            (["start", "--name", "a", "--prompt", "go", "--cwd", self.cwd], False),
+            (["model", "list"], False),
             (["--socket", self.socket_path, "model", "list"], False),
-            (["--instance", "chosen", "daemon", "status"], False),
+            (["daemon", "status"], False),
             (["--socket", self.socket_path, "daemon", "status"], False),
-            (["--instance", "chosen", "daemon", "stop"], False),
-            (["--socket", self.socket_path, "daemon", "shutdown"], False),
+            (["daemon", "stop"], False),
+            (["migration", "status"], False),
         ]
-        original_manager = cli._instance_manager
+        original_manager = cli._service_manager
 
         class Manager:
-            deps = type("Deps", (), {"paths": type("Paths", (), {"socket_path": Path(self.socket_path)})()})()
+            deps = type("Deps", (), {"paths": type("Paths", (), {
+                "rpc_socket": Path(self.socket_path)})()})()
             def status(inner):
                 return type("Response", (), {
                     "status": "ready", "last_error": None,
+                    "service_version": cli.distribution_version(),
                     "to_dict": lambda self: {"status": "ready"},
                 })()
-            def stop(inner):
-                return type("Response", (), {"to_dict": lambda self: {"status_after": "stopped"}})()
+            def ensure_running(inner, listener=None):
+                return inner.status()
+            def stop(inner, force=False):
+                return {"status_after": "stopped", "force": force}
 
-        cli._instance_manager = lambda selected: Manager()
+        cli._service_manager = lambda: Manager()
         try:
             for argv, include_socket in valid:
                 with self.subTest(valid=argv):
@@ -1481,11 +1540,12 @@ class CliTests(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertEqual(len(completed.stdout.splitlines()), 1)
         finally:
-            cli._instance_manager = original_manager
+            cli._service_manager = original_manager
 
         invalid = [
             ["--socket", self.socket_path, "--instance", "chosen", "model", "list"],
-            ["--socket", self.socket_path, "start", "--name", "a", "--prompt", "go"],
+            ["--socket", self.socket_path, "start", "--name", "a", "--prompt", "go",
+             "--cwd", self.cwd],
             ["--socket", self.socket_path, "daemon", "stop"],
             ["--instance", "chosen", "daemon", "shutdown"],
             ["--instance", "chosen", "daemon", "serve"],
@@ -1505,7 +1565,7 @@ class CliTests(unittest.TestCase):
                     completed = self.run_cli(argv, fake_rpc=self.fake_rpc_success,
                                              include_socket=False)
                     is_serve = "daemon" in argv and "serve" in argv
-                    if is_serve:
+                    if is_serve and "--instance" not in argv:
                         self.assertEqual(completed.returncode, 2)
                         self.assertEqual(completed.stdout, "")
                     else:
@@ -1530,22 +1590,44 @@ class CliTests(unittest.TestCase):
         self.assertEqual(called, [])
         self.assertEqual(self.rpc_calls, [])
 
-    def test_foreground_serve_has_no_stdout_and_shutdown_preserves_registry(self):
+    def test_invalid_raw_selector_never_selects_or_contacts_managed_service(self):
+        with mock.patch.object(cli, "_service_manager") as manager, \
+                mock.patch.object(cli, "rpc_call") as contact:
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["turn", "status", "--session", ""])
+        result = type("Completed", (), {
+            "returncode": code, "stdout": out.getvalue(), "stderr": err.getvalue()})()
+        payload = self.assert_json_error(result, 2, "invalid_params")
+        self.assertIn("non-empty", payload["error"]["data"]["details"]["reason"])
+        manager.assert_not_called()
+        contact.assert_not_called()
+
+    def test_foreground_serve_has_no_stdout_and_sigterm_preserves_registry(self):
         script = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"
         fake_bin = self.fake_codex_bin()
+        listener = _unused_loopback_listener()
         state_path = str(Path(self.tempdir.name) / "sessions.json")
         proc = subprocess.Popen(
             [sys.executable, str(script), "--socket", self.socket_path,
              "daemon", "serve", "--state", state_path, "--codex-bin", str(fake_bin),
-             "--event-limit", "5"],
+             "--event-limit", "5", "--app-server-listen", listener],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=dict(os.environ, PYTHONPATH=_websockets_pythonpath(),
+                     FAKE_CODEX_ERROR=str(Path(self.tempdir.name) / "fake-error.txt"),
+                     TMPDIR=self.tempdir.name),
         )
         try:
             deadline = time.time() + 5.0
             status = None
             while time.time() < deadline:
+                if proc.poll() is not None:
+                    stdout, stderr = proc.communicate(timeout=1.0)
+                    child_error = Path(self.tempdir.name, "fake-error.txt")
+                    self.fail("daemon exited before ready: stdout=%r stderr=%r child=%r" %
+                              (stdout, stderr, child_error.read_text() if child_error.exists() else None))
                 try:
                     status = rpc_call(self.socket_path, "daemon/status", {}, timeout=0.25)
                     break
@@ -1559,8 +1641,7 @@ class CliTests(unittest.TestCase):
                 "model": None,
             }, timeout=1.0)
             self.assertTrue(started["result"]["attached"])
-            stopped = rpc_call(self.socket_path, "daemon/shutdown", {}, timeout=1.0)
-            self.assertEqual(stopped["result"], {"accepted": True})
+            proc.terminate()
             stdout, stderr = proc.communicate(timeout=5.0)
         finally:
             if proc.poll() is None:
@@ -1569,23 +1650,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, stderr)
         self.assertEqual(stdout, "")
         self.assertTrue(Path(state_path).exists())
-        self.assertIn("codex-worker daemon listening", stderr)
 
     def test_foreground_serve_handles_sigterm_without_stdout(self):
         script = ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"
         fake_bin = self.fake_codex_bin()
+        listener = _unused_loopback_listener()
         state_path = str(Path(self.tempdir.name) / "sigterm-sessions.json")
         proc = subprocess.Popen(
             [sys.executable, str(script), "--socket", self.socket_path,
              "daemon", "serve", "--state", state_path, "--codex-bin", str(fake_bin),
-             "--event-limit", "5"],
+             "--event-limit", "5", "--app-server-listen", listener],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=dict(os.environ, PYTHONPATH=_websockets_pythonpath(),
+                     FAKE_CODEX_ERROR=str(Path(self.tempdir.name) / "fake-error.txt"),
+                     TMPDIR=self.tempdir.name),
         )
         try:
             deadline = time.time() + 5.0
             while time.time() < deadline:
+                if proc.poll() is not None:
+                    stdout, stderr = proc.communicate(timeout=1.0)
+                    child_error = Path(self.tempdir.name, "fake-error.txt")
+                    self.fail("daemon exited before ready: stdout=%r stderr=%r child=%r" %
+                              (stdout, stderr, child_error.read_text() if child_error.exists() else None))
                 try:
                     status = rpc_call(self.socket_path, "daemon/status", {}, timeout=0.25)
                     if status["result"]["ready"]:
@@ -1644,8 +1733,8 @@ class PublicLauncherTests(unittest.TestCase):
             env = dict(os.environ, HOME=str(home), XDG_STATE_HOME=str(root / "state"),
                        TMPDIR=str(unsafe_tmp))
             result = subprocess.run(
-                [str(launcher), "--instance", "unsafe-subprocess", "start",
-                 "--name", "worker-a", "--prompt", "go", "--cwd", directory],
+                [str(launcher), "start", "--name", "worker-a", "--prompt", "go",
+                 "--cwd", directory, "--app-server-listen", _unused_loopback_listener()],
                 cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, check=False,
             )
@@ -1653,8 +1742,7 @@ class PublicLauncherTests(unittest.TestCase):
         self.assertEqual(len(result.stdout.splitlines()), 1)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["error"]["data"]["kind"], "daemon_start_failed")
-        self.assertEqual(payload["error"]["data"]["known_ids"]["instance"],
-                         "unsafe-subprocess")
+        self.assertNotIn("instance", payload["error"]["data"]["known_ids"])
         self.assertNotIn("Traceback", result.stderr)
 
     def test_subprocess_unsafe_start_lock_is_one_typed_json(self):
@@ -1667,16 +1755,13 @@ class PublicLauncherTests(unittest.TestCase):
             runtime.mkdir(mode=0o700)
             env = dict(os.environ, HOME=str(home), XDG_STATE_HOME=str(root / "state"),
                        TMPDIR=str(runtime))
-            identity = resolve_instance("unsafe-subprocess-lock", {})
             state_home = (home / "Library" / "Application Support"
                           if sys.platform == "darwin" else root / "state")
-            paths = derive_instance_paths(identity, sys.platform, state_home, runtime,
-                                          os.getuid())
-            paths.lock_path.parent.mkdir(mode=0o700)
-            paths.lock_path.symlink_to(paths.lock_path.parent / "target")
+            paths = derive_service_paths(sys.platform, state_home, runtime, os.getuid())
+            paths.start_lock.parent.mkdir(mode=0o700)
+            paths.start_lock.symlink_to(paths.start_lock.parent / "target")
             result = subprocess.run(
-                [str(launcher), "--instance", identity.value, "run",
-                 "--name", "worker-a", "--prompt", "go"],
+                [str(launcher), "run", "--name", "worker-a", "--prompt", "go"],
                 cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, check=False,
             )
@@ -1695,6 +1780,7 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.addCleanup(self.tempdir.cleanup)
         self.root = Path(self.tempdir.name)
         self.launcher = ROOT / "bin" / "codex-worker"
+        self.listener = _unused_loopback_listener()
         fake_codex = ROOT / "tests" / "codex-worker" / "fake_codex.py"
         fake_bin_dir = self.root / "bin"
         fake_bin_dir.mkdir()
@@ -1710,6 +1796,8 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             encoding="utf-8",
         )
         fake_bin.chmod(0o700)
+        runtime_dir = self.root / "runtime"
+        runtime_dir.mkdir()
         self.env = dict(os.environ)
         self.env.update({
             "HOME": str(self.root / "home"),
@@ -1717,6 +1805,8 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             "CODEX_WORKER_INSTANCE": "task5-process-%s" % os.getpid(),
             "FAKE_CODEX_DELAY": "3.0",
             "PATH": str(fake_bin_dir) + os.pathsep + self.env.get("PATH", ""),
+            "PYTHONPATH": _websockets_pythonpath(),
+            "TMPDIR": str(runtime_dir),
         })
         (self.root / "home").mkdir()
         self.workdirs = []
@@ -1725,6 +1815,7 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             workdir.mkdir()
             self.workdirs.append(workdir)
         self.addCleanup(self._stop_daemon)
+        self._json(self._run("daemon", "start", "--app-server-listen", self.listener))
 
     def _run(self, *argv, cwd=None, timeout=10):
         return subprocess.run(
@@ -1759,8 +1850,8 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.fail("worker %s did not reach %s; last=%r" % (name, expected, last))
 
     def _stop_daemon(self):
-        with contextlib.suppress(Exception):
-            self._run("daemon", "stop", timeout=5)
+        stopped = self._run("daemon", "stop", "--force", timeout=5)
+        self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
 
     def test_concurrent_clients_share_one_daemon_without_crossing_results(self):
         self.env["FAKE_CODEX_DELAY"] = "1.0"
@@ -1770,7 +1861,8 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             prompt = "prompt-%d" % index
             processes.append((index, subprocess.Popen(
                 [str(self.launcher), "start", "--name", name, "--prompt", prompt,
-                 "--model", "fake-model-a", "--effort", "medium"],
+                 "--cwd", str(self.workdirs[index]), "--model", "fake-model-a",
+                 "--effort", "medium", "--app-server-listen", self.listener],
                 cwd=str(self.workdirs[index]), env=self.env, text=True,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )))
@@ -1797,9 +1889,9 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         statuses = [self._json(self._run("daemon", "status"))["result"] for _ in range(5)]
         status = statuses[0]
         self.assertEqual(status["status"], "ready")
-        self.assertIsInstance(status["daemon_pid"], int)
-        self.assertTrue(_pid_exists(status["daemon_pid"]))
-        self.assertEqual({item["daemon_pid"] for item in statuses}, {status["daemon_pid"]})
+        self.assertIsInstance(status["pid"], int)
+        self.assertTrue(_pid_exists(status["pid"]))
+        self.assertEqual({item["pid"] for item in statuses}, {status["pid"]})
         self.assertEqual(status["worker_count"], 5)
         names, threads, sessions, finals = set(), set(), set(), set()
         for index, payload in results:
@@ -1823,20 +1915,21 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.env["FAKE_CODEX_DELAY"] = "10.0"
         waiting = subprocess.Popen(
             [str(self.launcher), "start", "--name", "detached", "--prompt", "wait",
-             "--model", "fake-model-a"],
+             "--cwd", str(self.workdirs[5]), "--model", "fake-model-a",
+             "--app-server-listen", self.listener],
             cwd=str(self.workdirs[5]), env=self.env, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         try:
             active = self._status_until("detached", "in_progress")
-            daemon_pid = active["result"]["worker"]["instance"]
+            daemon_pid = self._json(self._run("daemon", "status"))["result"]["pid"]
             waiting.terminate()
             waiting.communicate(timeout=3)
-            still_active = self._status_until("detached", "in_progress")
-            self.assertEqual(still_active["result"]["worker"]["instance"], daemon_pid)
+            self._status_until("detached", "in_progress")
             daemon = self._json(self._run("daemon", "status"))["result"]
             self.assertEqual(daemon["status"], "ready")
-            self.assertTrue(_pid_exists(daemon["daemon_pid"]))
+            self.assertEqual(daemon["pid"], daemon_pid)
+            self.assertTrue(_pid_exists(daemon["pid"]))
         finally:
             if waiting.poll() is None:
                 waiting.kill()
@@ -1844,7 +1937,7 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
 
         timed = self._run(
             "start", "--name", "timed", "--prompt", "slow", "--model", "fake-model-a",
-            "--timeout", "0", cwd=self.workdirs[6], timeout=5,
+            "--cwd", str(self.workdirs[6]), "--timeout", "0", cwd=self.workdirs[6], timeout=5,
         )
         timeout_payload = self._json(timed, expected_exit=1)
         self.assertEqual(timeout_payload["error"]["code"], -32025)
@@ -1856,14 +1949,15 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.env["FAKE_CODEX_DELAY"] = "0.03"
         started = self._json(self._run(
             "start", "--name", "restartable", "--prompt", "first",
-            "--model", "fake-model-a", cwd=self.workdirs[0],
+            "--cwd", str(self.workdirs[0]), "--model", "fake-model-a",
+            "--app-server-listen", self.listener, cwd=self.workdirs[0],
         ))["result"]
         thread_id = started["worker"]["thread_id"]
         first_stop = self._json(self._run("daemon", "stop"))["result"]
         second_stop = self._json(self._run("daemon", "stop"))["result"]
-        self.assertEqual(first_stop["status_after"], "stopped")
-        self.assertEqual(second_stop["status_before"], "stopped")
-        self.assertEqual(second_stop["status_after"], "stopped")
+        self.assertEqual(first_stop["status"], "completed")
+        self.assertEqual(second_stop["status"], "completed")
+        self.env["FAKE_CODEX_RESUME_CWD"] = str(self.workdirs[0].resolve())
         continued = self._json(self._run(
             "run", "--name", "restartable", "--prompt", "second",
             cwd=self.workdirs[0],

@@ -30,7 +30,7 @@ class ProjectionTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.worker = WorkerView("default", "worker", "00000000-0000-0000-0000-000000000001",
+        self.worker = WorkerView("worker", "00000000-0000-0000-0000-000000000001",
                                  "thread", str(ROOT), Tier.MEDIUM, "model", "medium", AccessMode.FULL)
     def test_terminal_fallback_and_live_messages_preserve_nullable_phase(self):
         items = [

@@ -4,8 +4,10 @@ import os
 import stat
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,7 @@ from codex_worker.migration import (  # noqa: E402
     LegacyMigrationDeps,
     LegacyMigrationError,
     LegacyMigrator,
+    LiveMigrationCoordinator,
     MigrationCommitStage,
 )
 from codex_worker.models import IdentifierSelector, SessionRecord  # noqa: E402
@@ -42,6 +45,7 @@ from codex_worker.service_domain import (  # noqa: E402
     MigrationState,
     derive_service_paths,
 )
+from codex_worker.websocket_gateway import ServiceMaintenanceGate  # noqa: E402
 
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -93,7 +97,7 @@ class MigrationFixture:
         return paths
 
     def worker(self, record, instance="legacy-instance"):
-        return WorkerView(instance, record.name, record.session_id, record.thread_id,
+        return WorkerView(record.name, record.session_id, record.thread_id,
                           record.cwd, Tier(record.tier), record.model, record.effort,
                           AccessMode(record.access))
 
@@ -215,8 +219,8 @@ class LegacyMigrationTests(unittest.TestCase):
         migrated_event = CallbackStore(
             fixture.paths.callback_path, fixture.paths.callback_artifact_dir,
         ).pending(alternate.session_id)[0].event
-        self.assertEqual((migrated_event.worker.instance, migrated_event.worker.name),
-                         ("global", "collision-b"))
+        self.assertEqual(migrated_event.worker.name, "collision-b")
+        self.assertNotIn("instance", migrated_event.worker.to_dict())
         with self.assertRaises(LegacyNameConflict):
             SessionRegistry(fixture.paths.registry_path,
                             migration_path=fixture.paths.migration_path).resolve_name("collision")
@@ -266,7 +270,8 @@ class LegacyMigrationTests(unittest.TestCase):
         self.assertEqual(target.binding(unavailable.session_id).state,
                          CallbackState.UNAVAILABLE)
         self.assertEqual(target.binding(disabled.session_id).state, CallbackState.DISABLED)
-        self.assertEqual(target.pending(enabled.session_id)[0].event.worker.instance, "global")
+        self.assertNotIn(
+            "instance", target.pending(enabled.session_id)[0].event.worker.to_dict())
         self.assertEqual(len(target.pending(duplicate.session_id)), 1)
         self.assertEqual(target.pending(disabled.session_id), [])
         self.assertEqual(target.status_view(disabled.session_id)
@@ -338,11 +343,11 @@ class LegacyMigrationTests(unittest.TestCase):
                                fixture.paths.callback_artifact_dir)
         migrated = target.pending(record.session_id)[0].event
         migrated_artifact = migrated.payload["artifact"]
-        self.assertEqual(migrated.worker.instance, "global")
+        self.assertNotIn("instance", migrated.worker.to_dict())
         self.assertTrue(Path(migrated_artifact["path"])
                         .is_relative_to(fixture.paths.callback_artifact_dir))
         content = json.loads(Path(migrated_artifact["path"]).read_text(encoding="utf-8"))
-        self.assertEqual(content["worker"]["instance"], "global")
+        self.assertNotIn("instance", content["worker"])
         self.assertEqual(hashlib.sha256(Path(migrated_artifact["path"]).read_bytes()).hexdigest(),
                          migrated_artifact["sha256"])
         self.assertEqual(fixture.source_hashes(), before)
@@ -424,6 +429,398 @@ class LegacyMigrationTests(unittest.TestCase):
                                                    fixture.paths.callback_artifact_dir)
                                      .pending(record.session_id)), 1)
                 self.assertEqual(fixture.source_hashes(), before)
+
+    def test_live_resolution_restart_repairs_every_commit_prefix(self):
+        class SimulatedHardCrash(BaseException):
+            pass
+
+        for crash_stage in MigrationCommitStage:
+            with self.subTest(stage=crash_stage.value):
+                fixture = MigrationFixture(self)
+                selected = fixture.record(1, "collision", "thread-a")
+                rejected = fixture.record(2, "collision", "thread-b")
+                unrelated = fixture.record(3, "unrelated", "thread-unrelated")
+                fixture.add_instance("a", [selected, unrelated])
+                rejected_paths = fixture.add_instance("b", [rejected])
+                rejected_store = CallbackStore(
+                    rejected_paths.callback_path,
+                    rejected_paths.callback_artifact_dir)
+                rejected_store.bind(fixture.binding(rejected))
+                rejected_store.enqueue_terminal(
+                    rejected.session_id, fixture.event(rejected, "event-rejected"))
+                armed = [False]
+
+                def crash(stage):
+                    if armed[0] and stage == crash_stage:
+                        raise SimulatedHardCrash(stage.value)
+
+                migrator = fixture.migrator(after_commit=crash)
+                migrator.scan_and_apply()
+                registry = SessionRegistry(
+                    fixture.paths.registry_path,
+                    migration_path=fixture.paths.migration_path)
+                callbacks = CallbackStore(
+                    fixture.paths.callback_path,
+                    fixture.paths.callback_artifact_dir)
+                broker = SimpleNamespace(
+                    registry=registry, _gate=ServiceMaintenanceGate())
+                coordinator = LiveMigrationCoordinator(migrator, broker, callbacks)
+                armed[0] = True
+
+                with self.assertRaises(SimulatedHardCrash):
+                    coordinator.resolve("collision", "thread-b", "collision-b")
+
+                armed[0] = False
+                self.assertTrue(
+                    fixture.paths.migration_path.with_name(
+                        "migration-resolution.json").exists())
+                repaired = fixture.migrator().scan_and_apply()
+                self.assertTrue(repaired.ready)
+                self.assertEqual(
+                    (repaired.imported_count, repaired.deduplicated_count,
+                     repaired.conflict_count), (2, 0, 1))
+                self.assertEqual(
+                    {item.thread_id: item.outcome for item in repaired.sources},
+                    {"thread-a": MigrationOutcome.CONFLICTED,
+                     "thread-b": MigrationOutcome.IMPORTED,
+                     "thread-unrelated": MigrationOutcome.IMPORTED})
+                self.assertFalse(
+                    fixture.paths.migration_path.with_name(
+                        "migration-resolution.json").exists())
+                repaired_registry = SessionRegistry(
+                    fixture.paths.registry_path,
+                    migration_path=fixture.paths.migration_path)
+                self.assertEqual(
+                    repaired_registry.resolve_name("collision-b").thread_id,
+                    "thread-b")
+                self.assertEqual(
+                    repaired_registry.resolve_name("unrelated").thread_id,
+                    "thread-unrelated")
+                self.assertEqual(
+                    CallbackStore(
+                        fixture.paths.callback_path,
+                        fixture.paths.callback_artifact_dir,
+                    ).pending(rejected.session_id)[0].event.worker.name,
+                    "collision-b")
+
+    def test_live_resolution_exception_rolls_back_every_commit_prefix(self):
+        for failure_stage in MigrationCommitStage:
+            with self.subTest(stage=failure_stage.value):
+                fixture = MigrationFixture(self)
+                selected = fixture.record(1, "collision", "thread-a")
+                rejected = fixture.record(2, "collision", "thread-b")
+                unrelated = fixture.record(3, "unrelated", "thread-unrelated")
+                fixture.add_instance("a", [selected, unrelated])
+                rejected_paths = fixture.add_instance("b", [rejected])
+                rejected_store = CallbackStore(
+                    rejected_paths.callback_path,
+                    rejected_paths.callback_artifact_dir)
+                rejected_store.bind(fixture.binding(rejected))
+                rejected_store.enqueue_terminal(
+                    rejected.session_id, fixture.event(rejected, "event-rejected"))
+                armed = [False]
+
+                def fail(stage):
+                    if armed[0] and stage == failure_stage:
+                        raise RuntimeError(stage.value)
+
+                migrator = fixture.migrator(after_commit=fail)
+                migrator.scan_and_apply()
+                registry = SessionRegistry(
+                    fixture.paths.registry_path,
+                    migration_path=fixture.paths.migration_path)
+                callbacks = CallbackStore(
+                    fixture.paths.callback_path,
+                    fixture.paths.callback_artifact_dir)
+                coordinator = LiveMigrationCoordinator(
+                    migrator,
+                    SimpleNamespace(
+                        registry=registry, _gate=ServiceMaintenanceGate()),
+                    callbacks)
+                before = (
+                    fixture.paths.registry_path.read_bytes(),
+                    fixture.paths.callback_path.read_bytes(),
+                    fixture.paths.migration_path.read_bytes(),
+                )
+                armed[0] = True
+
+                with self.assertRaises(RuntimeError):
+                    coordinator.resolve("collision", "thread-b", "collision-b")
+
+                self.assertEqual(
+                    (fixture.paths.registry_path.read_bytes(),
+                     fixture.paths.callback_path.read_bytes(),
+                     fixture.paths.migration_path.read_bytes()),
+                    before)
+                self.assertFalse(
+                    fixture.paths.migration_path.with_name(
+                        "migration-resolution.json").exists())
+                self.assertEqual(
+                    registry.resolve_name("unrelated").thread_id,
+                    "thread-unrelated")
+                with self.assertRaises(LegacyNameConflict):
+                    registry.resolve_name("collision")
+                self.assertEqual(callbacks.pending(rejected.session_id), [])
+
+    def test_recovery_failure_preserves_intent_after_each_hard_crash_prefix(self):
+        class SimulatedHardCrash(BaseException):
+            pass
+
+        later_stages = {
+            MigrationCommitStage.ARTIFACTS: (
+                MigrationCommitStage.REGISTRY,
+                MigrationCommitStage.CALLBACKS,
+                MigrationCommitStage.LEDGER,
+            ),
+            MigrationCommitStage.REGISTRY: (
+                MigrationCommitStage.CALLBACKS,
+                MigrationCommitStage.LEDGER,
+            ),
+            MigrationCommitStage.CALLBACKS: (MigrationCommitStage.LEDGER,),
+        }
+        for crash_stage, failure_stages in later_stages.items():
+            for failure_stage in failure_stages:
+                with self.subTest(crash=crash_stage.value,
+                                  failure=failure_stage.value):
+                    fixture = MigrationFixture(self)
+                    selected = fixture.record(1, "collision", "thread-a")
+                    rejected = fixture.record(2, "collision", "thread-b")
+                    fixture.add_instance("a", [selected])
+                    rejected_paths = fixture.add_instance("b", [rejected])
+                    rejected_store = CallbackStore(
+                        rejected_paths.callback_path,
+                        rejected_paths.callback_artifact_dir)
+                    rejected_store.bind(fixture.binding(rejected))
+                    rejected_store.enqueue_terminal(
+                        rejected.session_id,
+                        fixture.event(rejected, "event-rejected"))
+                    armed = [False]
+
+                    def crash(stage):
+                        if armed[0] and stage == crash_stage:
+                            raise SimulatedHardCrash(stage.value)
+
+                    migrator = fixture.migrator(after_commit=crash)
+                    migrator.scan_and_apply()
+                    armed[0] = True
+                    with self.assertRaises(SimulatedHardCrash):
+                        migrator.resolve("collision", "thread-b", "collision-b")
+
+                    def fail(stage):
+                        if stage == failure_stage:
+                            raise RuntimeError(stage.value)
+
+                    with self.assertRaises(RuntimeError):
+                        fixture.migrator(after_commit=fail).scan_and_apply()
+                    intent_path = fixture.paths.migration_path.with_name(
+                        "migration-resolution.json")
+                    self.assertTrue(intent_path.exists())
+
+                    repaired = fixture.migrator().scan_and_apply()
+                    self.assertTrue(repaired.ready)
+                    self.assertEqual(
+                        (repaired.imported_count, repaired.deduplicated_count,
+                         repaired.conflict_count), (1, 0, 1))
+                    self.assertEqual(
+                        {item.thread_id: item.outcome for item in repaired.sources},
+                        {"thread-a": MigrationOutcome.CONFLICTED,
+                         "thread-b": MigrationOutcome.IMPORTED})
+                    self.assertFalse(intent_path.exists())
+                    registry = SessionRegistry(
+                        fixture.paths.registry_path,
+                        migration_path=fixture.paths.migration_path)
+                    self.assertEqual(
+                        registry.resolve_name("collision-b").thread_id,
+                        "thread-b")
+                    self.assertEqual(
+                        CallbackStore(
+                            fixture.paths.callback_path,
+                            fixture.paths.callback_artifact_dir,
+                        ).pending(rejected.session_id)[0].event.worker.name,
+                        "collision-b")
+
+    def test_live_status_waits_for_resolve_commit_and_refreshes_registry(self):
+        fixture = MigrationFixture(self)
+        selected = fixture.record(1, "collision", "thread-a")
+        rejected = fixture.record(2, "collision", "thread-b")
+        fixture.add_instance("a", [selected])
+        fixture.add_instance("b", [rejected])
+        commit_started = threading.Event()
+        allow_commit = threading.Event()
+        status_reached_commit = threading.Event()
+        armed = [False]
+
+        def block_after_registry(stage):
+            if armed[0] and stage == MigrationCommitStage.REGISTRY:
+                if threading.current_thread().name == "live-resolve":
+                    commit_started.set()
+                    self.assertTrue(allow_commit.wait(5))
+                else:
+                    status_reached_commit.set()
+
+        migrator = fixture.migrator(after_commit=block_after_registry)
+        migrator.scan_and_apply()
+        armed[0] = True
+        registry = SessionRegistry(
+            fixture.paths.registry_path,
+            migration_path=fixture.paths.migration_path)
+        callbacks = CallbackStore(
+            fixture.paths.callback_path,
+            fixture.paths.callback_artifact_dir)
+        coordinator = LiveMigrationCoordinator(
+            migrator,
+            SimpleNamespace(
+                registry=registry, _gate=ServiceMaintenanceGate()),
+            callbacks)
+        outcome = []
+
+        resolve_thread = threading.Thread(
+            target=lambda: outcome.append(
+                coordinator.resolve("collision", "thread-b", "collision-b")),
+            name="live-resolve")
+        resolve_thread.start()
+        self.assertTrue(commit_started.wait(5))
+        status_thread = threading.Thread(
+            target=lambda: outcome.append(coordinator.scan_and_apply()),
+            name="live-status")
+        status_thread.start()
+        status_committed_while_resolve_drained = status_reached_commit.wait(0.25)
+        allow_commit.set()
+        resolve_thread.join(5)
+        status_thread.join(5)
+        self.assertFalse(resolve_thread.is_alive())
+        self.assertFalse(status_thread.is_alive())
+        self.assertFalse(status_committed_while_resolve_drained)
+        self.assertEqual(len(outcome), 2)
+        self.assertEqual(registry.resolve_name("collision-b").thread_id, "thread-b")
+
+    def test_live_status_without_recovery_does_not_drain_worker_mutations(self):
+        fixture = MigrationFixture(self)
+        record = fixture.record(1, "ready")
+        fixture.add_instance("ready", [record])
+        migrator = fixture.migrator()
+        migrator.scan_and_apply()
+        registry = SessionRegistry(
+            fixture.paths.registry_path,
+            migration_path=fixture.paths.migration_path)
+        callbacks = CallbackStore(
+            fixture.paths.callback_path,
+            fixture.paths.callback_artifact_dir)
+        gate = ServiceMaintenanceGate()
+        coordinator = LiveMigrationCoordinator(
+            migrator, SimpleNamespace(registry=registry, _gate=gate), callbacks)
+        mutation_started = threading.Event()
+        release_mutation = threading.Event()
+        status_finished = threading.Event()
+        status_outcome = []
+
+        def active_mutation():
+            with gate.mutation("thread/start"):
+                mutation_started.set()
+                self.assertTrue(release_mutation.wait(5))
+
+        def read_status():
+            try:
+                status_outcome.append(coordinator.scan_and_apply())
+            finally:
+                status_finished.set()
+
+        mutation = threading.Thread(target=active_mutation)
+        mutation.start()
+        self.assertTrue(mutation_started.wait(5))
+        status = threading.Thread(target=read_status)
+        status.start()
+        completed_without_drain = status_finished.wait(0.25)
+        release_mutation.set()
+        mutation.join(5)
+        status.join(5)
+        self.assertFalse(mutation.is_alive())
+        self.assertFalse(status.is_alive())
+        self.assertTrue(completed_without_drain)
+        self.assertEqual(len(status_outcome), 1)
+        self.assertTrue(status_outcome[0].ready)
+
+    def test_resolution_updates_source_outcomes_and_counts(self):
+        fixture = MigrationFixture(self)
+        first = fixture.record(1, "collision", "thread-a")
+        second = fixture.record(2, "collision", "thread-b")
+        fixture.add_instance("a", [first])
+        fixture.add_instance("b", [second])
+        migrator = fixture.migrator()
+        migrator.scan_and_apply()
+
+        alternate = migrator.resolve("collision", "thread-b", "collision-b")
+        first_status = migrator.scan_and_apply()
+        self.assertEqual((first_status.imported_count,
+                          first_status.deduplicated_count,
+                          first_status.conflict_count), (1, 0, 1))
+        self.assertEqual(
+            {item.thread_id: item.outcome for item in first_status.sources},
+            {"thread-a": MigrationOutcome.CONFLICTED,
+             "thread-b": MigrationOutcome.IMPORTED})
+        self.assertEqual(
+            [candidate.thread_id for candidate in first_status.conflicts[0].candidates],
+            [first.thread_id])
+
+        migrator.resolve("collision", first.thread_id, None)
+        final_status = migrator.scan_and_apply()
+        self.assertEqual((final_status.imported_count,
+                          final_status.deduplicated_count,
+                          final_status.conflict_count), (2, 0, 0))
+        self.assertEqual(
+            {item.thread_id: item.outcome for item in final_status.sources},
+            {"thread-a": MigrationOutcome.IMPORTED,
+             "thread-b": MigrationOutcome.IMPORTED})
+        self.assertEqual(alternate.name, "collision-b")
+
+    def test_original_name_resolution_is_immediate_idempotent_and_recovers_ledger_crash(self):
+        class SimulatedHardCrash(BaseException):
+            pass
+
+        for hard_crash in (False, True):
+            with self.subTest(hard_crash=hard_crash):
+                fixture = MigrationFixture(self)
+                selected = fixture.record(1, "collision", "thread-a")
+                rejected = fixture.record(2, "collision", "thread-b")
+                fixture.add_instance("a", [selected])
+                fixture.add_instance("b", [rejected])
+                armed = [False]
+
+                def crash_after_ledger(stage):
+                    if armed[0] and stage == MigrationCommitStage.LEDGER:
+                        raise SimulatedHardCrash(stage.value)
+
+                migrator = fixture.migrator(after_commit=crash_after_ledger)
+                migrator.scan_and_apply()
+                armed[0] = hard_crash
+                if hard_crash:
+                    with self.assertRaises(SimulatedHardCrash):
+                        migrator.resolve("collision", selected.thread_id, None)
+                    self.assertTrue(fixture.paths.migration_path.with_name(
+                        "migration-resolution.json").exists())
+                    migrator = fixture.migrator()
+                    status = migrator.scan_and_apply()
+                else:
+                    migrator.resolve("collision", selected.thread_id, None)
+                    status = migrator.scan_and_apply()
+
+                self.assertFalse(fixture.paths.migration_path.with_name(
+                    "migration-resolution.json").exists())
+                self.assertEqual((status.imported_count, status.deduplicated_count,
+                                  status.conflict_count), (1, 0, 0))
+                self.assertEqual(
+                    {item.thread_id: item.outcome for item in status.sources},
+                    {"thread-a": MigrationOutcome.IMPORTED,
+                     "thread-b": MigrationOutcome.CONFLICTED})
+                registry = SessionRegistry(
+                    fixture.paths.registry_path,
+                    migration_path=fixture.paths.migration_path)
+                self.assertEqual(
+                    registry.resolve_name("collision").thread_id,
+                    selected.thread_id)
+                self.assertEqual(
+                    migrator.resolve("collision", selected.thread_id, None).thread_id,
+                    selected.thread_id)
 
     def test_completion_ledger_file_and_directory_are_fsynced(self):
         fixture = MigrationFixture(self)

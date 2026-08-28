@@ -72,7 +72,7 @@ class DispatcherTests(unittest.TestCase):
         root = Path(temporary.name)
         self.store = CallbackStore(root / "callbacks.json", root / "artifacts")
         self.runtime = RuntimeStore(10)
-        self.worker = WorkerView("default", "worker-a", "12345678-1234-5678-1234-567812345678",
+        self.worker = WorkerView("worker-a", "12345678-1234-5678-1234-567812345678",
                                  "thread-a", str(root.resolve()), Tier.MEDIUM,
                                  "gpt-5.6-terra", "medium", AccessMode.FULL)
         self.binding = CallbackBinding(self.worker.session_id, CallbackState.ENABLED,

@@ -3,9 +3,12 @@
 import argparse
 import json
 import os
+import socket
 import sys
 import threading
 import time
+import traceback
+from urllib.parse import urlsplit
 from pathlib import Path
 
 
@@ -33,6 +36,7 @@ class FakeCodex:
             "cursor-old": ([{"id": "turn-old", "status": "completed", "items": []}], None),
         }
         self.turn_list_requests = []
+        self.websocket = None
 
     def option(self, key, default=None):
         return self.scenario.get(key, default)
@@ -61,10 +65,13 @@ class FakeCodex:
                 os.close(fd)
 
     def send(self, message):
-        encoded = json.dumps(message, separators=(",", ":")) + "\n"
+        encoded = json.dumps(message, separators=(",", ":"))
         with self.write_lock:
-            sys.stdout.write(encoded)
-            sys.stdout.flush()
+            if self.websocket is not None:
+                self.websocket.send(encoded)
+            else:
+                sys.stdout.write(encoded + "\n")
+                sys.stdout.flush()
 
     def response(self, request_id, result):
         self.send({"id": request_id, "result": result})
@@ -218,7 +225,39 @@ class FakeCodex:
         elif method == "thread/resume":
             self.thread_id = message["params"]["threadId"]
             self.response(request_id, {"thread": {"id": self.thread_id,
-                                                    "cwd": self.thread_cwds.get(self.thread_id, os.getcwd())}})
+                                                    "cwd": self.thread_cwds.get(
+                                                        self.thread_id,
+                                                        os.environ.get(
+                                                            "FAKE_CODEX_RESUME_CWD",
+                                                            os.getcwd()))}})
+        elif method == "thread/list":
+            data = []
+            for thread_id in sorted(self.thread_cwds):
+                status = ({"type": "active", "activeFlags": []}
+                          if thread_id in self.active_turns else {"type": "idle"})
+                data.append({"id": thread_id, "status": status})
+            self.response(request_id, {
+                "data": data, "nextCursor": None, "backwardsCursor": None,
+            })
+        elif method == "thread/read":
+            thread_id = message["params"]["threadId"]
+            turns = []
+            if thread_id in self.active_turns:
+                turns.append({"id": self.active_turns[thread_id],
+                              "status": "inProgress", "items": []})
+            pages = self.option("history_pages")
+            if isinstance(pages, dict):
+                for page in pages.values():
+                    if isinstance(page, dict) and isinstance(page.get("turns"), list):
+                        turns.extend(page["turns"])
+            has_active = (thread_id in self.active_turns or any(
+                isinstance(turn, dict) and turn.get("status") in ("inProgress", "in_progress")
+                for turn in turns))
+            status = ({"type": "active", "activeFlags": []}
+                      if has_active else {"type": "idle"})
+            self.response(request_id, {"thread": {
+                "id": thread_id, "status": status, "turns": turns,
+            }})
         elif method == "turn/start":
             self.thread_id = message["params"]["threadId"]
             self.handle_turn_start(message)
@@ -293,10 +332,38 @@ class FakeCodex:
                 continue
             self.handle(json.loads(line))
 
+    def run_websocket(self, listener):
+        from websockets.sync.server import serve
+
+        if listener.startswith("unix://"):
+            socket_path = listener[len("unix://"):]
+            listening = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listening.bind(socket_path)
+            os.chmod(socket_path, 0o600)
+            listening.listen()
+            with serve(self._websocket_handler, sock=listening, unix=True) as server:
+                server.serve_forever()
+            return
+        parsed = urlsplit(listener)
+        if parsed.scheme != "ws" or parsed.hostname is None or parsed.port is None:
+            raise ValueError("fake listener must be a ws:// host:port URL")
+
+        with serve(self._websocket_handler, parsed.hostname, parsed.port) as server:
+            server.serve_forever()
+
+    def _websocket_handler(self, websocket):
+        self.websocket = websocket
+        try:
+            for message in websocket:
+                self.handle(json.loads(message))
+        finally:
+            self.websocket = None
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("app_server", nargs="?", choices=("app-server",))
+    parser.add_argument("--listen")
     parser.add_argument("--mode", default="normal")
     parser.add_argument("--delay", type=float, default=0.03)
     parser.add_argument("--scenario")
@@ -308,9 +375,19 @@ def main():
         scenario = json.loads(Path(scenario_path).read_text(encoding="utf-8"))
         if not isinstance(scenario, dict):
             raise ValueError("scenario must be a JSON object")
-    FakeCodex(args.mode, args.delay, scenario,
-              args.capture or os.environ.get("FAKE_CODEX_CAPTURE")).run()
+    fake = FakeCodex(args.mode, args.delay, scenario,
+                     args.capture or os.environ.get("FAKE_CODEX_CAPTURE"))
+    if args.listen:
+        fake.run_websocket(args.listen)
+    else:
+        fake.run()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException:
+        error_path = os.environ.get("FAKE_CODEX_ERROR")
+        if error_path:
+            Path(error_path).write_text(traceback.format_exc(), encoding="utf-8")
+        raise

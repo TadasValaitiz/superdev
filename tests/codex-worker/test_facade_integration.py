@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import shlex
 import socket
 import stat
 import subprocess
@@ -11,10 +12,30 @@ import time
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
+
+from codex_worker.commands import InstanceSource
+from codex_worker.instance import (InstanceIdentity, _write_metadata,
+                                   derive_instance_paths)
+from codex_worker.models import SessionRecord
+from codex_worker.registry import SessionRegistry
+
 COMMAND = ROOT / "bin" / "codex-worker"
 FAKE = Path(__file__).with_name("fake_codex.py")
+
+
+def websockets_pythonpath():
+    cache = Path.home() / ".cache" / "uv" / "archive-v0"
+    for metadata in sorted(cache.glob("*/websockets-15.*.dist-info")):
+        return str(metadata.parent)
+    raise AssertionError("websockets 15 must already exist in the uv cache")
+
+
+def unused_listener():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return "ws://127.0.0.1:%d" % probe.getsockname()[1]
 
 
 class FacadeIntegrationTests(unittest.TestCase):
@@ -35,15 +56,32 @@ class FacadeIntegrationTests(unittest.TestCase):
         codex = fake_bin / "codex"
         codex.write_text("#!/bin/sh\nexec %s %s \"$@\"\n" % (sys.executable, FAKE), encoding="utf-8")
         codex.chmod(0o700)
+        runtime = root / "runtime"
+        runtime.mkdir()
+        self.listener = unused_listener()
         self.env = dict(os.environ, HOME=str(root / "home"), XDG_STATE_HOME=str(self.state),
                         FAKE_CODEX_SCENARIO=str(self.scenario), FAKE_CODEX_CAPTURE=str(self.capture),
+                        FAKE_CODEX_RESUME_CWD=str(ROOT), CODEX_WORKER_INSTANCE="ignored",
+                        TMPDIR=str(runtime), PYTHONPATH=websockets_pythonpath(),
                         PATH=str(fake_bin) + os.pathsep + os.environ.get("PATH", ""))
-        self.instance = "integration-%s" % os.path.basename(self.tempdir.name)
 
     def command(self, argv, cwd=None):
-        return subprocess.run([str(COMMAND), "--instance", self.instance] + argv,
+        argv = list(argv)
+        if argv and argv[0] == "start" and "--app-server-listen" not in argv:
+            argv.extend(["--app-server-listen", self.listener])
+        return subprocess.run([str(COMMAND)] + argv,
                               cwd=str(cwd or ROOT), env=self.env, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12)
+
+    def add_legacy_instance(self, value, record):
+        root = Path(self.tempdir.name)
+        state_home = (Path(self.env["HOME"]) / "Library" / "Application Support"
+                      if sys.platform == "darwin" else Path(self.env["XDG_STATE_HOME"]))
+        identity = InstanceIdentity(InstanceSource.FLAG, value)
+        paths = derive_instance_paths(
+            identity, sys.platform, state_home, Path(self.env["TMPDIR"]), os.getuid())
+        _write_metadata(paths, identity)
+        SessionRegistry.publish_snapshot(paths.registry_path, [record])
 
     @unittest.skipUnless(os.name == "posix" and hasattr(socket, "AF_UNIX")
                          and shutil.which("ps") is not None,
@@ -61,26 +99,26 @@ class FacadeIntegrationTests(unittest.TestCase):
             cwd = Path(self.tempdir.name) / ("cwd-%d" % index)
             cwd.mkdir(); workspaces.append(cwd)
             processes.append(subprocess.Popen(
-                 [str(COMMAND), "--instance", self.instance, "start", "--name", "worker-%d" % index,
+                 [str(COMMAND), "start", "--name", "worker-%d" % index,
                  "--cwd", str(cwd), "--prompt", "prompt-%d" % index,
                  "--model", "fake-model-a", "--effort", "medium",
+                 "--app-server-listen", self.listener,
                 ],
                 env=self.env, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
             self.addCleanup(self.cleanup_process, processes[-1])
         self.wait_for_capture_count("turn/start", 5)
         first_active_status = self.daemon_status()
-        daemon_pid = first_active_status["daemon_pid"]
-        codex_pid = first_active_status["codex_pid"]
+        daemon_pid = first_active_status["pid"]
+        codex_pid = first_active_status["app_server_pid"]
         daemon_command = self.process_command(daemon_pid)
-        self.assertIn(first_active_status["instance"]["socket_path"], daemon_command)
-        self.assertIn(str(Path(first_active_status["instance"]["durable_dir"]) / "registry.json"),
-                      daemon_command)
+        self.assertIn("daemon serve", daemon_command)
+        self.assertIn("registry.json", daemon_command)
         self.assertEqual(self.process_parent(codex_pid), daemon_pid)
         self.assertEqual(self.codex_children(daemon_pid), [codex_pid])
         self.assertTrue(any(process.poll() is None for process in processes))
         active_statuses = [first_active_status] + [self.daemon_status() for _ in processes[1:]]
-        self.assertEqual({status["daemon_pid"] for status in active_statuses}, {daemon_pid})
-        self.assertEqual({status["codex_pid"] for status in active_statuses}, {codex_pid})
+        self.assertEqual({status["pid"] for status in active_statuses}, {daemon_pid})
+        self.assertEqual({status["app_server_pid"] for status in active_statuses}, {codex_pid})
 
         observed_client_completion_order = []
         deadline = time.monotonic() + 12
@@ -113,8 +151,8 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual(status.returncode, 0, status.stderr)
         managed = json.loads(status.stdout)["result"]
         self.assertEqual(managed["worker_count"], 5)
-        self.assertEqual(managed["daemon_pid"], daemon_pid)
-        self.assertEqual(managed["codex_pid"], codex_pid)
+        self.assertEqual(managed["pid"], daemon_pid)
+        self.assertEqual(managed["app_server_pid"], codex_pid)
         captures = [json.loads(line) for line in self.capture.read_text(encoding="utf-8").splitlines()]
         starts = [row for row in captures if row.get("method") == "thread/start"]
         self.assertEqual(len(starts), 5)
@@ -170,7 +208,8 @@ class FacadeIntegrationTests(unittest.TestCase):
                                 "--cwd", str(ROOT), "--model", "fake-model-a"])
         self.assertEqual(created.returncode, 0, created.stderr)
         status = self.daemon_status()
-        registry = Path(status["instance"]["durable_dir"]) / "registry.json"
+        registry = (Path(self.env["HOME"]) / "Library" / "Application Support" /
+                    "superdev" / "codex-worker" / "service" / "registry.json")
         preserved = registry.read_bytes()
         cases = [
             (["start", "--name", "stable", "--prompt", "again", "--cwd", str(ROOT),
@@ -293,7 +332,7 @@ class FacadeIntegrationTests(unittest.TestCase):
                                 "--model", "fake-model-a"])
         self.assertEqual(created.returncode, 0, created.stderr)
         history = self.command(["history", "--name", "history", "--tail", "2"])
-        self.assertEqual(history.returncode, 0, history.stderr)
+        self.assertEqual(history.returncode, 0, history.stderr + history.stdout)
         turns = json.loads(history.stdout)["result"]["turns"]
         self.assertEqual([turn["turn_id"] for turn in turns], ["final", "live"])
         self.assertEqual(turns[-1]["messages"][0]["selection"], "live")
@@ -376,6 +415,57 @@ class FacadeIntegrationTests(unittest.TestCase):
                 children.append(int(fields[0]))
         return children
 
+    def test_legacy_conflict_is_ready_scoped_resolvable_and_then_runnable(self):
+        cwd = str(Path(self.tempdir.name).resolve())
+        self.env["FAKE_CODEX_RESUME_CWD"] = cwd
+        records = [SessionRecord(
+            session_id="00000000-0000-0000-0000-00000000000%d" % index,
+            thread_id=("legacy thread; $(no)" if index == 1
+                       else "legacy-thread-%d" % index), cwd=cwd,
+            created_at="2026-08-28T00:00:00Z",
+            updated_at="2026-08-28T00:00:00Z", name="legacy-collision",
+            model="fake-model-a", effort="medium", tier="medium", access="full")
+            for index in (1, 2)]
+        self.add_legacy_instance("legacy-a", records[0])
+        self.add_legacy_instance("legacy-b", records[1])
+
+        started = self.command(["daemon", "start", "--app-server-listen", self.listener])
+        self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+        self.assertEqual(json.loads(started.stdout)["result"]["status"], "ready")
+
+        migration = self.command(["migration", "status"])
+        self.assertEqual(migration.returncode, 0, migration.stdout + migration.stderr)
+        migration_result = json.loads(migration.stdout)["result"]
+        self.assertEqual((migration_result["status"], migration_result["conflict_count"]),
+                         ("complete", 1))
+        action = next(value for value in migration_result["resolution_actions"]
+                      if records[0].thread_id in shlex.split(value["command"]))
+        self.assertEqual(shlex.split(action["command"]), [
+            "codex-worker", "migration", "resolve", "--name", "legacy-collision",
+            "--thread", records[0].thread_id])
+
+        conflicted = self.command(["status", "--name", "legacy-collision"])
+        self.assertEqual(conflicted.returncode, 1, conflicted.stdout + conflicted.stderr)
+        self.assertEqual(json.loads(conflicted.stdout)["error"]["data"]["kind"],
+                         "legacy_name_conflict")
+        fault_actions = json.loads(conflicted.stdout)["error"]["data"]["next_actions"]
+        self.assertIn(records[0].thread_id,
+                      [shlex.split(value["command"])[-1] for value in fault_actions])
+
+        resolved = self.command([
+            "migration", "resolve", "--name", "legacy-collision",
+            "--thread", records[0].thread_id])
+        self.assertEqual(resolved.returncode, 0, resolved.stdout + resolved.stderr)
+        self.assertEqual(json.loads(resolved.stdout)["result"]["thread_id"],
+                         records[0].thread_id)
+
+        run = self.command([
+            "run", "--name", "legacy-collision", "--prompt", "after resolve",
+            "--timeout", "5"])
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(json.loads(run.stdout)["result"]["worker"]["name"],
+                         "legacy-collision")
+
     def cleanup_process(self, process):
         if process.poll() is None:
             process.terminate()
@@ -390,7 +480,8 @@ class FacadeIntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         try:
-            self.command(["daemon", "stop"])
+            stopped = self.command(["daemon", "stop", "--force"])
+            self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
         except (OSError, subprocess.TimeoutExpired):
             pass
 

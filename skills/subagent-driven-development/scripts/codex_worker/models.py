@@ -136,6 +136,7 @@ class ActiveThreadItem:
     origin: str
     worker: Optional[str]
     session_id: Optional[str]
+    turn_id: str
     active_flags: Tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -150,6 +151,8 @@ class ActiveThreadItem:
         if self.session_id is not None and (not isinstance(self.session_id, str)
                                              or not self.session_id):
             raise ValueError("active session_id must be non-empty when present")
+        if not isinstance(self.turn_id, str) or not self.turn_id:
+            raise ValueError("active turn_id must be non-empty")
         if (not isinstance(self.active_flags, (list, tuple))
                 or any(not isinstance(value, str) or not value
                        for value in self.active_flags)):
@@ -167,16 +170,18 @@ class ActiveThreadItem:
             "origin": self.origin,
             "worker": self.worker,
             "session_id": self.session_id,
+            "turn_id": self.turn_id,
             "active_flags": list(self.active_flags),
         }
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        required = {"thread_id", "origin", "worker", "session_id", "active_flags"}
+        required = {"thread_id", "origin", "worker", "session_id", "turn_id",
+                    "active_flags"}
         if not isinstance(value, dict) or set(value) != required:
             raise ValueError("invalid ActiveThreadItem fields")
         return cls(value["thread_id"], value["origin"], value["worker"],
-                   value["session_id"], value["active_flags"])
+                   value["session_id"], value["turn_id"], value["active_flags"])
 
 
 @dataclass(frozen=True)
@@ -210,6 +215,44 @@ class ActiveInventory:
 
 
 @dataclass(frozen=True)
+class WorkerImpact:
+    """Exact named-worker split captured before global maintenance."""
+
+    active_names: Tuple[str, ...] = field(default_factory=tuple)
+    idle_names: Tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        for values in (self.active_names, self.idle_names):
+            if (not isinstance(values, (list, tuple))
+                    or any(not isinstance(value, str) or not value for value in values)):
+                raise ValueError("worker impact names must be non-empty strings")
+            if list(values) != sorted(set(values)):
+                raise ValueError("worker impact names must be unique and sorted")
+        if set(self.active_names) & set(self.idle_names):
+            raise ValueError("active and idle worker names must be disjoint")
+        object.__setattr__(self, "active_names", tuple(self.active_names))
+        object.__setattr__(self, "idle_names", tuple(self.idle_names))
+
+    def to_dict(self) -> JsonObject:
+        return {"active_names": list(self.active_names),
+                "idle_names": list(self.idle_names),
+                "active_count": len(self.active_names),
+                "idle_count": len(self.idle_names),
+                "total_count": len(self.active_names) + len(self.idle_names)}
+
+    @classmethod
+    def from_dict(cls, value: JsonObject):
+        required = {"active_names", "idle_names", "active_count", "idle_count",
+                    "total_count"}
+        if not isinstance(value, dict) or set(value) != required:
+            raise ValueError("invalid WorkerImpact fields")
+        result = cls(value["active_names"], value["idle_names"])
+        if result.to_dict() != value:
+            raise ValueError("worker impact counts do not match names")
+        return result
+
+
+@dataclass(frozen=True)
 class MaintenanceResult:
     """Internal lifecycle result retaining the exact pre-termination impact."""
 
@@ -218,6 +261,7 @@ class MaintenanceResult:
     forced: bool
     listener: Optional[str]
     inventory: ActiveInventory
+    workers: WorkerImpact = field(default_factory=WorkerImpact)
     durable_state: str = "preserved"
 
     def __post_init__(self) -> None:
@@ -237,6 +281,8 @@ class MaintenanceResult:
             validate_public_listener(self.listener)
         if not isinstance(self.inventory, ActiveInventory):
             raise ValueError("maintenance inventory must be ActiveInventory")
+        if not isinstance(self.workers, WorkerImpact):
+            raise ValueError("maintenance workers must be WorkerImpact")
         if self.status == "refused" and (self.forced or not self.inventory.items):
             raise ValueError("maintenance refusal requires non-forced active impact")
         if (self.status == "completed" and self.inventory.items
@@ -247,13 +293,16 @@ class MaintenanceResult:
 
     @classmethod
     def refused(cls, inventory: ActiveInventory, action: str = "stop",
-                listener: Optional[str] = None):
-        return cls(action, "refused", False, listener, inventory)
+                listener: Optional[str] = None, workers: Optional[WorkerImpact] = None):
+        return cls(action, "refused", False, listener, inventory,
+                   workers or WorkerImpact())
 
     @classmethod
     def completed(cls, action: str, inventory: ActiveInventory, forced: bool,
-                  listener: Optional[str] = None):
-        return cls(action, "completed", forced, listener, inventory)
+                  listener: Optional[str] = None,
+                  workers: Optional[WorkerImpact] = None):
+        return cls(action, "completed", forced, listener, inventory,
+                   workers or WorkerImpact())
 
     def to_dict(self) -> JsonObject:
         return {
@@ -262,18 +311,19 @@ class MaintenanceResult:
             "forced": self.forced,
             "listener": self.listener,
             "inventory": self.inventory.to_dict(),
+            "workers": self.workers.to_dict(),
             "durable_state": self.durable_state,
         }
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        required = {"action", "status", "forced", "listener", "inventory",
+        required = {"action", "status", "forced", "listener", "inventory", "workers",
                     "durable_state"}
         if not isinstance(value, dict) or set(value) != required:
             raise ValueError("invalid MaintenanceResult fields")
         return cls(value["action"], value["status"], value["forced"],
                    value["listener"], ActiveInventory.from_dict(value["inventory"]),
-                   value["durable_state"])
+                   WorkerImpact.from_dict(value["workers"]), value["durable_state"])
 
 
 @dataclass(frozen=True)

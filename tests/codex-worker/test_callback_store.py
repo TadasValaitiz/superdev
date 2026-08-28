@@ -28,7 +28,7 @@ class CallbackStoreTests(unittest.TestCase):
         self.path = root / "callbacks.json"
         self.artifacts = root / "callback-artifacts"
         self.store = CallbackStore(self.path, self.artifacts)
-        self.worker = WorkerView("scope", "worker", "12345678-1234-5678-1234-567812345678",
+        self.worker = WorkerView("worker", "12345678-1234-5678-1234-567812345678",
                                  "thread", str(root), Tier.MEDIUM, "model", "medium", AccessMode.FULL)
 
     def binding(self, state=CallbackState.ENABLED):

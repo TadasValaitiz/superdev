@@ -145,7 +145,7 @@ def default_service_deps() -> GlobalWorkerServiceDeps:
     return GlobalWorkerServiceDeps(_spawn_codex, _create_connection, _create_gateway)
 
 
-def _verify_private_socket(path: Path, uid: int) -> None:
+def _verify_private_socket(path: Path, uid: int) -> os.stat_result:
     value = os.lstat(str(path))
     if not stat.S_ISSOCK(value.st_mode):
         raise PermissionError("private Codex path is not a Unix socket")
@@ -153,6 +153,7 @@ def _verify_private_socket(path: Path, uid: int) -> None:
         raise PermissionError("private Codex socket is not owned by the service user")
     if stat.S_IMODE(value.st_mode) & 0o077:
         raise PermissionError("private Codex socket must be owner-only")
+    return value
 
 
 def _ensure_owner_directory(path: Path) -> None:
@@ -223,6 +224,7 @@ class GlobalWorkerService:
         self._process = None  # type: Optional[OwnedProcess]
         self._connection = None  # type: Optional[CodexConnection]
         self._gateway = None  # type: Optional[WebSocketGateway]
+        self._private_socket_identity = None  # type: Optional[os.stat_result]
 
     @property
     def private_endpoint(self) -> str:
@@ -267,7 +269,8 @@ class GlobalWorkerService:
         deadline = time.monotonic() + PRIVATE_SOCKET_TIMEOUT
         while True:
             if self.paths.private_codex_socket.exists() or self.paths.private_codex_socket.is_symlink():
-                _verify_private_socket(self.paths.private_codex_socket, os.getuid())
+                self._private_socket_identity = _verify_private_socket(
+                    self.paths.private_codex_socket, os.getuid())
                 return
             if process.poll() is not None:
                 raise RuntimeError("Codex exited before creating its private socket")
@@ -322,9 +325,11 @@ class GlobalWorkerService:
         gateway = self._gateway
         connection = self._connection
         process = self._process
+        private_socket_identity = self._private_socket_identity
         self._gateway = None
         self._connection = None
         self._process = None
+        self._private_socket_identity = None
         errors = []
         if gateway is not None:
             try:
@@ -344,6 +349,19 @@ class GlobalWorkerService:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=2.0)
+            except Exception as exc:
+                errors.append(exc)
+        private_socket = self.paths.private_codex_socket
+        if private_socket.exists() or private_socket.is_symlink():
+            try:
+                current = _verify_private_socket(private_socket, os.getuid())
+                if (private_socket_identity is None
+                        or (current.st_dev, current.st_ino) != (
+                            private_socket_identity.st_dev,
+                            private_socket_identity.st_ino)):
+                    raise PermissionError(
+                        "private Codex socket changed after readiness")
+                os.unlink(str(private_socket))
             except Exception as exc:
                 errors.append(exc)
         if errors and not suppress_errors:

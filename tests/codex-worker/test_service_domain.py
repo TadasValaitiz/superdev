@@ -33,7 +33,7 @@ from codex_worker.service_domain import (  # noqa: E402
 
 SERVICE_DOMAIN_MODELS = {
     "AttachView", "LegacyCandidate", "LegacyConflict", "MigrationSourceView",
-    "MigrationStatusView", "ServiceConfig", "ServicePaths",
+    "MigrationStatusView", "MigrationResolveView", "ServiceConfig", "ServicePaths",
 }
 SERVICE_DOMAIN_FUNCTIONS = {"derive_service_paths", "validate_public_listener"}
 

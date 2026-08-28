@@ -12,6 +12,7 @@ from codex_worker.commands import (
     MetricAvailability, MetricEvidence, RecoveryView, StartWorkerRequest, Tier, TurnView,
     WorkerMessagesResponse, WorkerStatusResponse, WorkerView,
 )
+from codex_worker.service_domain import AttachView, MigrationState, MigrationStatusView
 
 
 class CommandModelTests(unittest.TestCase):
@@ -41,11 +42,58 @@ class CommandModelTests(unittest.TestCase):
         self.assertEqual(fault.to_dict()["data"], {
             "kind": "worker_not_found", "retryable": False,
             "source": "codex-worker", "details": {},
-            "known_ids": {"instance": "scope", "name": "review-a31",
+            "known_ids": {"name": "review-a31",
                           "session_id": None, "thread_id": None, "turn_id": None},
             "next_actions": [{"command": "codex-worker start --name review-a31",
-                              "reason": "Create this worker in the selected instance"}],
+                              "reason": "Create this worker in the global service"}],
         })
+
+    def test_global_service_command_models_and_fault_codes_are_strict(self):
+        from codex_worker.commands import (
+            FACADE_FAULT_KINDS, MigrationStatusRequest,
+            ResolveLegacyConflictRequest, RestartServiceRequest,
+            StartServiceRequest, StatusServiceRequest, StopServiceRequest,
+        )
+        expected = {
+            FacadeFaultCode.ADDRESS_IN_USE: (-32039, "address_in_use"),
+            FacadeFaultCode.SERVICE_BUSY: (-32040, "service_busy"),
+            FacadeFaultCode.LEGACY_NAME_CONFLICT: (-32041, "legacy_name_conflict"),
+            FacadeFaultCode.SERVICE_CONFIG_CONFLICT: (-32042, "service_config_conflict"),
+        }
+        for code, (number, kind) in expected.items():
+            self.assertEqual((code.value, FACADE_FAULT_KINDS[code]), (number, kind))
+            self.assertEqual(FacadeFault(code, "message", kind).kind, kind)
+        models = (
+            StartServiceRequest("ws://127.0.0.1:4500"),
+            StatusServiceRequest(), StopServiceRequest(False),
+            RestartServiceRequest(None, True), MigrationStatusRequest(),
+            ResolveLegacyConflictRequest("legacy-a", "thread-a", None),
+        )
+        for model in models:
+            self.assertEqual(type(model).from_dict(model.to_dict()), model)
+            wire = model.to_dict(); wire["extra"] = True
+            with self.assertRaises(ValueError):
+                type(model).from_dict(wire)
+
+    def test_service_status_projects_listener_attach_counts_and_migration(self):
+        from codex_worker.commands import ServiceStatusResponse
+        migration = MigrationStatusView(MigrationState.COMPLETE, True, 0, 0, 0, [], [])
+        status = ServiceStatusResponse(
+            "ready", "8.1.0", 10, 11, "ws://127.0.0.1:4500",
+            "loopback", "none", "codex --remote ws://127.0.0.1:4500",
+            2, 1, migration.to_dict(), "preserved",
+        )
+        self.assertEqual(ServiceStatusResponse.from_dict(status.to_dict()), status)
+        self.assertEqual(status.active_turn_count, 1)
+        invalid = status.to_dict()
+        for key, value in (
+                ("status", "starting"), ("exposure", "unknown"),
+                ("auth", "token"), ("durable_state", "lost"),
+                ("attach_command", "codex --remote wrong"), ("pid", None)):
+            with self.subTest(key=key):
+                changed = dict(invalid); changed[key] = value
+                with self.assertRaises(ValueError):
+                    ServiceStatusResponse.from_dict(changed)
 
     def test_start_rejects_incompatible_policy_and_budget(self):
         with self.assertRaises(ValueError):
@@ -106,7 +154,7 @@ class CommandModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MessageWorkerRequest.from_dict({"name": "review-a31", "message": "notify", "priority": "urgent", "cc_agent_name": None})
 
-        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+        worker = WorkerView("review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
         attempt = CallbackAttemptView("event-1", CallbackAttemptState.WRITTEN, None,
                                       "2026-08-20T00:00:00Z", 1, "turn-1")
@@ -142,7 +190,7 @@ class CommandModelTests(unittest.TestCase):
             self.assertEqual(FacadeFault(code, "message", kind).to_dict()["data"]["kind"], kind)
 
     def test_response_models_recursively_reject_bad_shapes_and_round_trip(self):
-        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+        worker = WorkerView("review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
         response = CompletionResponse(
             worker, TurnView("turn", "completed", None),
@@ -156,7 +204,7 @@ class CommandModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CompletionResponse.from_dict(invalid)
         with self.assertRaises(ValueError):
-            WorkerView("scope", "bad name", self.session_id, "thread", self.cwd,
+            WorkerView("bad name", self.session_id, "thread", self.cwd,
                        Tier.MEDIUM, "model", "medium", AccessMode.FULL)
 
     def test_fault_rejects_unknown_codes_and_malformed_wire_envelopes(self):
@@ -170,7 +218,7 @@ class CommandModelTests(unittest.TestCase):
             FacadeFault.from_dict(malformed)
 
     def test_response_values_reject_closed_literals_and_boundary_counts(self):
-        worker = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+        worker = WorkerView("review-a31", self.session_id, "thread", self.cwd,
                             Tier.MEDIUM, "model", "medium", AccessMode.FULL)
         with self.assertRaises(ValueError):
             TurnView("turn", "unknown", None)
@@ -183,9 +231,9 @@ class CommandModelTests(unittest.TestCase):
 
     def test_worker_view_requires_uuid_session_id_on_construction_and_wire(self):
         with self.assertRaises(ValueError):
-            WorkerView("scope", "review-a31", "not-a-uuid", "thread", self.cwd,
+            WorkerView("review-a31", "not-a-uuid", "thread", self.cwd,
                        Tier.MEDIUM, "model", "medium", AccessMode.FULL)
-        valid = WorkerView("scope", "review-a31", self.session_id, "thread", self.cwd,
+        valid = WorkerView("review-a31", self.session_id, "thread", self.cwd,
                            Tier.MEDIUM, "model", "medium", AccessMode.FULL).to_dict()
         valid["session_id"] = "not-a-uuid"
         with self.assertRaises(ValueError):

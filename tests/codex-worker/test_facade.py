@@ -1,4 +1,5 @@
 import sys
+import json
 import shlex
 import tempfile
 import unittest
@@ -107,6 +108,19 @@ class _Broker:
         record = self.registry.resolve(selector)
         self.runtime.attach(record)
 
+    def turn_history(self, selector, cursor=None, limit=None):
+        record = self.registry.resolve(selector)
+        params = {"threadId": record.thread_id, "sortDirection": "desc",
+                  "itemsView": "full", "limit": limit}
+        if cursor is not None: params["cursor"] = cursor
+        page = self.codex.call("thread/turns/list", params)
+        return {"session_id": record.session_id, "thread_id": record.thread_id,
+                "turns": page["data"], "nextCursor": page["nextCursor"],
+                "attach": {"listener": "ws://127.0.0.1:4500",
+                           "thread_id": record.thread_id,
+                           "attach_command": "codex --remote ws://127.0.0.1:4500",
+                           "resume_command": "codex --remote ws://127.0.0.1:4500 resume %s" % record.thread_id}}
+
     def turn_steer(self, selector, prompt, expected_turn_id=None):
         if self.control_fault is not None:
             raise self.control_fault
@@ -171,8 +185,7 @@ class FacadeTests(unittest.TestCase):
         from codex_worker.projection import build_worker_message_event
 
         event_ids = iter(("event-a", "event-b"))
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher,
             self.callback_transport, lambda: next(event_ids),
@@ -196,7 +209,7 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(event.payload, {"message": "progress"})
         expected_block = (
             "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker --instance verified-instance message --name message-a --message \"<prose>\"\n"
+            "codex-worker message --name message-a --message \"<prose>\"\n"
             "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
             "This command does not wait for a reply; Claude may later use steer or run.")
         self.assertEqual(self.broker.turn_specs[0].prompt, "caller prose\n\n" + expected_block)
@@ -207,8 +220,7 @@ class FacadeTests(unittest.TestCase):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         instance = "verified instance; $(unsafe)"
         name = "root-only"
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, instance), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
         ))
@@ -216,15 +228,15 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(facade.start(StartWorkerRequest(name, "caller prose", self.cwd,
                                                                callback_capture=root_only)), Ok)
         prompt = self.broker.turn_specs[0].prompt
-        self.assertIn("codex-worker --instance 'verified instance; $(unsafe)' message --name root-only", prompt)
+        self.assertIn("codex-worker message --name root-only", prompt)
+        self.assertNotIn(instance, prompt)
         self.assertIn("Optional one-send override: --cc-agent-name <name>.", prompt)
         unsafe_record = type("Record", (), {"name": "root only; $(unsafe)"})()
         self.assertIn("--name 'root only; $(unsafe)'", facade._initial_prompt("x", unsafe_record))
 
     def test_null_and_disabled_callback_starts_do_not_inject_proactive_guidance(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
         ))
@@ -236,8 +248,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_message_callback_fault_matrix_is_typed_redacted_and_instance_qualified(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
         ))
@@ -265,15 +276,15 @@ class FacadeTests(unittest.TestCase):
                 commands = [shlex.split(action["command"])
                             for action in result.error.next_actions]
                 if code == FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE:
-                    self.assertEqual(commands[0][3:6],
+                    self.assertEqual(commands[0][1:4],
                                      ["message", "--name", "faults-a"])
                     self.assertIn("shorter", result.error.next_actions[0]["reason"].lower())
                 elif code == FacadeFaultCode.CALLBACK_SEND_FAILED:
-                    self.assertEqual([command[3] for command in commands],
+                    self.assertEqual([command[1] for command in commands],
                                      ["status", "message"])
                 else:
-                    self.assertEqual(commands[0][3:], ["status", "--name", "faults-a"])
-                    self.assertNotEqual(commands[0][3], "message")
+                    self.assertEqual(commands[0][1:], ["status", "--name", "faults-a"])
+                    self.assertNotEqual(commands[0][1], "message")
 
     def test_projector_port_declares_the_proactive_event_builder(self):
         from codex_worker.facade import ProjectorPort
@@ -282,8 +293,7 @@ class FacadeTests(unittest.TestCase):
     def test_message_override_is_one_send_only_and_named_workers_are_independent(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         event_ids = iter("event-%d" % index for index in range(5))
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
             lambda: next(event_ids),
@@ -305,8 +315,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_message_unavailable_override_is_permitted_but_disabled_override_refuses(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport,
         ))
@@ -332,9 +341,7 @@ class FacadeTests(unittest.TestCase):
     def test_start_installs_goal_before_first_turn_and_run_reuses_policy(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
 
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"),
-            self.registry, self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+        facade = WorkerFacade(FacadeDeps(self.registry, self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
             lambda: 1.0,
         ))
         started = facade.start(StartWorkerRequest(
@@ -393,8 +400,7 @@ class FacadeTests(unittest.TestCase):
             lambda: 7.0, transport.deps.now, 0.01)
         dispatcher.start(); self.addCleanup(dispatcher.shutdown)
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, projection, lambda: 1.0,
             self.callback_store, dispatcher, transport))
         capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
@@ -453,8 +459,7 @@ class FacadeTests(unittest.TestCase):
                     "turn_id": "turn-timeout", "status": "in_progress"}
         self.broker.start_turn = active_start
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(
-            InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"), self.registry,
+        facade = WorkerFacade(FacadeDeps(self.registry,
             self.broker, self.runtime, projection, lambda: 1.0,
             self.callback_store, dispatcher, transport))
         capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
@@ -527,12 +532,12 @@ class FacadeTests(unittest.TestCase):
             "model": "raw model; no", "supported_efforts": ["low", "high"],
         })
         self.assertEqual(result.error.known_ids, {
-            "instance": "verified-instance", "name": "retry-effort",
+            "name": "retry-effort",
             "session_id": None, "thread_id": None, "turn_id": None,
         })
         self.assertEqual(len(result.error.next_actions), 1)
         self.assertEqual(shlex.split(result.error.next_actions[0]["command"]), [
-            "codex-worker", "--instance", "verified-instance", "start",
+            "codex-worker", "start",
             "--name", "retry-effort", "--prompt", "continue; printf no",
             "--cwd", self.cwd, "--model", "raw model; no", "--effort", "low",
             "--read-only", "--goal", "finish safely", "--token-budget", "123",
@@ -550,7 +555,7 @@ class FacadeTests(unittest.TestCase):
 
         self.assertIsInstance(result, Err)
         command = shlex.split(result.error.next_actions[0]["command"])
-        self.assertEqual(command[3:], [
+        self.assertEqual(command[1:], [
             "start", "--name", "retry-tier", "--prompt", "continue",
             "--cwd", self.cwd, "--tier", "medium", "--effort", "low",
         ])
@@ -581,8 +586,7 @@ class FacadeTests(unittest.TestCase):
 
     def _facade(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        return WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "verified-instance"),
-                                       self.registry, self.broker, self.runtime,
+        return WorkerFacade(FacadeDeps(self.registry, self.broker, self.runtime,
                                        __import__("codex_worker.projection", fromlist=["x"]), lambda: 1.0,
                                        self.callback_store, self.callback_dispatcher,
                                        self.callback_transport))
@@ -595,10 +599,15 @@ class FacadeTests(unittest.TestCase):
 
     def _worker_dict(self, record):
         return {
-            "instance": "verified-instance", "name": record.name,
+            "name": record.name,
             "session_id": record.session_id, "thread_id": record.thread_id,
             "cwd": self.cwd, "tier": record.tier, "model": record.model,
             "effort": record.effort, "access": record.access,
+            "attach": {
+                "listener": "ws://127.0.0.1:4500", "thread_id": record.thread_id,
+                "attach_command": "codex --remote ws://127.0.0.1:4500",
+                "resume_command": "codex --remote ws://127.0.0.1:4500 resume %s" % record.thread_id,
+            },
         }
 
     def _completion_dict(self, record, structured_output=None):
@@ -619,10 +628,10 @@ class FacadeTests(unittest.TestCase):
                 "token_usage": {"value": None, "source": "codex", "availability": "unavailable"},
             },
             "recovery": {
-                "status": "codex-worker --instance verified-instance status --name %s" % name,
-                "messages": "codex-worker --instance verified-instance messages --name %s" % name,
-                "interrupt": "codex-worker --instance verified-instance interrupt --name %s" % name,
-                "raw_resume": "codex-worker --instance verified-instance session resume --thread %s" % record.thread_id,
+                "status": "codex-worker status --name %s" % name,
+                "messages": "codex-worker messages --name %s" % name,
+                "interrupt": "codex-worker interrupt --name %s" % name,
+                "raw_resume": "codex --remote ws://127.0.0.1:4500 resume %s" % record.thread_id,
             },
         }
 
@@ -657,11 +666,11 @@ class FacadeTests(unittest.TestCase):
         record = self.registry.resolve_name("goal-fails")
         self.assertNotIn("turn_start", self.broker.calls)
         self.assertEqual(result.error.known_ids, {
-            "instance": "verified-instance", "name": "goal-fails",
+            "name": "goal-fails",
             "session_id": record.session_id, "thread_id": record.thread_id, "turn_id": None,
         })
         self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[-2:],
-                         ["--thread", record.thread_id])
+                         ["resume", record.thread_id])
 
     def test_output_schema_reaches_turn_start_spec_exactly(self):
         schema = {"type": "object", "required": ["answer"]}
@@ -707,10 +716,10 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(waits, [(record.session_id, 2.5, "turn-1")])
         self.assertEqual(result.error.code, FacadeFaultCode.TIMEOUT_ACTIVE)
         self.assertEqual(result.error.known_ids, {
-            "instance": "verified-instance", "name": "timed", "session_id": record.session_id,
+            "name": "timed", "session_id": record.session_id,
             "thread_id": record.thread_id, "turn_id": "active-turn",
         })
-        self.assertEqual([shlex.split(action["command"])[3] for action in result.error.next_actions],
+        self.assertEqual([shlex.split(action["command"])[1] for action in result.error.next_actions],
                          ["status", "messages", "interrupt"])
 
     def test_run_active_turn_refusal_preserves_common_identity_and_controls(self):
@@ -730,12 +739,12 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(result.error.code.value, -32004)
         self.assertEqual(result.error.kind, "turn_active")
         self.assertEqual(result.error.known_ids, {
-            "instance": "verified-instance", "name": "already-active",
+            "name": "already-active",
             "session_id": record.session_id, "thread_id": record.thread_id,
             "turn_id": "active-turn",
         })
         self.assertEqual(
-            [shlex.split(action["command"])[3] for action in result.error.next_actions],
+            [shlex.split(action["command"])[1] for action in result.error.next_actions],
             ["status", "messages", "steer", "interrupt"],
         )
 
@@ -1037,19 +1046,22 @@ class FacadeTests(unittest.TestCase):
         record = self.registry.create(hostile_thread, self.cwd, "legacy-actions", "old-model", "medium")
         result = self._facade().run(RunWorkerRequest("legacy-actions", "continue"))
         self.assertIsInstance(result, Err)
-        self.assertEqual(result.error.details, {"policy_state": "incomplete_legacy"})
+        self.assertEqual(result.error.details["policy_state"], "incomplete_legacy")
+        self.assertEqual(result.error.details["attach"]["thread_id"], hostile_thread)
+        self.assertEqual(shlex.split(result.error.details["attach"]["resume_command"]), [
+            "codex", "--remote", "ws://127.0.0.1:4500", "resume", hostile_thread,
+        ])
         self.assertEqual(result.error.known_ids, {
-            "instance": "verified-instance", "name": "legacy-actions",
+            "name": "legacy-actions",
             "session_id": record.session_id, "thread_id": hostile_thread, "turn_id": None,
         })
         self.assertEqual(shlex.split(result.error.next_actions[0]["command"]), [
-            "codex-worker", "--instance", "verified-instance", "session", "resume",
-            "--thread", hostile_thread,
+            "codex", "--remote", "ws://127.0.0.1:4500", "resume", hostile_thread,
         ])
         self.assertEqual(result.error.next_actions[1:], [
-            {"command": "codex-worker --instance verified-instance turn start --session %s --prompt <text>" % record.session_id,
+            {"command": "codex-worker turn start --session %s --prompt <text>" % record.session_id,
              "reason": "Use the advanced raw turn path without inventing policy"},
-            {"command": "codex-worker --instance verified-instance start --name <different-name>",
+            {"command": "codex-worker start --name <different-name>",
              "reason": "Create a common worker with explicit policy"},
         ])
 
@@ -1059,11 +1071,12 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(result, Err)
         self.assertEqual(result.error.code, FacadeFaultCode.WORKER_NAME_EXISTS)
         self.assertEqual(result.error.known_ids["session_id"], record.session_id)
-        self.assertEqual([shlex.split(action["command"])[3:5]
-                          for action in result.error.next_actions[:2]],
-                         [["session", "resume"], ["turn", "start"]])
+        self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[-2:-1],
+                         ["resume"])
+        self.assertEqual(shlex.split(result.error.next_actions[1]["command"])[1:3],
+                         ["turn", "start"])
         self.assertEqual(result.error.next_actions[-1]["command"],
-                         "codex-worker --instance verified-instance start --name <different-name>")
+                         "codex-worker start --name <different-name>")
 
     def test_non_progressing_history_page_maps_protocol_error(self):
         self._record("history-stuck")
@@ -1111,8 +1124,7 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(refused, Err)
         raw_resume = refused.error.next_actions[0]["command"]
         self.assertEqual(shlex.split(raw_resume), [
-            "codex-worker", "--instance", "verified-instance", "session", "resume",
-            "--thread", hostile_thread,
+            "codex", "--remote", "ws://127.0.0.1:4500", "resume", hostile_thread,
         ])
 
     def test_limits_stopped_recovery_is_instance_scoped_without_fabricated_worker_name(self):
@@ -1123,31 +1135,86 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(refused, Err)
         self.assertEqual(refused.error.code, FacadeFaultCode.DAEMON_STOPPED)
         self.assertEqual(refused.error.known_ids, {
-            "instance": "verified-instance", "name": None, "session_id": None,
+            "name": None, "session_id": None,
             "thread_id": None, "turn_id": None,
         })
         self.assertEqual(refused.error.next_actions, [
             {
-                "command": "codex-worker --instance verified-instance daemon status",
-                "reason": "Inspect the selected instance",
+                "command": "codex-worker daemon status",
+                "reason": "Inspect the global service",
             },
             {
-                "command": "codex-worker --instance verified-instance start --name <name> --prompt <text>",
-                "reason": "Start a named worker to launch the selected instance",
+                "command": "codex-worker start --name <name> --prompt <text>",
+                "reason": "Start a named worker to launch the global service",
             },
         ])
 
-    def test_recovery_commands_pin_the_verified_shell_quoted_instance(self):
+    def test_recovery_commands_ignore_legacy_instance_identity(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
-        facade = WorkerFacade(FacadeDeps(InstanceIdentity(InstanceSource.DEFAULT, "scope; echo no"),
-                                       self.registry, self.broker, self.runtime,
+        facade = WorkerFacade(FacadeDeps(self.registry, self.broker, self.runtime,
                                        __import__("codex_worker.projection", fromlist=["x"]), lambda: 1.0))
         missing = facade.status(WorkerStatusRequest("absent"))
         self.assertIsInstance(missing, Err)
         self.assertEqual(missing.error.next_actions, [{
-            "command": "codex-worker --instance 'scope; echo no' start --name absent",
-            "reason": "Create this worker in the selected instance"}])
+            "command": "codex-worker start --name absent",
+            "reason": "Create this worker in the global service"}])
 
+
+class GlobalServiceFacadeTests(unittest.TestCase):
+    def test_status_busy_and_migration_resolution_are_closed_public_views(self):
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.commands import (MigrationStatusRequest,
+            ResolveLegacyConflictRequest, StatusServiceRequest, StopServiceRequest)
+        from codex_worker.models import (ActiveInventory, ActiveThreadItem,
+                                         MaintenanceResult, SessionRecord)
+        from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
+                                          ListenerExposure)
+        from codex_worker.service_domain import (MigrationState, MigrationStatusView,
+                                                  ServiceConfig)
+        listener = "ws://localhost:4600"
+        migration = MigrationStatusView(MigrationState.COMPLETE, True, 0, 0, 0, [], [])
+        active = ActiveInventory([ActiveThreadItem(
+            "thread-tui", "unmapped_tui", None, None, "turn-tui", ("active",))])
+        record = SessionRecord(
+            session_id="00000000-0000-0000-0000-000000000001",
+            thread_id="thread-a", cwd="/tmp",
+            created_at="2026-08-28T00:00:00Z", updated_at="2026-08-28T00:00:00Z",
+            name="legacy-a", model="model-a", effort="medium", tier="medium",
+            access="full")
+        class Service:
+            def status(self):
+                return GlobalWorkerServiceStatus(True, listener, "8.1.0", 22,
+                    "/tmp/private.sock", ListenerExposure.LOOPBACK,
+                    GatewayAuthentication.NONE)
+        class Broker:
+            def daemon_status(self): return {"daemon_pid": 21, "session_count": 1}
+            def list_active_threads(self): return active
+        class Coordinator:
+            def stop(self, force): return MaintenanceResult.refused(active, "stop", None)
+        class Migrator:
+            def scan_and_apply(self): return migration
+            def resolve(self, name, thread_id, as_name): return record
+        facade = ServiceFacade(ServiceFacadeDeps(
+            Service(), Broker(), Coordinator(), Migrator(),
+            ServiceConfig(listener, "8.1.0", "00000000-0000-0000-0000-000000000002")))
+        status = facade.status(StatusServiceRequest())
+        self.assertIsInstance(status, Ok)
+        self.assertEqual(status.value.attach_command,
+                         "codex --remote ws://localhost:4600")
+        refused = facade.stop(StopServiceRequest(False))
+        self.assertIsInstance(refused, Err)
+        self.assertEqual(refused.error.code, FacadeFaultCode.SERVICE_BUSY)
+        self.assertEqual(refused.error.details["active"][0]["origin"], "unmapped_tui")
+        self.assertEqual(refused.error.details["workers"], {
+            "active_names": [], "idle_names": [], "active_count": 0,
+            "idle_count": 0, "total_count": 0})
+        self.assertNotIn("--force", json.dumps(refused.error.next_actions))
+        migration_response = facade.migration_status(MigrationStatusRequest()).value
+        self.assertEqual(migration_response.conflict_count, migration.conflict_count)
+        self.assertEqual(migration_response.resolution_actions, [])
+        resolved = facade.migration_resolve(
+            ResolveLegacyConflictRequest("legacy-a", "thread-a", None)).value
+        self.assertEqual(resolved.attach.thread_id, "thread-a")
 
 if __name__ == "__main__":
     unittest.main()

@@ -97,6 +97,7 @@ class _MigrationPlan:
 class LegacyMigrator:
     """Plan the complete merge, then commit it in D20's fixed order."""
     LEDGER_VERSION = 1
+    RESOLUTION_INTENT_VERSION = 1
 
     def __init__(self, deps: LegacyMigrationDeps):
         if not isinstance(deps, LegacyMigrationDeps):
@@ -104,6 +105,9 @@ class LegacyMigrator:
         self.deps = deps
 
     def scan_and_apply(self) -> MigrationStatusView:
+        intent = self._read_resolution_intent(optional=True)
+        if intent is not None:
+            self.resolve(intent["name"], intent["thread_id"], intent["as_name"])
         existing = self._read_ledger(optional=True)
         if existing is not None:
             return existing[0]
@@ -117,6 +121,13 @@ class LegacyMigrator:
         self._commit(plan, [])
         return plan.status
 
+    def status_if_stable(self) -> Optional[MigrationStatusView]:
+        """Return the durable ledger only when no resolution recovery can write."""
+        if self._read_resolution_intent(optional=True) is not None:
+            return None
+        ledger = self._read_ledger(optional=True)
+        return None if ledger is None else ledger[0]
+
     def resolve(self, name: str, thread_id: str,
                 as_name: Optional[str]) -> SessionRecord:
         validate_worker_name(name)
@@ -124,16 +135,36 @@ class LegacyMigrator:
             raise ValueError("thread_id must be non-empty")
         if as_name is not None:
             validate_worker_name(as_name)
+        resolution = {"name": name, "thread_id": thread_id, "as_name": as_name}
+        pending = self._read_resolution_intent(optional=True)
+        if pending is not None and pending != resolution:
+            raise LegacyMigrationError(
+                "migration_resolution_recovery_required",
+                self._resolution_intent_path())
+        recovering = pending is not None
         ledger = self._read_ledger(optional=False)
         status, resolutions = ledger  # type: ignore[misc]
+        target_name = as_name or name
+        if resolution in resolutions:
+            registry = SessionRegistry(self.deps.paths.registry_path,
+                                       migration_path=self.deps.paths.migration_path)
+            matches = [record for record in registry.list()
+                       if record.name == target_name]
+            if len(matches) != 1 or matches[0].thread_id != thread_id:
+                raise ValueError("legacy conflict or candidate was not found")
+            record = matches[0]
+            if pending is not None:
+                self._clear_resolution_intent()
+            return record
         conflict = next((item for item in status.conflicts if item.name == name), None)
         if conflict is None:
-            target_name = as_name or name
             registry = SessionRegistry(self.deps.paths.registry_path,
                                        migration_path=self.deps.paths.migration_path)
             record = registry.resolve_name(target_name)
             if record.thread_id != thread_id:
                 raise ValueError("legacy conflict or candidate was not found")
+            if pending is not None:
+                self._clear_resolution_intent()
             return record
         candidates = [candidate for candidate in conflict.candidates
                       if candidate.thread_id == thread_id]
@@ -151,7 +182,6 @@ class LegacyMigrator:
                          and record.thread_id == candidate.thread_id), None)
         if original is None:
             raise LegacyMigrationError("legacy_candidate_missing", source.registry_path)
-        target_name = as_name or name
         selected = replace(original, name=target_name)
         current_records = self._target_records()
         matches = [record for record in current_records
@@ -168,21 +198,68 @@ class LegacyMigrator:
             source, original, selected, target_callbacks)
         merged_callbacks = self._merge_callback_snapshots(
             target_callbacks, CallbackStoreSnapshot(bindings, entries), set())
-        if as_name is None:
-            conflicts = [item for item in status.conflicts if item.name != name]
-        else:
-            conflicts = list(status.conflicts)
-        next_status = MigrationStatusView(
-            MigrationState.COMPLETE, True, status.imported_count,
-            status.deduplicated_count, len(conflicts), list(status.sources), conflicts)
-        resolution = {"name": name, "thread_id": thread_id, "as_name": as_name}
+        next_status = self._status_after_resolution(status, candidate, as_name)
         next_resolutions = list(resolutions)
         if resolution not in next_resolutions:
             next_resolutions.append(resolution)
         plan = _MigrationPlan(next_status, self._sorted_records(merged_records),
                               merged_callbacks, artifacts)
-        self._commit(plan, next_resolutions)
+        rollback_plan = _MigrationPlan(
+            status, self._sorted_records(current_records), target_callbacks, [])
+        self._write_resolution_intent(resolution)
+        try:
+            self._commit(plan, next_resolutions)
+        except Exception:
+            if recovering:
+                raise
+            try:
+                self._commit(rollback_plan, list(resolutions), notify=False)
+                self._clear_resolution_intent()
+            except Exception as rollback_error:
+                raise LegacyMigrationError(
+                    "migration_resolution_recovery_failed",
+                    self._resolution_intent_path()) from rollback_error
+            raise
+        self._clear_resolution_intent()
         return selected
+
+    @staticmethod
+    def _status_after_resolution(status: MigrationStatusView,
+                                 candidate: LegacyCandidate,
+                                 as_name: Optional[str]) -> MigrationStatusView:
+        found_source = False
+        sources = []
+        for source in status.sources:
+            if (source.source_path == candidate.source_path
+                    and source.source_digest == candidate.source_digest
+                    and source.session_id == candidate.session_id
+                    and source.thread_id == candidate.thread_id):
+                if source.outcome != MigrationOutcome.CONFLICTED:
+                    raise LegacyMigrationError("resolution_source_is_not_conflicted")
+                sources.append(replace(source, outcome=MigrationOutcome.IMPORTED))
+                found_source = True
+            else:
+                sources.append(source)
+        if not found_source:
+            raise LegacyMigrationError("resolution_source_missing")
+        conflicts = []
+        for conflict in status.conflicts:
+            if conflict.name != candidate.name:
+                conflicts.append(conflict)
+                continue
+            if as_name is None:
+                continue
+            remaining = [item for item in conflict.candidates
+                         if item != candidate]
+            if remaining:
+                conflicts.append(LegacyConflict(
+                    conflict.name, remaining,
+                    sorted({item.source_digest for item in remaining})))
+        return MigrationStatusView(
+            MigrationState.COMPLETE, True,
+            sum(item.outcome == MigrationOutcome.IMPORTED for item in sources),
+            sum(item.outcome == MigrationOutcome.DEDUPLICATED for item in sources),
+            len(conflicts), sources, conflicts)
 
     def _load_sources(self) -> List[_LegacySource]:
         root = self.deps.legacy_instances_dir
@@ -484,7 +561,7 @@ class LegacyMigrator:
         if (record.name is None or record.model is None or record.effort is None
                 or record.access is None):
             raise LegacyMigrationError("callback_worker_policy_is_incomplete")
-        return WorkerView("global", record.name, record.session_id, record.thread_id,
+        return WorkerView(record.name, record.session_id, record.thread_id,
                           record.cwd, None if record.tier is None else Tier(record.tier),
                           record.model, record.effort, AccessMode(record.access))
 
@@ -511,7 +588,8 @@ class LegacyMigrator:
                 if raw != expected:
                     raise LegacyMigrationError("global_artifact_collision", target)
 
-    def _commit(self, plan: _MigrationPlan, resolutions: List[dict]) -> None:
+    def _commit(self, plan: _MigrationPlan, resolutions: List[dict],
+                notify: bool = True) -> None:
         artifact_store = CallbackStore(self.deps.paths.callback_path,
                                        self.deps.paths.callback_artifact_dir)
         for expected, completion in plan.artifacts:
@@ -520,23 +598,27 @@ class LegacyMigrator:
                 raise LegacyMigrationError("global_artifact_publication_mismatch",
                                            Path(expected.path))
         self._sync_existing(self.deps.paths.callback_artifact_dir)
-        self.deps.after_commit(MigrationCommitStage.ARTIFACTS)
+        if notify:
+            self.deps.after_commit(MigrationCommitStage.ARTIFACTS)
 
         SessionRegistry.publish_snapshot(
             self.deps.paths.registry_path, plan.records,
             migration_path=self.deps.paths.migration_path)
         self._sync_existing(self.deps.paths.registry_path)
         self._sync_existing(self.deps.paths.registry_path.parent)
-        self.deps.after_commit(MigrationCommitStage.REGISTRY)
+        if notify:
+            self.deps.after_commit(MigrationCommitStage.REGISTRY)
 
         CallbackStore(self.deps.paths.callback_path,
                       self.deps.paths.callback_artifact_dir).replace_snapshot(plan.callbacks)
         self._sync_existing(self.deps.paths.callback_path)
         self._sync_existing(self.deps.paths.callback_path.parent)
-        self.deps.after_commit(MigrationCommitStage.CALLBACKS)
+        if notify:
+            self.deps.after_commit(MigrationCommitStage.CALLBACKS)
 
         self._write_ledger(plan.status, resolutions)
-        self.deps.after_commit(MigrationCommitStage.LEDGER)
+        if notify:
+            self.deps.after_commit(MigrationCommitStage.LEDGER)
 
     def _read_ledger(self, optional: bool) -> Optional[Tuple[MigrationStatusView, List[dict]]]:
         path = self.deps.paths.migration_path
@@ -593,6 +675,80 @@ class LegacyMigrator:
                 os.unlink(temporary)
             except FileNotFoundError:
                 pass
+
+    def _resolution_intent_path(self) -> Path:
+        return self.deps.paths.migration_path.with_name(
+            "migration-resolution.json")
+
+    def _read_resolution_intent(self, optional: bool) -> Optional[dict]:
+        path = self._resolution_intent_path()
+        if not path.exists():
+            if path.is_symlink():
+                raise LegacyMigrationError("unsafe_migration_resolution_intent", path)
+            if optional:
+                return None
+            raise LegacyMigrationError("migration_resolution_intent_missing", path)
+        self._owner_regular(path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if (not isinstance(payload, dict)
+                    or set(payload) != {"version", "resolution"}
+                    or payload["version"] != self.RESOLUTION_INTENT_VERSION
+                    or not isinstance(payload["resolution"], dict)):
+                raise ValueError("invalid migration resolution intent")
+            resolution = payload["resolution"]
+            if (set(resolution) != {"name", "thread_id", "as_name"}
+                    or not isinstance(resolution["name"], str)
+                    or not isinstance(resolution["thread_id"], str)
+                    or (resolution["as_name"] is not None
+                        and not isinstance(resolution["as_name"], str))):
+                raise ValueError("invalid migration resolution intent")
+            validate_worker_name(resolution["name"])
+            if not resolution["thread_id"]:
+                raise ValueError("invalid migration resolution intent")
+            if resolution["as_name"] is not None:
+                validate_worker_name(resolution["as_name"])
+            return dict(resolution)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise LegacyMigrationError(
+                "invalid_migration_resolution_intent", path) from exc
+
+    def _write_resolution_intent(self, resolution: dict) -> None:
+        path = self._resolution_intent_path()
+        self._mkdir_owner(path.parent)
+        if path.exists() or path.is_symlink():
+            self._owner_regular(path)
+        payload = json.dumps(
+            {"version": self.RESOLUTION_INTENT_VERSION,
+             "resolution": resolution},
+            sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8") + b"\n"
+        descriptor, temporary = tempfile.mkstemp(
+            prefix="migration-resolution.", dir=str(path.parent))
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                self.deps.fsync(handle.fileno())
+            self.deps.replace(temporary, path)
+            self._owner_regular(path)
+            self._sync_existing(path.parent)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+
+    def _clear_resolution_intent(self) -> None:
+        path = self._resolution_intent_path()
+        if not path.exists():
+            if path.is_symlink():
+                raise LegacyMigrationError("unsafe_migration_resolution_intent", path)
+            return
+        self._owner_regular(path)
+        os.unlink(path)
+        self._sync_existing(path.parent)
 
     def _target_records(self) -> List[SessionRecord]:
         path = self.deps.paths.registry_path
@@ -741,3 +897,47 @@ class LegacyMigrator:
             self.deps.fsync(descriptor)
         finally:
             os.close(descriptor)
+
+
+class LiveMigrationCoordinator:
+    """Serialize live conflict resolution with worker and callback authorities."""
+
+    def __init__(self, migrator: LegacyMigrator, broker, callback_store: CallbackStore):
+        if not isinstance(migrator, LegacyMigrator):
+            raise TypeError("migrator must be LegacyMigrator")
+        if not isinstance(callback_store, CallbackStore):
+            raise TypeError("callback_store must be CallbackStore")
+        if not isinstance(getattr(broker, "registry", None), SessionRegistry):
+            raise TypeError("broker must expose the live SessionRegistry")
+        if not hasattr(broker, "_gate"):
+            raise TypeError("broker must expose the shared maintenance gate")
+        self._migrator = migrator
+        self._broker = broker
+        self._callback_store = callback_store
+
+    def scan_and_apply(self) -> MigrationStatusView:
+        stable = self._migrator.status_if_stable()
+        if stable is not None:
+            return stable
+        registry = self._broker.registry
+        with self._broker._gate.drain():
+            with registry._lock:
+                with self._callback_store._lock:
+                    status = self._migrator.scan_and_apply()
+                    refreshed = SessionRegistry.read_existing(registry.path).list()
+                    registry._records = refreshed
+                    return status
+
+    def resolve(self, name: str, thread_id: str,
+                as_name: Optional[str]) -> SessionRecord:
+        registry = self._broker.registry
+        # Drain first, then acquire persistent authorities in a fixed order. This
+        # prevents a Codex mutation from succeeding upstream while its registry
+        # publication waits behind the migration transaction.
+        with self._broker._gate.drain():
+            with registry._lock:
+                with self._callback_store._lock:
+                    record = self._migrator.resolve(name, thread_id, as_name)
+                    refreshed = SessionRegistry.read_existing(registry.path).list()
+                    registry._records = refreshed
+                    return record
