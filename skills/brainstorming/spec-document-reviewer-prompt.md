@@ -23,7 +23,10 @@ Subagent (general-purpose):
 
     **Spec:** [SPEC_FILE_PATH]
     **Decision log:** [DECISION_LOG_PATH]
-    **Template it must follow:** [PLUGIN_ROOT]/skills/brainstorming/design-doc-template.md
+    **Angle companions (REQUIRED inputs when any exist):** [ANGLE_FILE_PATHS]
+    **Census:** [CENSUS_FILE_PATH]
+    **Templates they must follow:** [PLUGIN_ROOT]/skills/brainstorming/design-doc-template.md ·
+    item-angle-template.md (the teaching form) · decision-log-template.md
 
     ## What to check
 
@@ -41,7 +44,8 @@ Subagent (general-purpose):
     | Consistency | Internal contradictions, conflicting requirements. |
     | Clarity | Requirements ambiguous enough to build the wrong thing. |
     | Scope | Focused enough for a single plan; §8 Not-doing present, so scope was actually decided rather than left open. |
-    | Corpus & angles (when a `design/` corpus or item angles exist) | Collisions between areas/angles are surfaced and reconciled, not left implicit; every §5 area carries a DOC-MARK status; item angle companions cite the governing system passages at file:line and contradict none of them (a contradiction must appear as residue, not a silent local ruling). |
+    | Corpus & angles | Collisions between areas/angles are surfaced and reconciled, not left implicit; every §5 area carries a positional status line (`**Status:** LOCKED|FLEXIBLE|… (D#|owner) — …`); angle companions contradict neither the spec nor the log (a contradiction with a system-scale ruling must appear as residue, never a silent local ruling); every companion collision appears in the spec's areas or §8 Not-doing. |
+    | Angle experience probes (per companion) | STRANGER TEST: pick 2–3 claims and answer "what does this rule and why?" from the companion ALONE — a claim answerable only via the log is a finding. A `LOCKED` with no "this means…" consequence; a deferral saying bare "later" (no landing place); a resolved fork still reading as a pending recommendation; a status guide listing fewer statuses than the body uses; measured and invented quantities typographically identical — each is a finding. |
     | YAGNI | Unrequested features, over-engineering, areas serving no R#/UC#. |
 
     ## Calibration
@@ -69,5 +73,5 @@ Subagent (general-purpose):
     - [suggestions]
 ```
 
-**Reviewer returns:** Status, blocking issues, recommendations. The author fixes blocking
+**Reviewer returns:** Status, blocking issues (spec AND companions), recommendations. The author fixes blocking
 issues and re-dispatches once; advisory items are applied at the author's judgment.
