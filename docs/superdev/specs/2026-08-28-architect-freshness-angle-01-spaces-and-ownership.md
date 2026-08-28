@@ -1,7 +1,7 @@
 # Angle 1 — Spaces and ownership
 
 **Purpose:** understand who may write where in a governed repository, why each boundary sits where it does, and how ownership is audited — without reading the spec or the decision log.
-**Formal anchors:** D47–D49, D51 (D50 superseded), D60 · spec §5.1/§5.2 (R1–R4).
+**Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D47–D49, D51 (D50 superseded), D60, D68 · experience design §5.6. All quantities in this angle are real measurements from the evidence corpus, not illustrations.
 **Series:** 1 of 4.
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
@@ -13,7 +13,7 @@ How can the operator KNOW — mechanically, from the repository itself, without 
 
 ## Boundaries
 
-This angle starts at the repository's `docs/` root and stops at file ownership and transport: who writes, who reads, how content moves between owners. What the files *say* and how they stay fresh is angle 2's territory; how rooms consume them is angle 3's. The journey below follows one repository through a working day.
+This angle starts at the repository's `docs/` root and stops at file ownership and transport: who writes, who reads, how content moves between owners. What the files *say* and how they stay fresh is angle 2's territory; how rooms consume them is angle 3's.
 
 ## Concrete journey
 
@@ -21,12 +21,12 @@ This angle starts at the repository's `docs/` root and stops at file ownership a
 
 A governed repository has exactly four writing territories:
 
-```
-docs/system-design/     ARCHITECT only      the architecture corpus
-docs/orchestration/     ORCHESTRATOR only   operational records and ledgers
-docs/superdev/          ITEM ROOMS          specs, plans, scenarios — each room its own item's files
-.superdev/sdd/ + worktrees                  per-room scratch, git-ignored, outside docs/
-```
+| Space | Sole writer | Everyone reads? | Contains | Audit command |
+|---|---|---|---|---|
+| `docs/system-design/` | ARCHITECT | yes | the architecture corpus (canon + milestones) | `git log -- docs/system-design/` |
+| `docs/orchestration/` | ORCHESTRATOR | yes | operational records, ledgers, handovers, handoffs, execution proposals | `git log -- docs/orchestration/` |
+| `docs/superdev/` | ITEM ROOMS (each its own item's files) | yes | item specs, plans, decision logs, scenario distills | per-item `git log` |
+| `.superdev/sdd/` + worktrees | each room | owner only | scratch: briefs, reports, seat outputs | git-ignored — no history by design |
 
 Read access is universal — the architect grounds on item specs and code freely; rooms quote the corpus into their sessions; the orchestrator reads everything. But a *write* never crosses a boundary. A session that believes another space's file is wrong does not fix it: it sends a message to the owner describing the problem, and the owner decides. This is the correction route, and it exists so that "who wrote this?" always has exactly one possible answer.
 
@@ -48,13 +48,32 @@ The corpus divides into two layers with opposite maintenance disciplines:
 
 **The canon layer** — `map.md` and `visions/<area>.md`. These files are *rewritten in place*. No banners, no supersession trail inside the file, no dates in the filename. The contract: if it's in canon, you may rely on it today, as written. When the architecture moves, canon moves in the same sitting. The layer stays deliberately tiny — a handful of files — because "always current" is expensive and only affordable at small size. (The evidence project had already invented this shape independently: a three-file `canon/` folder — vision, topology, operating procedures — surviving unstale while hundreds of dated docs churned around it.)
 
-**The dated layer** — `milestones/<slug>/`, one folder per milestone, holding everything that milestone's design produced: `INDEX.md` (the angle index, the status vocabulary, and the milestone's declared D# range), `decisions.md` (the milestone's decision log), `angles/`, `anchors/`, `census.md` (the charter-time grounding sweep, provenance-tagged MEASURED/READ/FLAGGED), and `inputs/` (curated copies of intake — seat reports, charters; copying them in is authorship of the record). Dated files are *never rewritten*: a superseded document gets a banner at the top redirecting to current authority, and the prose below stays as the historical record.
+**The dated layer** — `milestones/<slug>/`, one folder per milestone, holding everything that milestone's design produced:
+
+```
+milestones/<slug>/
+├─ INDEX.md            the angle index, the status vocabulary, this milestone's declared D# range
+├─ decisions.md        the milestone's decision log
+├─ angles/NN-<slug>.md the angle series
+├─ anchors/<topic>.md  the formal design anchors
+├─ census.md           the charter-time grounding sweep, every claim provenance-tagged:
+│                        MEASURED = output of a command run in that sweep ·
+│                        READ = taken from source or a committed doc, file:line given ·
+│                        FLAGGED = noticed, unverified — "the work queue, not conclusions"
+├─ inputs/             design-intake material the architect curates in — e.g. perspective
+│                        ("seat") reports commissioned as inputs to a sitting; copying
+│                        them in is authorship of the record (D68: EXECUTION seats'
+│                        reports live in the orchestrator's space, never here)
+└─ conformance-<item>.md  an advisory conformance read that outgrew its response-block line
+```
+
+Dated files are *never rewritten*: a superseded document gets a banner at the top redirecting to current authority, and the prose below stays as the historical record.
 
 The milestone folder is the working set: a sitting touches one folder — the angles being flipped, the log being appended, the index that navigates them, all siblings. History is a *peek*: open the neighbouring milestone's folder directly.
 
 ### LOCKED — decision numbers: one stream, many files
 
-Each milestone's `decisions.md` continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its folder's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint blocks at charter time — the same trick as room ID blocks. This is what makes cross-milestone citation safe without a global file.
+Each milestone's `decisions.md` continues a single repo-wide D# stream — the bench milestone's log runs D350–D494 precisely because it continued a global count. Each INDEX declares its folder's range ("this milestone owns D350–D494"), so a bare "D372" cited from anywhere in the repository resolves to exactly one folder, forever. If two milestones ever run in parallel, they receive pre-assigned disjoint number blocks at charter time (milestone A rules D500–D599, milestone B D600–D699) — the same collision-avoidance trick used when parallel rooms once shared an append-only ledger. This is what makes cross-milestone citation safe without a global file.
 
 ### LOCKED — residue transport: rooms report, the orchestrator comprehends
 
@@ -67,11 +86,20 @@ The one flow that crosses all four spaces is the residue flow — design-class f
 
 ### LOCKED — the handoff splits; no file has two writers
 
-The old milestone handoff was one file with an orchestrator section and an architect section — two writers, one file, the exact thing the ownership law forbids. It splits naturally: the orchestrator writes his half (what was built, claims, retro facts) in `docs/orchestration/handoffs/`; the architect's half — "upfront design for the next milestone" — *is the creation of the next `milestones/<slug>/` folder itself*. The handoff is not a document the architect contributes a section to; it is the birth of the next working set.
+The old milestone handoff was one file with an orchestrator section and an architect section — two writers, one file, the exact thing the ownership law forbids. It splits naturally: the orchestrator writes his half (what was built, claims, retro facts) in `docs/orchestration/handoffs/` — note the near-homophone: `handoffs/` are per-MILESTONE close documents in the never-pruned keep-set, while `handovers/` (angle 2) are per-CHECKPOINT message companions pruned on the rolling window; the architect's half — "upfront design for the next milestone" — *is the creation of the next `milestones/<slug>/` folder itself*. The handoff is not a document the architect contributes a section to; it is the birth of the next working set.
+
+## What the ownership law does not guarantee
+
+The law is about writes, and only writes. It does not guarantee:
+
+- **freshness of what you read** — reading a stale operational file from another space is permitted and expected; its OPERATIONAL RECORD stamp (angle 2), not the ownership law, tells you how much to trust it;
+- **lossless comprehension** — the orchestrator's residue ledger is his comprehension of room reports, and comprehension can drop or distort; the bound is auditability, not perfection: at milestone close, item-room reports can be diffed against ledger rows, and D51's revisit clause reopens the transport if that audit finds losses;
+- **content quality** — a space's sole writer can still write something wrong; correctness comes from reviews and reconciliation, not from ownership;
+- **protection outside docs/** — code and tests follow the item-room worktree rules, not this law.
 
 ## Visible collisions
 
-- **Single-writer purity vs multi-writer ledgers.** Three transports were designed, argued, and two discarded in one sitting: the shared inbox (invalidated by worktrees and by messaging's existence), per-room ledger files (rejected — the operator kept the working report-based model rather than multiply roots and mechanics), and report→orchestrator comprehension (won). The instructive part: the *first* redesign looked doctrinally cleaner and was still wrong, because it optimized the law rather than the work.
+- **Doctrine versus the work.** The residue-transport fork's instructive part (the fork itself is settled in the journey above): the first redesign — doctrinally cleaner per-room files — was still wrong, because it optimized the law rather than the work. When a purity argument and a working practice collide, ask what problem the purity actually solves before paying for it.
 - **Milestone-scoped logs vs global citation.** Self-contained folders pull toward per-milestone numbering; cross-references pull toward one global file. The reconciliation — local files, global stream, declared ranges — takes both sides' actual need and discards both sides' preferred mechanism.
 - **The two-writer handoff vs the law.** Resolved not by choosing a writer but by discovering the file was two artifacts wearing one filename.
 

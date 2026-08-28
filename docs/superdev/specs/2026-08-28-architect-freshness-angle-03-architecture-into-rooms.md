@@ -1,10 +1,15 @@
 # Angle 3 — Architecture into rooms, and back
 
 **Purpose:** understand how the milestone architecture reaches a fresh item-room session without paraphrase drift, and what happens when the room's contact with real code proves the architecture wrong — without reading the brief template or the SDD skill.
-**Formal anchors:** D53, D57, D61 · spec §5.1 (R6) and §5.4 (R8, R11).
+**Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D53, D57, D61 · experience design §5.6.
 **Series:** 3 of 4.
 
-> **Status guide:** LOCKED · FLEXIBLE · DEFERRED · MISMATCH.
+> **Status guide (this angle owns the vocabulary — full glosses):** LOCKED operator-ruled,
+> recorded at a D# · FLEXIBLE boundary agreed, exact shapes may move · DEFERRED a named
+> later session owns it · BLIND not yet examined — said honestly, so nobody mistakes
+> silence for approval · MISMATCH the repository behaves differently today; a
+> reconciliation is owed · SEED-ILLUSTRATIVE an example explaining a mechanism, never a
+> measurement or recommendation · SUPERSEDED→link this text is history; the link is the law.
 
 ## The central question
 
@@ -66,10 +71,20 @@ RULED SINCE THE RECONCILE:
 Part by part, against its failure:
 
 1. **The as-of line** defeats silent staleness: the room knows exactly which corpus state briefed it, so anything newer is *knowably* uncovered rather than unknowingly missing.
-2. **MAJOR reads** defeat wrong grounding — pointers at file-and-section precision, capped at three to five, with the one redirect that prevents the classic disaster: where the map says RESHAPE or REPLACE, the room grounds on the *vision*, never the legacy code, because the design has already killed that domain and building against it is building a fossil.
+2. **MAJOR reads** defeat wrong grounding — pointers at file-and-section precision, capped at three to five, with the one redirect that prevents the classic disaster: where the map says RESHAPE (the responsibility survives, its shape changes) or REPLACE (the design has killed this domain entirely), the room grounds on the *vision*, never the legacy code — building against a killed domain is building a fossil. (The verdicts live in `map.md`, the architect's current→target canon — angle 1; the architect assigns them.)
 3. **NARROW reads** defeat both hunting and over-reading: the room neither searches the corpus blind nor pre-reads twenty files.
 4. **The verbatim rulings** defeat paraphrase drift — the contested part, and the one place duplication is *sanctioned* in the whole system. The orchestrator selects the three-to-five LOCKED lines that bind this item and pastes them character-for-character. The evidence is a live ten-worker run whose orchestrator recorded the lesson explicitly: quoting the load-bearing sentences verbatim prevented drift better than any paraphrase — workers made to extract rulings from full documents drifted at exactly that step. The duplication's risks are bounded by construction: quotes freeze at brief time, live for the days of one item, and are stale-*detectable* because each cites a D# whose status supersession flips.
 5. **Post-reconcile deltas as D# pointers** keep the one unsanctioned duplication — retelling rulings the docs don't carry yet — impossible: newer law arrives as a pointer into the decision log, never as retold content.
+
+The whole block, as a map:
+
+| Part | Defeats | Mechanism |
+|---|---|---|
+| as-of SHA line | silent staleness | freshness made knowable, not assumed |
+| MAJOR reads | wrong grounding | 3–5 file:section pointers + the vision-not-legacy redirect |
+| NARROW reads | hunting and over-reading | listed, read on need |
+| verbatim rulings | paraphrase drift | frozen quotes of pre-distilled `**LOCKED:**` lines, D#-cited |
+| post-SHA D# pointers | retold law | pointer into the log, never content |
 
 ### LOCKED — outbound: show must go on
 
@@ -85,9 +100,13 @@ Now the return path. Three days in, the room discovers its data layer physically
 
 ## Visible collisions
 
-- **Verbatim quotes vs "messages are pointers".** Duplication lost this argument everywhere else in the system; here it won, because the measured alternative — pure pointers, rooms extracting rulings themselves — was the observed drift mechanism. Doctrine yielded to evidence, in one bounded, detectable place.
-- **LOCKED's authority vs the room that knows better.** The strict option (LOCKED inviolable below the architect; a gutted item stalls awaiting a human) protected the corpus by stopping the work. The operator inverted it: work never stops, and the price — merged code temporarily contradicting the corpus — is paid *visibly*, in markers, with the architect notified while the contradiction is hours old. The system chooses honest motion over frozen purity.
-- **The bracket grammar vs the author's hands.** A stricter grammar produced fewer markers in practice; ratifying the emergent plain form and moving rigor into the census script kept the count honest. General shape: when a convention loses to habit 5-to-1, fix the convention.
+- **Evidence versus doctrine, as a policy.** Both of this angle's contested rulings (settled in the journey above) share one meta-rule worth naming: where measurement and principle disagreed — verbatim quotes beating pure pointers, plain markers beating the bracket — the measurement won, *and* the concession was bounded (one sanctioned duplication; rigor moved into tooling). The system's doctrine is falsifiable by its own practice, on purpose.
+- **Honest motion versus frozen purity.** Show-must-go-on accepts merged code that temporarily contradicts the corpus — visibly, in markers, with the architect notified in hours. The alternative protected the corpus by stopping the work; the operator judged an honest, marked contradiction cheaper than a stalled milestone. The collision is permanent: every MISMATCH marker in the tree is this trade, re-made.
+- **Freshness versus the quote.** The brief's frozen quotes are the one place the freshness guarantee (angle 2) is deliberately weakened: a reconcile can supersede a quoted D# while the room runs. The bound is detectability (the quote cites its D#) — and the unbuilt CORRECTION push below is this collision's open half.
+
+## Current mismatch
+
+**MISMATCH:** the skill text does not yet implement this angle. The room-brief template has no ARCHITECTURE CONTEXT block; the SDD skill still carries the retired residue-jsonl append verbatim; the marker sections still teach the DOC-MARK bracket; the census script does not exist. All land at implementation Task 5 — this angle describes the ruled target.
 
 ## Flexible and deferred
 

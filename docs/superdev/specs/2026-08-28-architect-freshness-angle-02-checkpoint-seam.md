@@ -1,14 +1,28 @@
 # Angle 2 — The checkpoint seam
 
 **Purpose:** understand the complete life of one design checkpoint — what crosses between orchestrator and architect, in which artifacts, under which freshness promises, and who rules — without reading either skill.
-**Formal anchors:** D52, D58–D60, D62 · spec §5.1–§5.3 (R5, R9, R10, R12).
+**Formal anchors:** [decision log](./2026-08-28-architect-freshness-decisions.md) D52, D58–D60, D62, D68 · experience design §5.6.
 **Series:** 2 of 4.
 
-> **Status guide:** LOCKED · FLEXIBLE · DEFERRED · MISMATCH.
+> **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
+> DEFERRED another session owns it · MISMATCH current text behaves differently today ·
+> SEED-ILLUSTRATIVE worked example only — every SHA, duration, and count in this angle's
+> sketches is invented for illustration, never a measurement.
 
 ## The central question
 
 How do two altitudes converse through files without the files becoming a third, drifting version of the truth?
+
+## The mental model
+
+Two rooms with different jobs, at different heights — the **altitudes**. The ARCHITECT owns *what must be true*: the corpus, the rulings, the long view; it is idle between sittings. The ORCHESTRATOR owns *what happens next*: rooms, schedules, ledgers; it never stops. They share no file (angle 1), so everything they exchange crosses as a message pointing at a document one of them owns — and the checkpoint is the appointed moment when a milestone's accumulated learning crosses up and its accumulated questions get ruled.
+
+The seam is not:
+
+- a meeting protocol — nobody attends anything; documents and one message each way carry it;
+- a review of the orchestrator's work — claims are audited, but the sitting rules on *design*, not performance;
+- continuous — between checkpoints the architect hears only plan-time deviation pointers (angle 3), and receiving is not ruling; or
+- a merge gate — publishing is FF-CAS by rooms; the seam governs understanding, not integration.
 
 ## Boundaries
 
@@ -67,7 +81,13 @@ Census delta since reconcile abc1234: BLIND 3→0, MISMATCH +2 (both fee seam).
 charter→merge: 2.1d avg · review cycles: 2 · blocked-wait: 4h total.
 ```
 
-Three narrative sections first — they are the point. The ledgers hold every row and every measurement, but no file holds what it *felt like across rooms* — that judgment exists only in the orchestrator, and the handover is where it becomes durable. The claims section practices **two-step discharge**: the orchestrator *claims* map rows with evidence; only the architect *writes* the map. The clusters section is his authored grouping of the typed ledger rows — interpretation offered to the sitting, not imposed on it. The facts are machine-generated numbers inlined, not attached as documents: the recurring marker census is ephemeral script output that lives in handovers, never as a committed census file (the milestone folder's `census.md` — the charter-time grounding sweep — is a different, surviving artifact).
+Three narrative sections first — they are the point. The ledgers hold every row and every measurement, but no file holds what it *felt like across rooms*; that judgment exists only in the orchestrator, and the handover is where it becomes durable.
+
+**The claims section** practices two-step discharge: the orchestrator *claims* map rows with evidence; only the architect *writes* the map. This means a claim can be rejected — and the rejection, with its reason, survives (see the response block below), which `map.md` alone could never record.
+
+**The clusters section** is his authored grouping of the typed ledger rows — interpretation *offered* to the sitting, never imposed on it; the sitting may regroup.
+
+**The facts** are machine-generated numbers inlined, not attached: the recurring marker census is ephemeral script output that lives in handovers, never as a committed file. (The milestone folder's `census.md` — the charter-time grounding sweep — is a different, surviving artifact; the two share a name and nothing else.)
 
 ### LOCKED — the sitting: mechanical open, then ruling by mode
 
@@ -75,8 +95,8 @@ The architect's sitting opens mechanically, in both modes: read the handover, gr
 
 | | HUMAN mode | AUTONOMOUS mode |
 |---|---|---|
-| declared | at co-plan, default for design-heavy milestones | explicitly by the orchestrator, recorded in graph + conventions |
-| architect does | stages only; waits for the operator; rulings happen in the sitting together | real architecture: for each fork, options with gains/sacrifices + a recommendation, presented to the Fork Presentation Standard |
+| declared | at the co-plan — the milestone's opening sitting, where operator and orchestrator ratify the charter graph — default for design-heavy milestones | explicitly by the orchestrator, recorded in his graph file and `conventions.md` so every room and the architect can read it |
+| architect does | stages only; waits for the operator; rulings happen in the sitting together | real architecture: for each fork, options with gains/sacrifices + a recommendation, presented to the Fork Presentation Standard — every fork carries the situation and its failure modes, each option's mechanism with a concrete example, its consequences for this project, and a reasoned recommendation; labels refer, never present |
 | who picks | the operator | **the orchestrator** |
 | the pick's record | ordinary D# | flagged D#: options preserved, named as an autonomous-mode pick, revisitable |
 | reserved forks (money/irreversibility, blast-radius reshapes, taste) | operator | **operator — always**; tagged and queued; the architect designs around them so work continues |
@@ -109,7 +129,7 @@ Then the sitting's mandatory last act (both modes, every sitting — checkpoint-
 ## Visible collisions
 
 - **Rich handover vs the pointer doctrine.** The narrative trio is genuine content in an operational file — allowed because the operational surface's contract ("point-in-time, may rot, will be pruned") makes durable-but-unreconciled content safe there. The same content on the reconciled surface would be a maintenance debt.
-- **The response document that almost was.** The first design gave the response its own file in a `responses/` directory — symmetric, tidy, and wrong: the operator's rule that every doc type multiplies reconciliation surfaces killed it, and the response moved *inside* the file reconciliation already owns. The general lesson: when two artifacts always change together, they are one artifact.
+- **Symmetry versus surfaces.** The general lesson from the response's placement (the fork itself is settled in the journey above): when two artifacts always change together, they are one artifact — and every artifact type you add is a reconciliation surface you will pay for on every future sitting. Symmetric designs are seductive precisely because they multiply surfaces evenly.
 - **Architect idleness vs staging cost.** Strict idleness wastes the operator's most expensive minutes on watching greps; unrestricted preparation drifts into pre-cooked conclusions. The mode law absorbed this: mechanical opens are always allowed because *reading is not ruling* — the line is drawn at judgment, not at activity.
 - **Autonomy vs authority.** AUTONOMOUS mode looks like it transfers design authority to the orchestrator. It doesn't: it transfers *scheduling* of authority — picks are provisional-by-construction (flagged, reviewable, overturnable) and the irreducible forks never leave the operator. What the milestone gains is that it never stalls on an absent human it was told not to wait for.
 
