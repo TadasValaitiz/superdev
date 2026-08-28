@@ -270,7 +270,7 @@ classDiagram
 | callback commands | existing strict models | `WorkerRecord.callback` only; never identity |
 
 **Depends on:** registry/callback persistence; §5.1 paths.
-**Serves:** R4, R5, R6, R9 · **Governed by:** D7, D11, D14 · **Realizes:** UC1, UC3, UC7, UC9.
+**Serves:** R4, R5, R6, R9 · **Governed by:** D7, D11, D14, D18 · **Realizes:** UC1, UC3, UC7, UC9.
 
 ### 5.4 Shared control and authoritative reconciliation
 
@@ -376,7 +376,7 @@ thread; exactly five simultaneous named workers; listener collision; idle upgrad
 active refusal; legacy migration; real Claude common-command caller; and CLI checkride.
 
 **Depends on:** all prior areas.
-**Serves:** R10, R11, R12 · **Governed by:** D10, D12, D13, D16, D17 · **Realizes:** UC2, UC3, UC6, UC10.
+**Serves:** R10, R11, R12 · **Governed by:** D10, D12, D13, D16, D17, D18 · **Realizes:** UC2, UC3, UC6, UC10.
 
 ## 6. Decisions
 
@@ -403,6 +403,8 @@ active refusal; legacy migration; real Claude common-command caller; and CLI che
   the public listener is now specifically gateway-owned `ws://HOST:PORT`.
 - **D17 (provisional):** a maintenance-aware public WebSocket gateway fronts the private
   app-server and closes the TUI turn race; revisit on atomic upstream drain support.
+- **D18 (provisional):** evolve the existing strict dataclass seams in place while splitting
+  new service responsibilities into focused modules; revisit on an independent Pydantic migration.
 
 Full alternatives, sacrifices, evidence, and extension laws remain in the decision log.
 

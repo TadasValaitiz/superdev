@@ -417,3 +417,38 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   active inventory, CLI/security projection, transport/live tests.
 - **Revisit-when:** Codex exposes an atomic drain-and-stop API or a managed public listener whose
   maintenance contract includes every client/thread.
+
+## D18 — Evolve the strict dataclass seams in place and split new service capabilities by responsibility
+**When:** 2026-08-28T18:10:00Z · **Phase:** plan · **Status:** provisional (autonomous implementation-shape decision)
+**Decided by:** author under the operator-delegated autonomous build
+
+- **Trigger:** the generic Python canon prefers frozen Pydantic seam models, but this mature
+  dependency-light Python 3.9 package already enforces frozen strict dataclass serialization,
+  closed fields, enum faults, and exhaustive model tests across hundreds of cases. Converting
+  every existing seam while replacing topology would create an unrelated big-bang migration.
+- **Options weighed:**
+  - A: convert all worker seams to Pydantic during this change — gains literal generic-canon
+    alignment / sacrifices bounded scope and risks every stable public JSON shape.
+  - B: add gateway/service logic to existing large modules — gains fewer files / sacrifices
+    dependency direction and makes lifecycle/control coupling harder to review.
+  - C: retain the tested strict frozen dataclass seam for this legacy package, add exact guards
+    for new models, and place new service domain, migration, WebSocket transport, gateway and
+    supervision responsibilities in focused modules — gains an incremental inward-arrow lift /
+    sacrifices immediate uniformity with the generic Pydantic recommendation.
+- **Decided:** C. Existing public command/response models remain strict frozen dataclasses with
+  exhaustive serialization and extra-field rejection. New domain models follow that same seam.
+  New effects live behind typed dependency records/protocols; CLI remains wiring only. Moves
+  retain compatibility re-exports where tests or internal consumers still import old homes.
+- **Shape at selection:** `service_domain.py` owns L0 value objects; `migration.py` owns durable
+  legacy discovery/import; `websocket_transport.py` owns the initialized broker connection;
+  `websocket_gateway.py` owns one-to-one forwarding and drain classification; `service.py` owns
+  lifecycle composition. Existing `commands.py`, `registry.py`, `app_server.py`, `instance.py`,
+  `facade.py`, `rpc.py`, and `cli.py` are lifted only where touched.
+- **Enforcement:** focused strict-model round trips, enum exhaustiveness, AST import-arrow guards,
+  seam inventory, and Python 3.9 compile/import tests make the exception checkable rather than
+  conventional.
+- **Rests on:** approved §5 module boundaries; generic Python patterns §§1–3/6/9; existing
+  dependency-free strict-model contract and Python 3.9 floor.
+- **Affects:** implementation file map, task ordering, compatibility shims, structural tests.
+- **Revisit-when:** the package adopts Pydantic for an independently justified feature or the
+  strict dataclass machinery can be replaced without coupling to a topology migration.
