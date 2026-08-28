@@ -1,4 +1,4 @@
-# Codex worker global install — CLI Surface (status: draft)
+# Codex worker global install — CLI Surface (status: ratified Tadas, 2026-08-28)
 
 **Design doc:** ./2026-08-28-codex-worker-global-install-design.md · **Decision log:** ./2026-08-28-codex-worker-global-install-decisions.md
 

@@ -1,6 +1,6 @@
 # Codex worker global install — Design (anchor)
 
-**Date:** 2026-08-28 · **Status:** draft
+**Date:** 2026-08-28 · **Status:** approved
 **Mode:** human-in-loop
 **Decision log:** ./2026-08-28-codex-worker-global-install-decisions.md
 **Companions:** ./2026-08-28-codex-worker-global-install-cli-surface.md

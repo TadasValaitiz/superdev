@@ -137,3 +137,65 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   locators supplied by this harness.
 - **Affects:** R3, R7, spec §5.2 and skill preflight.
 - **Revisit-when:** all supported harnesses expose one standardized plugin-root variable.
+
+## D7 — Make preflight an executable policy boundary
+**When:** 2026-08-28T05:44:24Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** agent
+
+- **Trigger:** Encoding path ownership, version comparison, UV invocation, and recovery
+  only as prose would make the skill behavior untestable and invite divergent shell
+  snippets across agents.
+- **Options weighed:**
+  - A: Put the shell sequence inline in `codex-worker.md` — gains no extra file /
+    sacrifices one canonical testable implementation and concise skill instructions.
+  - B: Ship an internal `install-codex-worker` preflight executable beside the package —
+    gains one hardened policy boundary and short skill invocation / sacrifices one
+    internal script to maintain.
+- **Decided:** B. The skill runs this internal preflight once before its first worker
+  command; the script self-resolves and validates its plugin root, and only normal
+  operations use the globally installed executable.
+- **Rests on:** R3, R7 and the repository's existing executable-script pattern.
+- **Affects:** spec §5.2, Task 2, skill runbook.
+- **Revisit-when:** UV exposes a declarative tool manifest that performs equivalent
+  ownership/version/source checks.
+
+## D8 — Store package version in PEP 621 metadata and teach release tooling TOML
+**When:** 2026-08-28T05:44:24Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** agent
+
+- **Trigger:** Preflight must read the expected version without importing an uninstalled
+  package or requiring global Python, while the existing release tool updates JSON only.
+- **Options weighed:**
+  - A: Add a second plain version file or Python constant — gains simple shell reading /
+    sacrifices a second authoritative mirror and custom build indirection.
+  - B: Use static PEP 621 `project.version` as the tool authority and extend the existing
+    version-bump configuration/tool for a narrowly parsed TOML field — gains one package
+    authority and normal wheel metadata / sacrifices a small release-tool extension.
+- **Decided:** B. `codex-worker --version` reads installed distribution metadata;
+  source-launcher fallback reads the same project metadata only for development. Release
+  checks require exact equality with all plugin manifests.
+- **Rests on:** D5 and the existing `.version-bump.json` controlled-file mechanism.
+- **Affects:** Task 1, Task 4, package metadata and release scripts.
+- **Revisit-when:** the worker adopts an independently versioned registry release.
+
+## D9 — Use hatchling as the wheel build boundary
+**When:** 2026-08-28T05:53:39Z · **Phase:** plan ·
+**Status:** locked
+**Decided by:** agent
+
+- **Trigger:** A PEP 517 backend must turn the existing package directory into a wheel
+  with a console entry point and an explicit package allowlist.
+- **Options weighed:**
+  - A: setuptools — gains maximum historical familiarity / sacrifices more discovery
+    configuration around the mixed scripts directory and commonly arrives from the
+    ambient interpreter rather than the selected UV toolchain.
+  - B: hatchling — gains concise PEP 621 support, explicit wheel package selection, and
+    isolated build requirements resolved by UV / sacrifices one build-only dependency.
+- **Decided:** B with `hatchling>=1.27,<2`. It is build-time only; the installed worker
+  retains `dependencies = []` and standard-library runtime behavior.
+- **Rests on:** D3, D4, R4–R6 and UV's PEP 517 build contract.
+- **Affects:** Task 1 package metadata and Task 3 wheel/package checks.
+- **Revisit-when:** hatchling drops Python 3.9-source build support or the tool moves to
+  a dedicated repository with another established backend.
