@@ -1,0 +1,200 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf 'codex-worker preflight: %s\n' "$*" >&2
+  exit 1
+}
+
+SCRIPT_PATH=$0
+while [ -h "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
+  LINK=$(readlink "$SCRIPT_PATH")
+  case $LINK in
+    /*) SCRIPT_PATH=$LINK ;;
+    *) SCRIPT_PATH=$SCRIPT_DIR/$LINK ;;
+  esac
+done
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
+DERIVED_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd -P)
+
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  [ -d "$CLAUDE_PLUGIN_ROOT" ] \
+    || fail "CLAUDE_PLUGIN_ROOT is not a directory: $CLAUDE_PLUGIN_ROOT"
+  DECLARED_ROOT=$(CDPATH= cd -- "$CLAUDE_PLUGIN_ROOT" && pwd -P)
+  [ "$DECLARED_ROOT" = "$DERIVED_ROOT" ] || fail \
+    "loaded-root mismatch: script root is $DERIVED_ROOT but CLAUDE_PLUGIN_ROOT is $DECLARED_ROOT"
+fi
+
+SKILL="$DERIVED_ROOT/skills/subagent-driven-development/SKILL.md"
+PACKAGE="$DERIVED_ROOT/skills/subagent-driven-development/scripts"
+PYPROJECT="$PACKAGE/pyproject.toml"
+[ -f "$SKILL" ] || fail "untrusted loaded root: missing $SKILL"
+[ -f "$PYPROJECT" ] || fail "untrusted loaded root: missing $PYPROJECT"
+
+set --
+for manifest in \
+  "$DERIVED_ROOT/.claude-plugin/plugin.json" \
+  "$DERIVED_ROOT/.codex-plugin/plugin.json"
+do
+  [ ! -f "$manifest" ] || set -- "$@" "$manifest"
+done
+[ "$#" -gt 0 ] || fail \
+  "untrusted loaded root: expected .claude-plugin/plugin.json or .codex-plugin/plugin.json beneath $DERIVED_ROOT"
+
+EXPECTED_VERSION=$(python3 - "$PYPROJECT" "$@" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+pyproject = Path(sys.argv[1])
+section = None
+names = []
+versions = []
+for line in pyproject.read_text(encoding="utf-8").splitlines():
+    stripped = line.strip()
+    header = re.fullmatch(r"\[([^]]+)\][ \t]*(?:#.*)?", stripped)
+    if header:
+        section = header.group(1)
+        continue
+    if section != "project":
+        continue
+    name = re.fullmatch(r'name[ \t]*=[ \t]*"([^"\r\n]+)"[ \t]*(?:#.*)?', stripped)
+    version = re.fullmatch(r'version[ \t]*=[ \t]*"([^"\r\n]+)"[ \t]*(?:#.*)?', stripped)
+    if name:
+        names.append(name.group(1))
+    if version:
+        versions.append(version.group(1))
+if names != ["codex-worker"] or len(versions) != 1:
+    print(
+        "codex-worker preflight: package metadata must contain exactly "
+        "name=codex-worker and one project.version in %s" % pyproject,
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+expected = versions[0]
+for manifest_name in sys.argv[2:]:
+    manifest = Path(manifest_name)
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        print("codex-worker preflight: invalid manifest %s: %s" % (manifest, exc), file=sys.stderr)
+        raise SystemExit(1)
+    if value != expected:
+        print(
+            "codex-worker preflight: version mismatch: %s declares %s but %s declares %s"
+            % (manifest, value, pyproject, expected),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+print(expected)
+PY
+) || exit $?
+
+UV=$(command -v uv 2>/dev/null || true)
+[ -n "$UV" ] || fail \
+  "uv is required when a Codex worker is selected; install uv from https://docs.astral.sh/uv/getting-started/installation/"
+
+set +e
+UV_BIN_OUTPUT=$("$UV" tool dir --bin 2>&1)
+UV_BIN_STATUS=$?
+set -e
+[ "$UV_BIN_STATUS" -eq 0 ] || fail \
+  "uv tool dir --bin failed (exit $UV_BIN_STATUS): $UV_BIN_OUTPUT"
+[ -d "$UV_BIN_OUTPUT" ] || fail "uv tool dir --bin returned a missing directory: $UV_BIN_OUTPUT"
+UV_BIN=$(CDPATH= cd -- "$UV_BIN_OUTPUT" && pwd -P)
+EXPECTED_COMMAND="$UV_BIN/codex-worker"
+
+canonical_file() {
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+}
+
+CURRENT_COMMAND=$(command -v codex-worker 2>/dev/null || true)
+if [ -n "$CURRENT_COMMAND" ]; then
+  CURRENT_REAL=$(canonical_file "$CURRENT_COMMAND") \
+    || fail "could not resolve PATH codex-worker: $CURRENT_COMMAND"
+  if [ -e "$EXPECTED_COMMAND" ]; then
+    EXPECTED_REAL=$(canonical_file "$EXPECTED_COMMAND") \
+      || fail "could not resolve UV-owned codex-worker: $EXPECTED_COMMAND"
+  else
+    EXPECTED_REAL=$EXPECTED_COMMAND
+  fi
+  [ "$CURRENT_REAL" = "$EXPECTED_REAL" ] || fail \
+    "PATH shadowing: codex-worker resolves to $CURRENT_REAL, expected UV-owned $EXPECTED_REAL. Run 'uv tool update-shell', start a new shell, or repair this shell with: export PATH=\"$UV_BIN:\$PATH\""
+fi
+
+PROBE_STDOUT=
+PROBE_STDERR=
+INSTALL_OUTPUT=
+cleanup() {
+  [ -z "$PROBE_STDOUT" ] || rm -f "$PROBE_STDOUT"
+  [ -z "$PROBE_STDERR" ] || rm -f "$PROBE_STDERR"
+  [ -z "$INSTALL_OUTPUT" ] || rm -f "$INSTALL_OUTPUT"
+}
+trap cleanup EXIT HUP INT TERM
+PROBE_STDOUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.out.XXXXXX") \
+  || fail "could not allocate temporary version-stdout file"
+PROBE_STDERR=$(mktemp "${TMPDIR:-/tmp}/codex-worker-version.err.XXXXXX") \
+  || fail "could not allocate temporary version-stderr file"
+INSTALL_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/codex-worker-install.out.XXXXXX") \
+  || fail "could not allocate temporary install-output file"
+
+probe_matches() {
+  command_path=$1
+  [ -x "$command_path" ] || return 1
+  set +e
+  "$command_path" --version >"$PROBE_STDOUT" 2>"$PROBE_STDERR"
+  probe_status=$?
+  set -e
+  [ "$probe_status" -eq 0 ] || return 1
+  python3 - "$PROBE_STDOUT" "$PROBE_STDERR" "$EXPECTED_VERSION" <<'PY'
+import sys
+from pathlib import Path
+
+stdout = Path(sys.argv[1]).read_bytes()
+stderr = Path(sys.argv[2]).read_bytes()
+expected = ("codex-worker %s\n" % sys.argv[3]).encode("utf-8")
+raise SystemExit(0 if stdout == expected and stderr == b"" else 1)
+PY
+}
+
+NEEDS_INSTALL=1
+if [ -e "$EXPECTED_COMMAND" ] && probe_matches "$EXPECTED_COMMAND"; then
+  NEEDS_INSTALL=0
+fi
+
+if [ "$NEEDS_INSTALL" -eq 1 ]; then
+  set +e
+  "$UV" tool install --reinstall "$PACKAGE" >"$INSTALL_OUTPUT" 2>&1
+  INSTALL_STATUS=$?
+  set -e
+  if [ "$INSTALL_STATUS" -ne 0 ]; then
+    printf 'codex-worker preflight: uv tool install failed (exit %s):\n' \
+      "$INSTALL_STATUS" >&2
+    cat "$INSTALL_OUTPUT" >&2
+    exit 1
+  fi
+fi
+
+[ -x "$EXPECTED_COMMAND" ] || fail \
+  "UV reported success but no executable exists at $EXPECTED_COMMAND"
+probe_matches "$EXPECTED_COMMAND" || fail \
+  "UV-owned $EXPECTED_COMMAND did not emit exact version 'codex-worker $EXPECTED_VERSION' with empty stderr"
+
+PATH_COMMAND=$(command -v codex-worker 2>/dev/null || true)
+if [ -z "$PATH_COMMAND" ]; then
+  fail "UV-owned command is $EXPECTED_COMMAND but it is not on current PATH. Run 'uv tool update-shell' and start a new shell, or repair this shell with: export PATH=\"$UV_BIN:\$PATH\""
+fi
+PATH_REAL=$(canonical_file "$PATH_COMMAND") \
+  || fail "could not resolve PATH codex-worker after installation: $PATH_COMMAND"
+EXPECTED_REAL=$(canonical_file "$EXPECTED_COMMAND") \
+  || fail "could not resolve UV-owned codex-worker after installation: $EXPECTED_COMMAND"
+[ "$PATH_REAL" = "$EXPECTED_REAL" ] || fail \
+  "PATH shadowing after installation: codex-worker resolves to $PATH_REAL, expected $EXPECTED_REAL. Run 'uv tool update-shell' or export PATH=\"$UV_BIN:\$PATH\""
+
+printf 'codex-worker ready: %s (%s)\n' "$EXPECTED_REAL" "$EXPECTED_VERSION"

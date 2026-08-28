@@ -40,15 +40,213 @@ write_json_field() {
   jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
+toml_field() {
+  local operation="$1" file="$2" field="$3" value="${4:-}"
+  if [[ "$field" != "project.version" ]]; then
+    echo "error: unsupported TOML field '$field' in $file" >&2
+    return 1
+  fi
+  # Python 3.9 has no tomllib. Validate the repository-controlled package metadata
+  # subset fail-closed: bare tables/keys, scalar values, and single-line scalar arrays.
+  # This is deliberately not a general-purpose TOML parser.
+  python3 - "$operation" "$file" "$value" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+operation = sys.argv[1]
+path = Path(sys.argv[2])
+new_value = sys.argv[3]
+text = path.read_text(encoding="utf-8")
+section = None
+matches = []
+seen_sections = set()
+seen_keys = set()
+offset = 0
+
+
+def invalid(line_number, reason):
+    print("error: invalid TOML in %s at line %d: %s" % (path, line_number, reason), file=sys.stderr)
+    raise SystemExit(1)
+
+
+def without_comment(line, line_number):
+    quote = None
+    escaped = False
+    for index, character in enumerate(line):
+        if quote == '"':
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif quote == "'":
+            if character == quote:
+                quote = None
+        elif character in ("'", '"'):
+            quote = character
+        elif character == "#":
+            return line[:index].rstrip()
+    if quote is not None:
+        invalid(line_number, "unterminated string")
+    return line.rstrip()
+
+
+def string_end(value, start, line_number):
+    quote = value[start]
+    escaped = False
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if quote == '"' and escaped:
+            escaped = False
+        elif quote == '"' and character == "\\":
+            escaped = True
+        elif character == quote:
+            return index + 1
+        index += 1
+    invalid(line_number, "unterminated string")
+
+
+def validate_scalar(value, line_number):
+    value = value.strip()
+    if not value:
+        invalid(line_number, "missing value")
+    if value[0] in ("'", '"'):
+        if string_end(value, 0, line_number) != len(value):
+            invalid(line_number, "characters after string value")
+        return
+    if value in ("true", "false"):
+        return
+    if re.fullmatch(r"[+-]?[0-9](?:_?[0-9])*(?:\.[0-9](?:_?[0-9])*)?", value):
+        return
+    invalid(line_number, "unsupported or malformed value")
+
+
+def validate_value(value, line_number):
+    value = value.strip()
+    if not value:
+        invalid(line_number, "missing value")
+    if not value.startswith("["):
+        validate_scalar(value, line_number)
+        return
+    if not value.endswith("]"):
+        invalid(line_number, "unterminated array")
+    inner = value[1:-1].strip()
+    if not inner:
+        return
+    items = []
+    start = 0
+    index = 0
+    while index < len(inner):
+        if inner[index] in ("'", '"'):
+            index = string_end(inner, index, line_number)
+            continue
+        if inner[index] in "[]{}":
+            invalid(line_number, "nested collections are outside the supported package metadata subset")
+        if inner[index] == ",":
+            items.append(inner[start:index])
+            start = index + 1
+        index += 1
+    items.append(inner[start:])
+    if not items[-1].strip():
+        items.pop()
+    for item in items:
+        validate_scalar(item, line_number)
+
+
+for line_number, line in enumerate(text.splitlines(keepends=True), 1):
+    body = line.rstrip("\r\n")
+    logical = without_comment(body, line_number).strip()
+    if not logical:
+        offset += len(line)
+        continue
+    header = re.fullmatch(r"\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]", logical)
+    if header:
+        section = header.group(1)
+        if section in seen_sections:
+            invalid(line_number, "duplicate table [%s]" % section)
+        seen_sections.add(section)
+        offset += len(line)
+        continue
+    assignment = re.fullmatch(
+        r"([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)[ \t]*=[ \t]*(.+)", logical
+    )
+    if not assignment:
+        invalid(line_number, "expected a complete table header or key/value assignment")
+    key = assignment.group(1)
+    validate_value(assignment.group(2), line_number)
+    identity = (section, key)
+    if identity in seen_keys and identity != ("project", "version"):
+        invalid(line_number, "duplicate key %s" % key)
+    seen_keys.add(identity)
+    if identity == ("project", "version"):
+        exact = re.fullmatch(
+            r'([ \t]*version[ \t]*=[ \t]*")([^"\r\n]+)("[ \t]*(?:#.*)?)', body
+        )
+        if not exact:
+            invalid(line_number, "project.version must be one exact double-quoted assignment")
+        matches.append((offset + exact.start(2), offset + exact.end(2), exact.group(2)))
+    offset += len(line)
+
+if len(matches) != 1:
+    print("error: expected exactly one project.version in %s; found %d" % (path, len(matches)), file=sys.stderr)
+    raise SystemExit(1)
+start, end, current_value = matches[0]
+if operation == "read":
+    print(current_value)
+elif operation == "write":
+    updated = text[:start] + new_value + text[end:]
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(updated)
+    temporary.replace(path)
+else:
+    print("error: unsupported TOML operation '%s'" % operation, file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+read_toml_field() {
+  toml_field read "$1" "$2"
+}
+
+write_toml_field() {
+  toml_field write "$1" "$2" "$3"
+}
+
+read_field() {
+  local file="$1" field="$2" format="${3:-json}"
+  case "$format" in
+    json) read_json_field "$file" "$field" ;;
+    toml) read_toml_field "$file" "$field" ;;
+    *) echo "error: unsupported format '$format' for $file" >&2; return 1 ;;
+  esac
+}
+
+write_field() {
+  local file="$1" field="$2" value="$3" format="${4:-json}"
+  case "$format" in
+    json) write_json_field "$file" "$field" "$value" ;;
+    toml) write_toml_field "$file" "$field" "$value" ;;
+    *) echo "error: unsupported format '$format' for $file" >&2; return 1 ;;
+  esac
+}
+
 # Read the list of declared files from config.
-# Outputs lines of "path<TAB>field"
+# Outputs lines of "path<TAB>field<TAB>format". Format defaults to JSON.
 declared_files() {
-  jq -r '.files[] | "\(.path)\t\(.field)"' "$CONFIG"
+  jq -r '.files[] | [.path, .field, (.format // "json")] | @tsv' "$CONFIG"
 }
 
 # Read the audit exclude patterns from config.
 audit_excludes() {
   jq -r '.audit.exclude[]' "$CONFIG" 2>/dev/null
+}
+
+audit_public_paths() {
+  jq -r '.audit.public[]' "$CONFIG" 2>/dev/null
 }
 
 # --- commands ---
@@ -60,7 +258,7 @@ cmd_check() {
   echo "Version check:"
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
       printf "  %-45s  MISSING\n" "$path ($field)"
@@ -68,7 +266,7 @@ cmd_check() {
       continue
     fi
     local ver
-    ver=$(read_json_field "$fullpath" "$field")
+    ver=$(read_field "$fullpath" "$field" "$format")
     printf "  %-45s  %s\n" "$path ($field)" "$ver"
     versions+=("$ver")
   done < <(declared_files)
@@ -93,15 +291,16 @@ cmd_check() {
 
 cmd_audit() {
   # First run check
-  cmd_check || true
+  local check_status=0
+  cmd_check || check_status=$?
   echo ""
 
   # Determine the current version (most common across declared files)
   local current_version
   current_version=$(
-    while IFS=$'\t' read -r path field; do
+    while IFS=$'\t' read -r path field format; do
       local fullpath="$REPO_ROOT/$path"
-      [[ -f "$fullpath" ]] && read_json_field "$fullpath" "$field"
+      [[ -f "$fullpath" ]] && read_field "$fullpath" "$field" "$format"
     done < <(declared_files) | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'
   )
 
@@ -124,7 +323,7 @@ cmd_audit() {
 
   # Get list of declared paths for comparison
   local -a declared_paths=()
-  while IFS=$'\t' read -r path _field; do
+  while IFS=$'\t' read -r path _field _format; do
     declared_paths+=("$path")
   done < <(declared_files)
 
@@ -161,13 +360,57 @@ cmd_audit() {
     echo "Review the above files — if they should be bumped, add them to .version-bump.json"
     echo "If they should be skipped, add them to the audit.exclude list."
   fi
+
+  local -a public_paths=()
+  while IFS= read -r path; do
+    [[ -n "$path" ]] && public_paths+=("$path")
+  done < <(audit_public_paths)
+  local public_status=0
+  if [[ "${#public_paths[@]}" -gt 0 ]]; then
+    python3 - "$REPO_ROOT" "$current_version" "${public_paths[@]}" <<'PY' || public_status=$?
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+current = sys.argv[2]
+major, minor, _patch = current.split(".")
+accepted = {current, "%s.%s.x" % (major, minor)}
+pattern = re.compile(r"(?<![0-9])([0-9]+\.[0-9]+\.(?:[0-9]+|x))(?![0-9A-Za-z])")
+stale = False
+for relative in sys.argv[3:]:
+    path = root / relative
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        print("stale public version: could not read %s: %s" % (relative, exc), file=sys.stderr)
+        stale = True
+        continue
+    for number, line in enumerate(lines, 1):
+        if "superdev" not in line.lower():
+            continue
+        for match in pattern.finditer(line):
+            if match.group(1) not in accepted:
+                print(
+                    "stale public version: %s:%d: %s (expected %s or %s.%s.x)"
+                    % (relative, number, match.group(1), current, major, minor),
+                    file=sys.stderr,
+                )
+                stale = True
+raise SystemExit(1 if stale else 0)
+PY
+  fi
+
+  if [[ "$check_status" -ne 0 || "$public_status" -ne 0 ]]; then
+    return 1
+  fi
 }
 
 cmd_bump() {
   local new_version="$1"
 
   # Validate semver-ish format
-  if ! echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+  if ! echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     echo "error: '$new_version' doesn't look like a version (expected X.Y.Z)" >&2
     exit 1
   fi
@@ -175,17 +418,61 @@ cmd_bump() {
   echo "Bumping all declared files to $new_version..."
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  local -a paths=() fields=() formats=() old_versions=()
+  local count=0
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
-      echo "  SKIP (missing): $path"
-      continue
+      echo "error: declared version file is missing: $path" >&2
+      return 1
     fi
     local old_ver
-    old_ver=$(read_json_field "$fullpath" "$field")
-    write_json_field "$fullpath" "$field" "$new_version"
-    printf "  %-45s  %s -> %s\n" "$path ($field)" "$old_ver" "$new_version"
+    old_ver=$(read_field "$fullpath" "$field" "$format")
+    paths[$count]="$path"
+    fields[$count]="$field"
+    formats[$count]="$format"
+    old_versions[$count]="$old_ver"
+    count=$((count + 1))
   done < <(declared_files)
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "error: no declared version files found" >&2
+    return 1
+  fi
+
+  local stage_dir
+  stage_dir=$(mktemp -d "$REPO_ROOT/.version-bump.XXXXXX")
+  local i
+  for ((i = 0; i < count; i++)); do
+    local staged="$stage_dir/staged-$i"
+    local backup="$stage_dir/backup-$i"
+    cp -p "$REPO_ROOT/${paths[$i]}" "$staged"
+    cp -p "$REPO_ROOT/${paths[$i]}" "$backup"
+    if ! write_field "$staged" "${fields[$i]}" "$new_version" "${formats[$i]}"; then
+      find "$stage_dir" -depth -delete
+      return 1
+    fi
+  done
+
+  local committed=0
+  for ((i = 0; i < count; i++)); do
+    if ! mv -f "$stage_dir/staged-$i" "$REPO_ROOT/${paths[$i]}"; then
+      local rollback
+      for ((rollback = 0; rollback < committed; rollback++)); do
+        cp -p "$stage_dir/backup-$rollback" "$REPO_ROOT/${paths[$rollback]}" || true
+      done
+      echo "error: version update failed; restored previously written declarations" >&2
+      find "$stage_dir" -depth -delete
+      return 1
+    fi
+    committed=$((committed + 1))
+  done
+
+  for ((i = 0; i < count; i++)); do
+    printf "  %-45s  %s -> %s\n" \
+      "${paths[$i]} (${fields[$i]})" "${old_versions[$i]}" "$new_version"
+  done
+  find "$stage_dir" -depth -delete
 
   echo ""
   echo "Done. Running audit to check for missed files..."

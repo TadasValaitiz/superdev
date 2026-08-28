@@ -15,6 +15,7 @@ from .models import (
     session_result,
 )
 from .commands import AccessMode
+from .version import distribution_version
 from .registry import RegistryError, SessionRegistry
 from .runtime import (
     CodexProtocolError,
@@ -139,13 +140,15 @@ class WorkerBroker:
     """
 
     def __init__(self, registry: SessionRegistry, codex: Any, runtime: RuntimeStore,
-                 socket_path: str, state_path: str, daemon_pid: Optional[int] = None):
+                 socket_path: str, state_path: str, daemon_pid: Optional[int] = None,
+                 worker_version: Optional[str] = None):
         self.registry = registry
         self.codex = codex
         self.runtime = runtime
         self.socket_path = socket_path
         self.state_path = state_path
         self.daemon_pid = os.getpid() if daemon_pid is None else daemon_pid
+        self.worker_version = distribution_version() if worker_version is None else worker_version
 
     def daemon_status(self) -> JsonObject:
         proc = getattr(self.codex, "proc", None)
@@ -160,6 +163,7 @@ class WorkerBroker:
             "socket_path": self.socket_path,
             "state_path": self.state_path,
             "session_count": len(self.registry.list()),
+            "worker_version": self.worker_version,
         }
 
     @staticmethod

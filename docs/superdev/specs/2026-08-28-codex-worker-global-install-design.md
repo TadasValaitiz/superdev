@@ -88,14 +88,19 @@ dispatches any Codex work.
   path is the UV-bin executable and its `--version` equals the manifest exactly. A
   missing or mismatched UV-owned tool is installed/reinstalled non-editably from the
   bundled source. An older or newer version is deliberately replaced because the loaded
-  skill and runtime ship as one compatibility unit (D5).
+  skill and runtime ship as one compatibility unit (D5). Because UV owns one mutable
+  global command, replacement can coordinate—but cannot simultaneously satisfy—rooms
+  using different cached plugin versions. Every operational invocation carrying
+  `CLAUDE_PLUGIN_ROOT` therefore compares that loaded manifest with the installed
+  distribution before runtime contact and fails as typed `tool_version_mismatch` on
+  skew; `--version` remains available for diagnosis (D12).
 - **Interface / contract:** Missing UV, untrusted source, install failure, or a UV bin
   absent from PATH stops before dispatch with a short recovery instruction. A same-named
   non-UV or PATH-shadowing executable is never overwritten and reports its resolved path
   plus the UV-bin path that must precede it. There is no source-launcher fallback.
 - **Depends on:** §5.1 package, the loaded skill filesystem locator, optional
   `CLAUDE_PLUGIN_ROOT`, and UV tool-bin configuration.
-- **Serves:** R1, R2, R3, R7 · **Governed by:** D1, D2, D3, D5, D6 · **Realizes:** UC1, UC2
+- **Serves:** R1, R2, R3, R7 · **Governed by:** D1, D2, D3, D5, D6, D12 · **Realizes:** UC1, UC2
 
 ### 5.3 Short-command operating contract
 
@@ -109,8 +114,18 @@ preflight, which is the friction reduction the design exists to deliver.
   `codex-worker --version` is a terminal parser action outside RPC: it writes exactly
   `codex-worker <distribution-version>\n` to stdout, writes nothing to stderr, and exits
   0 without starting or contacting a daemon.
+- **Runtime compatibility:** Managed-daemon readiness includes the daemon distribution
+  version stamped once at process construction. Exact peers are reused; an incompatible
+  peer for the selected instance is
+  gracefully stopped and replaced under the lifecycle lock without deleting durable
+  state. Managed raw families (`--instance`) probe the same stamped identity without
+  autostart before their requested RPC. Only exact-ready proceeds; stopped, malformed,
+  and failed probes return existing typed unavailability, while version mismatch returns
+  typed mismatch. No refusal invokes the requested RPC; explicit `--socket` behavior is
+  unchanged. Other managed instances and explicitly
+  selected raw sockets are not stopped.
 - **Depends on:** successful §5.2 preflight.
-- **Serves:** R1, R3, R6, R7 · **Governed by:** D1, D2, D5 · **Realizes:** UC1, UC4
+- **Serves:** R1, R3, R6, R7 · **Governed by:** D1, D2, D5, D12 · **Realizes:** UC1, UC4
 
 ### 5.4 Distribution and verification boundary
 
@@ -166,6 +181,17 @@ installation, completing the story from bundled source to real terminal use.
   rather than overwritten.
 - **Revisit-when:** The worker gains an independent compatibility API or release cadence.
 
+### D12 — Fail closed across cached-plugin and runtime skew   (status: locked)
+
+- **Decision:** Keep automatic exact-version preflight repair, then enforce exact
+  loaded-manifest/tool equality per operational invocation and exact tool/managed-daemon
+  equality at readiness.
+- **Alternatives:** Version-namespaced commands would permit simultaneous skew but break
+  the required plain-command contract.
+- **Why:** One mutable UV tool cannot satisfy two cached versions simultaneously; typed
+  refusal and selected-runtime replacement prevent silent incompatibility.
+- **Revisit-when:** Concurrent cross-version rooms become a supported requirement.
+
 ### D6 — Resolve install source from the loaded skill trust anchor   (status: locked)
 
 - **Decision:** Prefer `CLAUDE_PLUGIN_ROOT`; otherwise derive the root from the harness's
@@ -206,13 +232,13 @@ installation, completing the story from bundled source to real terminal use.
 
 | # | Acceptance hint (operator terms) | Proves | Lane | Receipt (filled at gate) |
 |---|----------------------------------|--------|------|--------------------------|
-| AH1 | Claude can begin with no `codex-worker` command, perform its preflight, and then use the short command successfully. | UC1 / R1, R3, R7 | live | |
-| AH2 | The installed worker is visibly owned by an isolated UV tool environment, not the current repository environment. | UC2 / R2, R5 | fast + live | |
-| AH3 | A developer can install the current source non-editably, move the source away, and see both the imported package and short command remain owned by UV's environment. | UC3 / R2, R4, R6 | fast | |
-| AH4 | From an unrelated repository, the short command starts a named read-only worker that reports Git status without a long path. | UC4 / R1, R4, R6 | live checkride | |
-| AH5 | Missing UV, installation failure, stale/incompatible command, and absent external Codex each produce an honest recovery path. | UC1, UC2 / R3, R5, R7 | fast + checkride | |
-| AH6 | Existing common/raw commands, daemon durability, and both plugin packages remain intact. | UC1–UC4 / R6 | fast + package | |
-| AH7 | Reinstalling the UV tool leaves an existing named worker/session mapping observable afterward. | UC2, UC4 / R2, R4, R6 | live | |
+| AH1 | Claude can begin with no `codex-worker` command, perform its preflight, and then use the short command successfully. | UC1 / R1, R3, R7 | live | **MEASURED:** final independently evaluated absent-command → trusted preflight → literal PATH command journey is reconstructed in `docs/superdev/checkrides/2026-08-28-codex-worker-global-install-evidence/{executor-transcript,evaluator-verdict}.md`; verdict **PASS**. Skill-pressure GREEN is recorded in `docs/superdev/reviews/2026-08-28-codex-worker-global-install-skill-eval.md`. |
+| AH2 | The installed worker is visibly owned by an isolated UV tool environment, not the current repository environment. | UC2 / R2, R5 | fast + live | **MEASURED:** checkride `command -v`, UV audit, executable and import probes agree on isolated UV ownership; release-candidate corroboration `.superdev/codex-worker-live/20260828T080522.992380Z-86858-package-independence` reports UV-owned 7.10.0 command/import provenance. |
+| AH3 | A developer can install the current source non-editably, move the source away, and see both the imported package and short command remain owned by UV's environment. | UC3 / R2, R4, R6 | fast | **MEASURED:** `20260828T080522.992380Z-86858-package-independence` used real UV with Python 3.9, moved the copied 7.10.0 source to `source-away`, imported from UV site-packages, and returned `codex-worker 7.10.0`; the checkride independently records a literal install/move/probe chain. |
+| AH4 | From an unrelated repository, the short command starts a named read-only worker that reports Git status without a long path. | UC4 / R1, R4, R6 | live checkride | **MEASURED:** evaluator PASS plus release run `20260828T080553.084680Z-87907-external-status-worker`: exactly one `status-checker-abc` from `/Users/tadas/Projects/ai-ethics/ai-trading-calibration`, read-only/no-callback; independently measured before/after both report branch `main`, staged/unstaged false, pre-existing untracked `.claude/settings.local.json`, clean false. |
+| AH5 | Missing UV, installation failure, stale/incompatible command, and absent external Codex each produce an honest recovery path. | UC1, UC2 / R3, R5, R7 | fast + checkride | **MEASURED:** final evaluator PASS reconstructs absent, simulated lower/higher versions over real repair, idempotence, shadow, missing UV, forced exit-47 install failure, and absent external Codex; preservation hashes and honesty labels are literal in the executor transcript. Deterministic pressure matrix remains in `test_tool_preflight.py`. |
+| AH6 | Existing common/raw commands, daemon durability, and both plugin packages remain intact. | UC1–UC4 / R6 | fast + package | **MEASURED 7.10.0+D12 candidate:** warning-strict worker discovery 403 tests PASS; managed raw exact/mismatch/stopped/malformed/probe-failure and immutable process-version regressions PASS; bump-version TOML fixture PASS; marketplace, Codex archive, and Codex sync gates each independently PASS; compileall and installer `bash -n` exit 0. Focused D12 executor/evaluator evidence under `docs/superdev/checkrides/2026-08-28-codex-worker-global-install-evidence/d12-reride/` reconstructs the 78-event base ride plus an 11-event post-fix extension and ends **PASS** for behavioral candidate `2db9ccd`: old-peer replacement, mismatch/no-target-RPC, malformed/generic-failure no-target-RPC, exact-ready target dispatch, exact-root serve, and fail-closed audit paths are all explicit. |
+| AH7 | Reinstalling the UV tool leaves an existing named worker/session mapping observable afterward. | UC2, UC4 / R2, R4, R6 | live | **MEASURED:** checkride D11 journey preserves exact IDs and runtime-only stops; release run `20260828T080530.887690Z-86961-durable-reinstall` preserves all five durable file digests and exact session `dd0ea2a0-9d65-4a54-9f64-6105e8b00f53` / thread `01a04767-177e-7452-8a62-98ed7ab99f97` through 7.10.0 reinstall, run/reattach, and status. |
 
 ## 10. Drift protocol
 

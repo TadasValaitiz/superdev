@@ -1,5 +1,36 @@
 # Superdev Release Notes
 
+## v7.10.0 (2026-08-28)
+
+### Globally installed, UV-owned Codex workers
+
+- **Standalone package:** the existing Python 3.9/standard-library worker is now a
+  PEP 621 `codex-worker` tool with a real console entry point and exact `--version`
+  identity coupled to every Superdev manifest.
+- **Skill preflight:** Codex dispatch performs one trusted-root compatibility gate per
+  session. It installs or replaces the bundled source non-editably with UV when absent
+  or mismatched, requires UV-bin PATH ownership, refuses shadows/root drift/install
+  failure actionably, and never falls back to the repository launcher. Native
+  Claude-only work remains dependency-free.
+- **Exact runtime and cached-room safety:** Operational commands fail typed before
+  runtime contact when `CLAUDE_PLUGIN_ROOT` differs from the installed distribution.
+  Managed daemons expose their worker version and only an incompatible selected runtime
+  is gracefully replaced, preserving durable mappings. The version is immutable for the
+  daemon process lifetime, and managed raw `--instance` commands probe it without
+  autostart before their requested RPC. Automatic UV mismatch repair
+  remains, with explicit coordination guidance for the one global tool.
+- **Release audit:** `bump-version.sh --audit` now preserves declaration-drift failure
+  and rejects stale Superdev version families in configured public documentation.
+- **Durable replacement:** UV tool reinstall is isolated from worker state. Named
+  mappings, session IDs, and thread IDs survive; after a runtime restart, `run --name`
+  deliberately resumes/reattaches before status, and runtime stop remains
+  non-destructive.
+- **MEASURED acceptance:** isolated real-UV/Python-3.9 installation remained functional
+  after source removal; absence, mismatch, shadow, failure, and missing-Codex paths were
+  exercised; a plain PATH command from an unrelated repository ran exactly one
+  read-only/no-callback status worker without changing that repository. The independent
+  CLI evaluator's final verdict is PASS.
+
 ## v7.9.0 (2026-08-26)
 
 ### Design law vs process discipline — the split

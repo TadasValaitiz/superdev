@@ -99,6 +99,55 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(load_managed_identity(self.paths.registry_path), self.identity)
         self.assertEqual(stat.S_IMODE(os.stat(self.paths.metadata_path).st_mode), 0o600)
 
+    def test_ready_peer_is_reused_when_client_path_lacks_external_codex(self):
+        self.ready = True
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", self.manager.deps.spawn,
+            self.manager.deps.rpc_call, lambda: 0.0, which=lambda _: None,
+        ), self.identity)
+        response = manager.ensure_running()
+        self.assertEqual(response.status, "ready")
+        self.assertEqual(self.spawns, [])
+
+    def test_incompatible_ready_peer_is_stopped_then_replaced_for_selected_instance(self):
+        ready = {"value": True, "version": "7.9.0"}
+        calls = []
+        spawns = []
+        durable = self.paths.durable_dir / "preserve.txt"
+        durable.parent.mkdir(parents=True, mode=0o700)
+        durable.write_text("preserve\n", encoding="utf-8")
+
+        def rpc(socket_path, method, params, timeout):
+            calls.append((socket_path, method))
+            if method == "daemon/status":
+                if not ready["value"]:
+                    raise OSError("stopped")
+                return {"result": {
+                    "ready": True, "worker_version": ready["version"],
+                    "daemon_pid": 1234, "codex_pid": 5678, "session_count": 1,
+                }}
+            if method == "daemon/shutdown":
+                ready["value"] = False
+                return {"result": {"accepted": True}}
+            raise AssertionError(method)
+
+        def spawn(argv, stderr_path):
+            spawns.append(list(argv))
+            ready.update(value=True, version="7.10.1")
+            return Process()
+
+        manager = InstanceManager(InstanceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc, lambda: 0.0,
+            expected_version="7.10.1",
+        ), self.identity)
+        with mock.patch.object(instance_module, "_pid_alive", return_value=False):
+            result = manager.ensure_running()
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.readiness["worker_version"], "7.10.1")
+        self.assertEqual([method for _, method in calls].count("daemon/shutdown"), 1)
+        self.assertEqual(len(spawns), 1)
+        self.assertEqual(durable.read_text(encoding="utf-8"), "preserve\n")
+
     def test_instance_paths_reserve_callback_state_and_artifacts(self):
         self.assertEqual(self.paths.callback_path, self.paths.durable_dir / "callbacks.json")
         self.assertEqual(self.paths.callback_artifact_dir,

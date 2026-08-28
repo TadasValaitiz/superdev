@@ -199,3 +199,83 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** Task 1 package metadata and Task 3 wheel/package checks.
 - **Revisit-when:** hatchling drops Python 3.9-source build support or the tool moves to
   a dedicated repository with another established backend.
+
+## D10 — Probe the external Codex prerequisite through explicit daemon start
+**When:** 2026-08-28T06:45:31Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human
+
+- **Trigger:** Task 2's planned negative probe said `model list` in an isolated managed
+  instance should produce `daemon_start_failed` when external `codex` is absent.
+  Measured runtime behavior showed that `model list` is an RPC-only read: it does not
+  autostart a stopped managed daemon and correctly returns `daemon_unavailable`.
+- **Options weighed:**
+  - A: Make `model list` autostart — would satisfy the original test route / sacrifices
+    established read-only lifecycle semantics and creates an unrequested public change.
+  - B: Preserve `model list` semantics and drive `--instance X daemon start` — exercises
+    the existing explicit lifecycle boundary and its typed start refusal / sacrifices
+    the original test command only.
+- **Decided:** B. The external-prerequisite negative uses explicit managed daemon start,
+  requires one actionable `daemon_start_failed` JSON object, and leaves `model list`
+  RPC-only.
+- **Rests on:** measured CLI behavior, D1, R5–R7, and the existing command-ergonomics
+  lifecycle contract.
+- **Affects:** Task 2 test route and evidence only; no public CLI surface changes.
+- **Revisit-when:** managed read commands deliberately adopt autostart semantics.
+
+## D11 — Resume a durable mapping before post-reinstall status
+**When:** 2026-08-28T07:23:03Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human
+
+- **Trigger:** The planned upgrade recipe called `status --name` immediately after a
+  reinstall and daemon restart. Measured behavior proved that durable registry bytes,
+  session ID, and thread ID survive, while the fresh daemon intentionally has no runtime
+  attachment for that worker; direct status therefore returns `daemon_stopped`.
+- **Options weighed:**
+  - A: Change status to load or reattach detached mappings — would make the original
+    test route pass / sacrifices the established read-only lifecycle semantics.
+  - B: Preserve lifecycle semantics and deliberately call `run --name` to resume and
+    reattach the existing mapping before status — proves continuity through the public
+    resume path / costs one short real continuation in the live proof.
+- **Decided:** B. The durable-reinstall scenario first proves the registry file bytes
+  survived replacement, then runs one short continuation under the same name, requires
+  exact session/thread ID equality, and only then reads status.
+- **Rests on:** measured daemon restart behavior, D4, D10, and the existing common-command
+  resume contract.
+- **Affects:** Task 3 evidence route and CLI §3 upgrade recipe only; no public CLI change.
+- **Revisit-when:** detached mappings gain a separately designed read-only inspection
+  surface.
+
+## D12 — Fail closed across cached-plugin and managed-runtime version skew
+**When:** 2026-08-28T12:30:00Z · **Phase:** build ·
+**Status:** locked
+**Decided by:** human, closing final review findings
+
+- **Trigger:** A UV reinstall replaces one mutable global command, while older Claude
+  rooms and already-running managed daemons can retain a different Superdev version.
+  The original preflight proved executable identity only, so either mismatch could be
+  used silently.
+- **Options weighed:**
+  - A: Namespace every executable by version — supports simultaneous skew / violates the
+    required plain `codex-worker` surface and overbuilds the current release boundary.
+  - B: Keep automatic trusted-root repair, but fail every operational invocation whose
+    `CLAUDE_PLUGIN_ROOT` manifest differs from the installed distribution and require an
+    exact managed-daemon version handshake — preserves zero-friction upgrades and the
+    plain command / does not promise simultaneous operation of skewed cached rooms.
+- **Decided:** B. `--version` remains a daemon-free diagnostic. Every other invocation
+  with `CLAUDE_PLUGIN_ROOT` must exactly match that loaded manifest before runtime
+  contact or return typed `tool_version_mismatch` (`-32038`) with coordination and
+  trusted-preflight recovery. Preflight may still automatically replace an older or
+  newer UV-owned tool; operators must understand that doing so coordinates the single
+  global version. A selected managed daemon reports its distribution version: an exact
+  process-construction-stamped peer is reused, while an incompatible peer is gracefully stopped and respawned under
+  the selected instance lock. Durable state is preserved; unrelated instances and raw
+  socket lifecycles are not stopped. Managed raw families probe the selected peer's
+  stamped version without autostart before their requested RPC. Only exact-ready may
+  proceed; stopped, malformed, or otherwise failed probes refuse typed, as does mismatch,
+  without invoking the requested RPC. Explicit `--socket` behavior is unchanged.
+- **Rests on:** D1–D5, D11, one mutable UV tool, and per-room `CLAUDE_PLUGIN_ROOT`.
+- **Affects:** spec §5.2–§5.3, CLI §1/§3, skill preflight, managed daemon readiness.
+- **Revisit-when:** simultaneous operation across different cached Superdev versions is
+  required, or a separately versioned compatibility protocol replaces exact equality.

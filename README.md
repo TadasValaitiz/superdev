@@ -17,7 +17,7 @@ From GitHub (any machine):
 ```bash
 claude plugin marketplace add TadasValaitiz/superdev
 claude plugin install superdev@superdev-dev
-claude plugin details superdev        # → 7.9.x, skill inventory
+claude plugin details superdev        # → 7.10.x, skill inventory
 # then, inside any running session:  /reload-plugins
 ```
 
@@ -38,7 +38,7 @@ claude plugin marketplace update superdev-dev
 claude plugin update superdev@superdev-dev
 ```
 
-**Prerequisite for the room layer** (orchestrator / architect / item rooms): `~/.claude/settings.json` must contain `"crossSessionInbound": "accept"` — without it rooms launch, look healthy, and their messages are silently held. The bootstrap skill checks this for you. Requirements otherwise: the `claude` CLI, git, python3. No other plugins needed — superdev is standalone.
+**Prerequisite for the room layer** (orchestrator / architect / item rooms): `~/.claude/settings.json` must contain `"crossSessionInbound": "accept"` — without it rooms launch, look healthy, and their messages are silently held. The bootstrap skill checks this for you. Requirements otherwise: the `claude` CLI, git, python3. When a Codex worker is selected, its one-per-session preflight additionally requires UV and the external `codex` CLI. Native Claude work does not require either dependency. No other plugins needed — superdev is standalone.
 
 ## Where to start
 

@@ -5,6 +5,7 @@ import math
 import os
 import shlex
 import signal
+import shutil
 import sys
 import tempfile
 import subprocess
@@ -24,6 +25,7 @@ from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowReq
                        WorkerMessagesRequest, WorkerStatusRequest)
 from .instance import (InstanceDeps, InstanceManager, derive_instance_paths,
                        resolve_instance, validate_instance_id)
+from .version import distribution_version
 
 
 DOCUMENTED_CLIENT_METHODS = {
@@ -132,6 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CodexWorkerArgumentParser(
         prog="codex-worker",
         description="Local Unix-socket broker for durable Codex worker sessions.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="codex-worker %s" % distribution_version(),
     )
     parser.add_argument("--socket", type=_absolute_path,
                         help="Unix socket path (default: SUPERDEV_CODEX_WORKER_SOCKET or user temp path)")
@@ -342,14 +349,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.pretty or args.instance:
             print("codex-worker: --pretty and --instance are not valid with daemon serve", file=sys.stderr)
             return 2
-        return _serve(args)
+        try:
+            _require_loaded_plugin_version(args)
+            return _serve(args)
+        except FacadeFault as fault:
+            response = rpc_response("cli", fault=FacadeRpcFault(fault))
+            _print_json(response, False)
+            return 1
 
     try:
+        params = None
         if args.family == "daemon" and args.action == "start":
             if args.socket:
                 raise ValueError("--socket is not valid with daemon start")
+        elif args.family == "daemon" and args.action == "stop":
+            if args.socket:
+                raise ValueError("--socket is not valid with daemon stop")
+        else:
+            if args.family == "daemon" and args.action == "shutdown" and args.instance:
+                raise ValueError("--instance is not valid with daemon shutdown")
+            params = _params_for(args)
+            if getattr(args, "common", False):
+                _validate_common_request(args.method, params)
+                if args.socket:
+                    raise ValueError("--socket is not valid for common worker commands")
+            elif args.socket and args.instance:
+                raise ValueError("--socket and --instance are mutually exclusive")
+
+        _require_loaded_plugin_version(args)
+        if args.family == "daemon" and args.action == "start":
+            manager = _instance_manager(args.instance)
             response = {"jsonrpc": "2.0", "id": "cli",
-                        "result": _instance_manager(args.instance).ensure_running().to_dict()}
+                        "result": manager.ensure_running().to_dict()}
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "status" and not args.socket:
@@ -357,28 +388,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "stop":
-            if args.socket:
-                raise ValueError("--socket is not valid with daemon stop")
             response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).stop().to_dict()}
             _print_json(response, args.pretty)
             return 0
-        if args.family == "daemon" and args.action == "shutdown" and args.instance:
-            raise ValueError("--instance is not valid with daemon shutdown")
         method = args.method
-        params = _params_for(args)
         if method == "worker/start" and not args.no_callback:
             from .claude_transport import capture_from_env
             capture = capture_from_env(os.environ)
             params["callback_capture"] = capture.to_dict() if capture is not None else None
         if getattr(args, "common", False):
-            _validate_common_request(method, params)
-            if args.socket:
-                raise ValueError("--socket is not valid for common worker commands")
             socket_path = _common_endpoint(args.instance, autostart=method in ("worker/start", "worker/run"))
         else:
-            if args.socket and args.instance:
-                raise ValueError("--socket and --instance are mutually exclusive")
-            socket_path = (str(_instance_manager(args.instance).deps.paths.socket_path)
+            socket_path = (_managed_raw_endpoint(args.instance)
                            if args.instance else args.socket or default_socket_path())
         response = rpc_call(socket_path, method, params, timeout=_client_timeout(method, params))
     except FacadeFault as fault:
@@ -618,11 +639,102 @@ def _common_endpoint(explicit_instance, autostart):
     return str(manager.deps.paths.socket_path)
 
 
+def _managed_raw_endpoint(explicit_instance):
+    """Probe a managed raw target without changing its no-autostart lifecycle."""
+    manager = _instance_manager(explicit_instance)
+    status = manager.status()
+    socket_path = str(manager.deps.paths.socket_path)
+    if getattr(status, "status", None) == "stopped":
+        raise daemon_unavailable_fault(socket_path)
+    candidate_error = getattr(status, "last_error", None)
+    last_error = candidate_error if isinstance(candidate_error, dict) else {}
+    if last_error.get("reason") == "worker_version_mismatch":
+        selected = shlex.quote(manager.identity.value)
+        raise FacadeFault(
+            FacadeFaultCode.TOOL_VERSION_MISMATCH,
+            "Managed codex-worker daemon does not match the installed command",
+            "tool_version_mismatch",
+            details={
+                "reason": "managed_daemon_version_differs",
+                "expected_version": last_error.get("expected_version"),
+                "actual_version": last_error.get("actual_version"),
+                "socket_path": socket_path,
+            },
+            known_ids={"instance": manager.identity.value, "name": None,
+                       "session_id": None, "thread_id": None, "turn_id": None},
+            next_actions=[{
+                "command": "codex-worker --instance %s daemon start" % selected,
+                "reason": "Deliberately replace only this incompatible managed runtime",
+            }],
+        )
+    if getattr(status, "status", None) != "ready":
+        raise daemon_unavailable_fault(socket_path)
+    return socket_path
+
+
+def _daemon_launcher():
+    source_launcher = Path(__file__).resolve().parent.parent / "codex-worker"
+    if source_launcher.is_file():
+        return str(source_launcher)
+    return str(Path(sys.executable).with_name("codex-worker"))
+
+
 def _instance_manager(explicit_instance):
     identity = resolve_instance(explicit_instance, os.environ)
     paths = derive_instance_paths(identity, sys.platform, _managed_state_home(), Path(tempfile.gettempdir()), os.getuid())
-    launcher = str(Path(__file__).resolve().parents[4] / "bin" / "codex-worker")
-    return InstanceManager(InstanceDeps(paths, launcher, "codex", _spawn_daemon, rpc_call, time.monotonic), identity)
+    return InstanceManager(InstanceDeps(
+        paths, _daemon_launcher(), "codex", _spawn_daemon, rpc_call, time.monotonic,
+        which=shutil.which,
+        expected_version=distribution_version(),
+    ), identity)
+
+
+def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
+    """Refuse operational use when this executable differs from the loaded plugin."""
+    if getattr(args, "version", False):
+        return
+    root_value = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if not root_value:
+        return
+    root = Path(root_value)
+    manifest_path = root / ".claude-plugin" / "plugin.json"
+    loaded_version = None
+    reason = "loaded_manifest_invalid"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        candidate = payload.get("version") if isinstance(payload, dict) else None
+        if isinstance(candidate, str) and candidate:
+            loaded_version = candidate
+            reason = "loaded_plugin_version_differs"
+    except (OSError, ValueError):
+        pass
+    installed_version = distribution_version()
+    if loaded_version == installed_version:
+        return
+    installer = root / "skills" / "subagent-driven-development" / "scripts" / "install-codex-worker"
+    raise FacadeFault(
+        FacadeFaultCode.TOOL_VERSION_MISMATCH,
+        "Installed codex-worker does not match the loaded Superdev plugin",
+        "tool_version_mismatch",
+        details={
+            "reason": reason,
+            "loaded_root": str(root),
+            "loaded_version": loaded_version,
+            "installed_version": installed_version,
+            "coordination": (
+                "One global codex-worker version is shared by all rooms. Coordinate cached "
+                "plugin versions before rerunning this room's trusted installer."
+            ),
+        },
+        known_ids={"instance": None, "name": None, "session_id": None,
+                   "thread_id": None, "turn_id": None},
+        next_actions=[
+            {"command": "codex-worker --version",
+             "reason": "Inspect the installed command version without runtime contact"},
+            {"command": shlex.quote(str(installer)),
+             "reason": "After coordinating other rooms, repair from this loaded plugin root"},
+        ],
+    )
 
 
 def _managed_components(broker, runtime, registry, state_path):

@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -701,6 +702,7 @@ class RpcServerTests(unittest.TestCase):
             -32033: "callback_target_not_found", -32034: "callback_target_ambiguous",
             -32035: "callback_target_unsafe", -32036: "callback_send_failed",
             -32037: "callback_payload_too_large",
+            -32038: "tool_version_mismatch",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)
@@ -777,6 +779,144 @@ class CliTests(unittest.TestCase):
         self.prompt_file.write_text("from file\n", encoding="utf-8")
         self.rpc_calls = []
 
+    def test_version_is_terminal_plain_text_and_never_touches_runtime(self):
+        forbidden = []
+        original_rpc_call = cli.rpc_call
+        original_instance_manager = cli._instance_manager
+        original_serve = cli._serve
+        cli.rpc_call = lambda *args, **kwargs: forbidden.append("rpc")
+        cli._instance_manager = lambda *args, **kwargs: forbidden.append("instance")
+        cli._serve = lambda *args, **kwargs: forbidden.append("serve")
+        try:
+            completed = self.run_cli(
+                ["--pretty", "--instance", "chosen", "--version"],
+                include_socket=False,
+            )
+        finally:
+            cli.rpc_call = original_rpc_call
+            cli._instance_manager = original_instance_manager
+            cli._serve = original_serve
+        self.assertEqual(completed.returncode, 0)
+        self.assertRegex(completed.stdout, r"^codex-worker \d+\.\d+\.\d+\n$")
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(forbidden, [])
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(completed.stdout)
+
+    def test_loaded_plugin_version_skew_is_typed_before_any_runtime_contact(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps({"name": "superdev", "version": "0.0.1"}) + "\n",
+            encoding="utf-8",
+        )
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}):
+            completed = self.run_cli(
+                ["model", "list"], fake_rpc=self.fake_rpc_success, include_socket=True,
+            )
+        self.assert_json_error(completed, 1, "tool_version_mismatch")
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["error"]["data"]["details"]["loaded_version"], "0.0.1")
+        self.assertEqual(payload["error"]["data"]["details"]["installed_version"],
+                         cli.distribution_version())
+        self.assertTrue(payload["error"]["data"]["next_actions"])
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_local_invalid_params_precede_loaded_plugin_version_skew(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({"version": "0.0.1"}) + "\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}):
+            completed = self.run_cli(
+                ["start", "--name", "bad/name", "--prompt", "one"],
+                fake_rpc=self.fake_rpc_success,
+            )
+        self.assert_json_error(completed, 2, "invalid_params")
+        self.assertEqual(self.rpc_calls, [])
+
+    def test_loaded_plugin_version_skew_guards_foreground_daemon_serve(self):
+        plugin = Path(self.tempdir.name) / "cached-plugin"
+        manifest = plugin / ".claude-plugin" / "plugin.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({"version": "0.0.1"}) + "\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}), \
+                mock.patch.object(cli, "_serve") as serve:
+            completed = self.run_cli(["daemon", "serve"])
+        self.assert_json_error(completed, 1, "tool_version_mismatch")
+        serve.assert_not_called()
+
+    def test_managed_raw_families_refuse_old_daemon_before_requested_rpc(self):
+        for command, requested_method in (
+                (["model", "list"], "model/list"),
+                (["session", "list"], "session/list")):
+            with self.subTest(command=command):
+                self.rpc_calls = []
+
+                def old_peer(socket_path, method, params, timeout):
+                    self.rpc_calls.append((method, params, timeout))
+                    if method == "daemon/status":
+                        return {"result": {
+                            "ready": True,
+                            "worker_version": "0.0.1",
+                            "daemon_pid": 1234,
+                            "codex_pid": 5678,
+                            "session_count": 1,
+                        }}
+                    return {"result": {"unexpected": requested_method}}
+
+                completed = self.run_cli(
+                    ["--instance", "managed-old"] + command,
+                    fake_rpc=old_peer,
+                    include_socket=False,
+                )
+                payload = self.assert_json_error(completed, 1, "tool_version_mismatch")
+                details = payload["error"]["data"]["details"]
+                self.assertEqual(details["actual_version"], "0.0.1")
+                self.assertEqual(details["expected_version"], cli.distribution_version())
+                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+                self.assertIn(
+                    "--instance managed-old daemon start",
+                    payload["error"]["data"]["next_actions"][0]["command"],
+                )
+
+    def test_managed_raw_stopped_daemon_preserves_no_autostart_refusal(self):
+        def stopped_peer(socket_path, method, params, timeout):
+            self.rpc_calls.append((method, params, timeout))
+            raise OSError("stopped")
+
+        with mock.patch.object(cli, "_spawn_daemon") as spawn:
+            completed = self.run_cli(
+                ["--instance", "managed-stopped", "model", "list"],
+                fake_rpc=stopped_peer,
+                include_socket=False,
+            )
+        self.assert_json_error(completed, 1, "daemon_unavailable")
+        self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+        spawn.assert_not_called()
+
+    def test_managed_raw_failed_status_refuses_before_target_rpc(self):
+        for failure in ("malformed", "probe_error"):
+            with self.subTest(failure=failure):
+                self.rpc_calls = []
+
+                def failed_peer(socket_path, method, params, timeout):
+                    self.rpc_calls.append((method, params, timeout))
+                    if method != "daemon/status":
+                        return {"result": {"unexpected": method}}
+                    if failure == "malformed":
+                        return {"result": ["not", "a", "status", "object"]}
+                    raise RuntimeError("status probe failed")
+
+                completed = self.run_cli(
+                    ["--instance", "managed-failed", "session", "list"],
+                    fake_rpc=failed_peer,
+                    include_socket=False,
+                )
+                self.assert_json_error(completed, 1, "daemon_unavailable")
+                self.assertEqual([call[0] for call in self.rpc_calls], ["daemon/status"])
+
     def test_message_parser_maps_strict_prose_file_surface(self):
         parser = build_parser()
         args = parser.parse_args(["message", "--name", "build-1", "--message", "progress"])
@@ -817,6 +957,8 @@ class CliTests(unittest.TestCase):
 
     def test_managed_daemon_start_is_an_explicit_json_lifecycle_action(self):
         class Manager:
+            def require_external_codex(self):
+                raise AssertionError("a ready managed peer must not require client PATH codex")
             def ensure_running(self):
                 return type("Status", (), {"to_dict": lambda self: {
                     "status": "ready", "instance": {"instance": "chosen"},
@@ -831,6 +973,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(json.loads(completed.stdout)["result"]["status"], "ready")
         self.assertEqual(completed.stderr, "")
+
+    def test_daemon_launcher_prefers_source_adjacent_entrypoint_over_argv0(self):
+        original = sys.argv[0]
+        sys.argv[0] = "codex-worker"
+        try:
+            launcher = cli._daemon_launcher()
+        finally:
+            sys.argv[0] = original
+        self.assertEqual(
+            launcher,
+            str(ROOT / "skills" / "subagent-driven-development" / "scripts" / "codex-worker"),
+        )
 
     def test_message_rejects_socket_and_stopped_daemon_does_not_autostart(self):
         self.rpc_calls = []
@@ -934,6 +1088,9 @@ class CliTests(unittest.TestCase):
         manager = type("Manager", (), {
             "deps": type("Deps", (), {
                 "paths": type("Paths", (), {"socket_path": Path(self.socket_path)})(),
+            })(),
+            "status": lambda self: type("Status", (), {
+                "status": "ready", "last_error": None,
             })(),
         })()
         cli._instance_manager = lambda selected: manager
@@ -1307,7 +1464,10 @@ class CliTests(unittest.TestCase):
         class Manager:
             deps = type("Deps", (), {"paths": type("Paths", (), {"socket_path": Path(self.socket_path)})()})()
             def status(inner):
-                return type("Response", (), {"to_dict": lambda self: {"status": "stopped"}})()
+                return type("Response", (), {
+                    "status": "ready", "last_error": None,
+                    "to_dict": lambda self: {"status": "ready"},
+                })()
             def stop(inner):
                 return type("Response", (), {"to_dict": lambda self: {"status_after": "stopped"}})()
 

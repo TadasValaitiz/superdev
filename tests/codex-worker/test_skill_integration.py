@@ -5,6 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SDD = ROOT / "skills" / "subagent-driven-development" / "SKILL.md"
 REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-worker.md"
+INSTALLER = ROOT / "skills" / "subagent-driven-development" / "scripts" / "install-codex-worker"
+README = ROOT / "README.md"
 MODEL_REFERENCE = ROOT / "skills" / "subagent-driven-development" / "codex-model-selection.md"
 CODEX_TOOLS_REFERENCE = ROOT / "skills" / "using-superdev" / "references" / "codex-tools.md"
 OPERATOR = REFERENCE
@@ -19,6 +21,59 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
 
     def test_sdd_links_codex_worker_reference(self):
         self.assertIn("[Codex worker broker](codex-worker.md)", SDD.read_text(encoding="utf-8"))
+
+    def test_codex_selection_has_one_structural_preflight_before_short_dispatch(self):
+        text = SDD.read_text(encoding="utf-8")
+        installer = (
+            '"$SUPERDEV_PLUGIN_ROOT/skills/subagent-driven-development/scripts/'
+            'install-codex-worker"'
+        )
+        self.assertIn(installer, text)
+        self.assertIn("codex-worker --version", text)
+        self.assertLess(text.index(installer), text.index("codex-worker --version"))
+        self.assertIn("&& codex-worker --version", " ".join(text.split()))
+        self.assertLess(text.index("codex-worker --version"), text.index("Read [Codex worker broker]"))
+        normalized = " ".join(text.split()).lower()
+        for fragment in (
+            "once per session",
+            "when codex is selected",
+            "claude_plugin_root",
+            "exact loaded `skill.md` path",
+            "native claude-only work does not run this preflight",
+            "never invoke the source launcher",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, normalized)
+
+    def test_preflight_reference_keeps_lifecycle_optional_and_dispatch_short(self):
+        text = REFERENCE.read_text(encoding="utf-8").lower()
+        for fragment in (
+            "uv tool install --reinstall",
+            "local checkout",
+            "git url",
+            "future registry",
+            "uv tool upgrade codex-worker",
+            "uv tool list",
+            "uv tool uninstall codex-worker",
+            "uv tool update-shell",
+            "never invoke the source launcher",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+        start_section = text.index("## start, then continue")
+        self.assertNotIn("scripts/codex-worker", text[start_section:])
+        self.assertIn("codex-worker start --name", text[start_section:])
+
+    def test_readme_makes_uv_and_external_codex_conditional_prerequisites(self):
+        text = " ".join(README.read_text(encoding="utf-8").split()).lower()
+        for fragment in (
+            "when a codex worker is selected",
+            "uv",
+            "external `codex` cli",
+            "native claude",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
 
     def test_reference_names_required_control_and_recovery_commands(self):
         text = self._reference()
@@ -63,11 +118,14 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             text.index('codex-worker run --name implement-a31 --prompt "Run the focused gate and report."'),
         )
 
-    def test_operator_fan_out_assigns_each_start_its_own_worktree(self):
+    def test_operator_review_fan_out_assigns_each_start_its_own_worktree(self):
         text = self._reference()
-        for worktree in ("IMPLEMENT_A_WORKTREE", "IMPLEMENT_B_WORKTREE", "REVIEW_C_WORKTREE", "REVIEW_D_WORKTREE", "VERIFY_E_WORKTREE"):
+        for worktree in ("REVIEW_C_WORKTREE", "REVIEW_D_WORKTREE", "VERIFY_E_WORKTREE"):
             with self.subTest(worktree=worktree):
                 self.assertIn(f'(cd "${worktree}" && codex-worker start', text)
+        for worktree in ("IMPLEMENT_A_WORKTREE", "IMPLEMENT_B_WORKTREE"):
+            with self.subTest(worktree=worktree):
+                self.assertNotIn(f'(cd "${worktree}" && codex-worker start', text)
 
     def test_response_semantics_distinguish_timeout_from_cancellation(self):
         text = self._reference().lower()
@@ -97,13 +155,14 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         text = SDD.read_text(encoding="utf-8").lower()
         self.assertIn("main-session brainstorming and design", text)
 
-    def test_sdd_dispatch_keeps_native_claude_and_named_worker_happy_path(self):
+    def test_sdd_dispatch_keeps_native_claude_design_and_named_worker_happy_path(self):
         text = SDD.read_text(encoding="utf-8").lower()
         self.assertIn("collision-resistant", text)
         self.assertIn("`start`", text)
         self.assertIn("`run`", text)
         self.assertIn("native claude", text)
-        self.assertIn("codex is opt-in", text)
+        self.assertIn("first-class implementer choice", text)
+        self.assertIn("not the default", text)
         self.assertNotIn("daemon ensure", text)
 
     def test_operator_reference_links_appendix_and_covers_common_surface(self):
@@ -197,7 +256,8 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         for fragment in ("continue", "does not pause", "does not wait"):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, callback.lower())
-        self.assertIn("native claude code remains the default", skill.lower())
+        self.assertIn("first-class implementer choice beside native claude", skill.lower())
+        self.assertIn("not the default", skill.lower())
         self.assertNotIn("callback token", callback.lower())
         self.assertNotIn("raw socket", callback.lower())
         self.assertNotIn("mcp", callback.lower())

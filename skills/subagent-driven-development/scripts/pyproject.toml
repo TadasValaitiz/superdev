@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-worker"
+version = "7.10.0"
+description = "Local durable Codex app-server worker broker"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+codex-worker = "codex_worker.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["codex_worker"]

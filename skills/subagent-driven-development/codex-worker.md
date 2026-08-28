@@ -4,6 +4,59 @@ Use this reference only when the operator or plan explicitly selects a local Cod
 worker. Claude Code remains an equal native SDD mechanism and the coordinator keeps
 the normal worktree, task-brief, report, and independent-review contracts.
 
+## Install and preflight
+
+When a Codex worker is selected, run the bundled preflight once per session before its
+first dispatch. `SUPERDEV_PLUGIN_ROOT` is the canonical plugin root derived from
+`CLAUDE_PLUGIN_ROOT`, when set, or from the exact loaded `SKILL.md` path:
+
+```sh
+"$SUPERDEV_PLUGIN_ROOT/skills/subagent-driven-development/scripts/install-codex-worker" \
+  && codex-worker --version
+```
+
+The preflight accepts only a UV-owned executable whose version exactly matches the
+loaded plugin manifest. It installs an absent or mismatched tool non-editably with
+`uv tool install --reinstall` from that trusted local checkout. A foreign executable
+earlier on PATH is a refusal, not a replacement target: use `uv tool update-shell`,
+start a new shell (or prepend the reported UV bin for the current shell), and rerun the
+preflight. Never invoke the source launcher or fall back to an absolute source path.
+Native Claude-only work needs neither this preflight nor UV.
+
+UV owns one mutable global command, so mismatch repair coordinates every open room and
+cannot make different cached plugin versions operate simultaneously. Coordinate rooms
+using other cached versions before repair. Thereafter every operational invocation with
+`CLAUDE_PLUGIN_ROOT` must exactly match the installed tool or it returns typed
+`tool_version_mismatch` before runtime contact; `codex-worker --version` remains the
+safe diagnostic. Rerun this loaded root's trusted preflight only after coordination.
+Managed daemons also report their worker version: the selected incompatible runtime is
+gracefully replaced with durable mappings preserved, while unrelated instances and raw
+socket lifecycles are left alone. That identity is stamped once when the daemon process
+starts, so an in-place UV metadata change cannot relabel an old process. Advanced raw
+commands using `--instance` probe it without autostart and refuse mismatch before the
+requested RPC. Only an exact-ready probe can proceed; stopped, malformed, and failed
+probes refuse typed without the requested RPC. Explicit `--socket` behavior remains
+unchanged.
+
+Package lifecycle commands are maintenance opportunities, not routine dispatch
+ceremony. A local checkout may be installed directly for release validation; an
+editable local install is development-only. A pinned Git URL can be used once a release
+source is published, and a future registry release may use the distribution name:
+
+```sh
+uv tool install --reinstall /path/to/local/superdev/skills/subagent-driven-development/scripts
+uv tool install --reinstall 'git+https://github.com/TadasValaitiz/superdev.git#subdirectory=skills/subagent-driven-development/scripts'
+# Future registry release:
+uv tool install --reinstall codex-worker
+uv tool list
+uv tool upgrade codex-worker
+uv tool uninstall codex-worker
+```
+
+Use `uv tool list` together with `codex-worker --version` to audit ownership and exact
+identity. Uninstalling or reinstalling the tool does not remove worker state, named
+sessions, callbacks, sockets, or registries.
+
 ## Start, then continue
 
 From the intended worktree, create one collision-resistant worker name: a readable

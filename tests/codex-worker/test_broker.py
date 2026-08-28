@@ -15,6 +15,7 @@ from codex_worker.broker import ModelSelectionError, WorkerBroker
 from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
+from codex_worker.version import distribution_version
 
 
 class FakeCodex:
@@ -235,13 +236,23 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(status, {
             "ready": True, "daemon_pid": 1234, "codex_pid": 4321,
             "socket_path": str(Path(self.cwd) / "worker.sock"), "state_path": self.state_path,
-            "session_count": 0,
+            "session_count": 0, "worker_version": distribution_version(),
         })
         models = self.broker.model_list()
         self.assertEqual(models["models"], [
             {"id": "fake-model-a", "is_default": True, "supported_efforts": ["medium"]},
             {"id": "fake-model-b", "is_default": False, "supported_efforts": ["high", "medium"]},
         ])
+
+    def test_daemon_version_is_immutable_when_installed_metadata_changes(self):
+        with mock.patch("codex_worker.broker.distribution_version", return_value="7.10.0"):
+            broker = WorkerBroker(
+                self.registry, self.codex, self.runtime, str(Path(self.cwd) / "worker.sock"),
+                self.state_path, daemon_pid=1234,
+            )
+        with mock.patch("codex_worker.broker.distribution_version", return_value="7.10.1"):
+            status = broker.daemon_status()
+        self.assertEqual(status["worker_version"], "7.10.0")
 
     def test_session_start_validates_live_model_and_persists_immutable_cwd(self):
         with self.assertRaises(ModelSelectionError):

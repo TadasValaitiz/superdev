@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).with_name("live_broker_check.py")
+UV_SCRIPT = Path(__file__).with_name("live_uv_tool_check.py")
 SPEC = importlib.util.spec_from_file_location("live_broker_check", SCRIPT)
 assert SPEC and SPEC.loader
 LIVE = importlib.util.module_from_spec(SPEC)
@@ -52,6 +53,46 @@ class GoalRunner:
 
 
 class LiveHarnessContractTests(unittest.TestCase):
+    def test_uv_tool_harness_declares_separate_isolated_scenarios(self):
+        self.assertTrue(UV_SCRIPT.is_file(), "UV tool live harness is missing")
+        source = UV_SCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            '"package-independence"', '"preflight-recovery"',
+            '"durable-reinstall"', '"external-status-worker"',
+            '"UV_TOOL_DIR"', '"UV_TOOL_BIN_DIR"', '"UV_CACHE_DIR"',
+            '"HOME"', '"CODEX_HOME"',
+            '"--python", "3.9"', 'source-away', 'codex_worker',
+            'sys.executable', 'shutil.which', '"--editable" not in',
+            'absent-external-codex', '"daemon", "stop"',
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, source)
+
+    def test_external_status_worker_contract_is_exact_and_non_destructive(self):
+        self.assertTrue(UV_SCRIPT.is_file(), "UV tool live harness is missing")
+        source = UV_SCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            '/Users/tadas/Projects/ai-ethics/ai-trading-calibration',
+            'uv-global-install', 'status-checker-abc', '"--read-only"',
+            '"--no-callback"', 'branch', 'staged', 'unstaged', 'untracked',
+            'clean', 'exactly one worker', 'before_status == after_status',
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, source)
+        self.assertNotIn("shutil.rmtree(durable", source)
+
+    def test_durable_reinstall_resumes_once_before_status_without_retries(self):
+        source = UV_SCRIPT.read_text(encoding="utf-8")
+        durable = source.split("def scenario_durable_reinstall()", 1)[1].split(
+            "def git_status", 1,
+        )[0]
+        self.assertIn("before_reinstall == after_reinstall", durable)
+        self.assertIn('"run", "--name", name', durable)
+        self.assertIn('continued_worker["session_id"] == worker["session_id"]', durable)
+        self.assertIn('continued_worker["thread_id"] == worker["thread_id"]', durable)
+        self.assertIn('"status", "--name", name', durable)
+        self.assertNotIn("eventually", durable)
+
     def test_pause_goal_omits_budget_update_and_preserves_authoritative_budget(self):
         runner = GoalRunner(token_budget=31789)
         preceding = {"availability": "present", "goal": {

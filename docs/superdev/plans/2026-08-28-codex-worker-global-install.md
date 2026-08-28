@@ -209,7 +209,12 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
   | root disagreement | set `CLAUDE_PLUGIN_ROOT` to a second valid-looking root | nonzero before UV; stderr names both roots; no install |
   | UV bin off PATH | fake `uv tool dir --bin` returns a directory omitted from PATH | nonzero after any needed install; stderr names `uv tool update-shell` and current-shell PATH recovery |
   | install failure | fake UV exits nonzero and a prior UV-bin worker/durable sentinel exist | nonzero; prior executable and sentinel hashes unchanged; stderr includes UV failure exit/output |
-  | external Codex absent | real installed worker is on PATH but `codex` is removed; invoke `model list` in isolated instance | one JSON refusal with existing typed daemon-start failure, actionable missing-`codex` detail, nonzero exit, no traceback |
+  | external Codex absent | real installed worker is on PATH but `codex` is removed; invoke `--instance <isolated> daemon start` | one JSON refusal with existing typed daemon-start failure, actionable missing-`codex` detail, nonzero exit, no traceback |
+
+  **Build erratum (2026-08-28, D10):** measured `model list` is an RPC-only read and
+  correctly does not autostart a stopped managed daemon. The external-prerequisite
+  negative therefore uses explicit `daemon start`; this corrects the test route without
+  changing public lifecycle semantics.
 
   Before editing the skill, run at least two fresh-agent pressure scenarios against the
   current skill: (a) no PATH worker but a loaded plugin package; (b) a shadowing old
@@ -284,7 +289,7 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
 
 **Role in the build:** Prove the shipped source installs independently, survives source removal/reinstall, and drives a real named worker from another repository, implementing R1–R7 and producing AH1–AH7 receipts.
 
-**Read first:** spec §5.4 and §9; CLI surface §3; decisions D4–D9; Python patterns §§1, 4, 6, 9, 10; process discipline §§2–3.
+**Read first:** spec §5.4 and §9; CLI surface §3; decisions D4–D11; Python patterns §§1, 4, 6, 9, 10; process discipline §§2–3.
 
 **Files:**
 - Modify: `tests/codex/test-package-codex-plugin.sh`
@@ -313,8 +318,11 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
   away, asserts the installed interpreter is Python 3.9, imports `codex_worker` from the
   UV environment rather than the moved source, and runs `--version`.
   `preflight-recovery` drives absent, mismatch, shadow, forced installation failure,
-  and absent-external-`codex` refusals. `durable-reinstall` creates a named mapping, stops the runtime,
-  reinstalls, and reads the same mapping. `external-status-worker` runs from
+  and absent-external-`codex` refusals. `durable-reinstall` creates a named mapping,
+  stops the runtime, reinstalls, proves the registry bytes survived, deliberately runs
+  the same name to resume/reattach it with exact session/thread IDs, and then reads
+  status (D11 build erratum; direct post-restart status was the wrong proof route).
+  `external-status-worker` runs from
   `/Users/tadas/Projects/ai-ethics/ai-trading-calibration` with instance
   `uv-global-install` and name `status-checker-abc`, read-only/no-callback, asking for
   branch/staged/unstaged/untracked/clean status without modification; it validates the
@@ -444,6 +452,13 @@ This plan discharges UC1–UC4 and AH1–AH7 from the anchor. Task 1 produces AH
   external-cwd status, and leave every touched checkout clean.
 
 ## Operational strategy
+
+**Final-review erratum (2026-08-28, D12):** The original executable-only compatibility
+gate was incomplete. One mutable UV tool cannot satisfy differently versioned cached
+rooms simultaneously, so automatic trusted preflight replacement remains the upgrade
+path while every operational invocation with `CLAUDE_PLUGIN_ROOT` fails typed on skew.
+Managed readiness now includes exact daemon version and replaces only an incompatible
+selected runtime, preserving durable state and unrelated/raw runtimes.
 
 All existing Codex-worker behavioral, packaging, release, and skill-integration tests
 are **keep and fix-in-place**. New package/preflight/live tests extend those lanes; no

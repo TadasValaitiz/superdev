@@ -62,6 +62,8 @@ class InstanceDeps:
     rpc_call: Callable[[str, str, dict, Optional[float]], dict]
     monotonic: Callable[[], float]
     wait: Callable[[float], None] = field(default=time.sleep)
+    which: Callable[[str], Optional[str]] = field(default=lambda executable: executable)
+    expected_version: Optional[str] = None
 
 
 def resolve_instance(explicit: Optional[str], env: Mapping[str, str]) -> InstanceIdentity:
@@ -348,12 +350,24 @@ class InstanceManager:
                                     result.get("codex_pid"), result.get("session_count", 0),
                                     result if status == "ready" else None, last_error)
 
+    def _compatible(self, result: dict) -> bool:
+        return (self.deps.expected_version is None
+                or result.get("worker_version") == self.deps.expected_version)
+
     def status(self) -> DaemonStatusResponse:
         try:
             result = self._probe()
         except Exception as exc:
             return self._status_response("failed", last_error={"reason": type(exc).__name__})
-        return self._status_response("ready", result) if result is not None else self._status_response("stopped")
+        if result is None:
+            return self._status_response("stopped")
+        if not self._compatible(result):
+            return self._status_response("failed", last_error={
+                "reason": "worker_version_mismatch",
+                "expected_version": self.deps.expected_version,
+                "actual_version": result.get("worker_version"),
+            })
+        return self._status_response("ready", result)
 
     def _serve_argv(self) -> Sequence[str]:
         paths = self.deps.paths
@@ -394,6 +408,21 @@ class InstanceManager:
             ],
         )
 
+    def _require_external_codex(self) -> None:
+        """Refuse a new spawn when the external Codex CLI is absent."""
+        if self.deps.which(self.deps.codex_bin) is not None:
+            return
+        raise self._start_fault(
+            "codex_not_found",
+            cause={
+                "type": "FileNotFoundError",
+                "message": (
+                    "external '%s' executable was not found on PATH; install the Codex CLI "
+                    "and verify it with '%s --version'" % (self.deps.codex_bin, self.deps.codex_bin)
+                ),
+            },
+        )
+
     def ensure_running(self) -> DaemonStatusResponse:
         try:
             return self._ensure_running()
@@ -420,7 +449,9 @@ class InstanceManager:
         with acquire_start_lock(self.deps.paths.lock_path):
             ready = self._probe()
             if ready is not None:
-                return self._status_response("ready", ready)
+                if self._compatible(ready):
+                    return self._status_response("ready", ready)
+                self.stop()
             _write_metadata(self.deps.paths, self.identity)
             stale_socket = _verified_socket(self.deps.paths.socket_path,
                                              FacadeFaultCode.DAEMON_START_FAILED)
@@ -430,6 +461,7 @@ class InstanceManager:
                                            "socket_peer_active", self.deps.paths.socket_path)
                 _unlink_verified_socket(self.deps.paths.socket_path, stale_socket,
                                         FacadeFaultCode.DAEMON_START_FAILED)
+            self._require_external_codex()
             try:
                 process = self.deps.spawn(self._serve_argv(), str(self.deps.paths.log_path))
             except Exception as exc:
@@ -437,7 +469,7 @@ class InstanceManager:
             deadline = self.deps.monotonic() + 2.0
             while True:
                 ready = self._probe()
-                if ready is not None:
+                if ready is not None and self._compatible(ready):
                     return self._status_response("ready", ready)
                 if getattr(process, "poll", lambda: None)() is not None:
                     reason = "child_exited"; break
