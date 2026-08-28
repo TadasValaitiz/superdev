@@ -78,3 +78,11 @@ managed-raw, loaded-root, foreground-serve, and release-audit journeys in 78 lit
 events. Its independent
 [`d12-reride/evaluator-verdict.md`](2026-08-28-codex-worker-global-install-evidence/d12-reride/evaluator-verdict.md)
 is **PASS**, closing AH6 for current HEAD without relabelling the failed attempts.
+
+Final review subsequently tightened managed raw selection so only an exact-ready status
+probe may expose the target endpoint. The focused
+[`post-fix-ah6-executor-transcript.md`](2026-08-28-codex-worker-global-install-evidence/d12-reride/post-fix-ah6-executor-transcript.md)
+records 11 events (9 exit 0, 2 exit 1): non-object and generic failed status probes each
+return typed `daemon_unavailable` after only `daemon/status`, while exact-ready proceeds
+to `model/list`. The aggregate evaluator verdict is **PASS** for behavioral candidate
+`2db9ccd` and evidence-only descendant `a856b7c`.
