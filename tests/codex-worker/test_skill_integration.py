@@ -63,11 +63,14 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             text.index('codex-worker run --name implement-a31 --prompt "Run the focused gate and report."'),
         )
 
-    def test_operator_fan_out_assigns_each_start_its_own_worktree(self):
+    def test_operator_review_fan_out_assigns_each_start_its_own_worktree(self):
         text = self._reference()
-        for worktree in ("IMPLEMENT_A_WORKTREE", "IMPLEMENT_B_WORKTREE", "REVIEW_C_WORKTREE", "REVIEW_D_WORKTREE", "VERIFY_E_WORKTREE"):
+        for worktree in ("REVIEW_C_WORKTREE", "REVIEW_D_WORKTREE", "VERIFY_E_WORKTREE"):
             with self.subTest(worktree=worktree):
                 self.assertIn(f'(cd "${worktree}" && codex-worker start', text)
+        for worktree in ("IMPLEMENT_A_WORKTREE", "IMPLEMENT_B_WORKTREE"):
+            with self.subTest(worktree=worktree):
+                self.assertNotIn(f'(cd "${worktree}" && codex-worker start', text)
 
     def test_response_semantics_distinguish_timeout_from_cancellation(self):
         text = self._reference().lower()
@@ -97,13 +100,14 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         text = SDD.read_text(encoding="utf-8").lower()
         self.assertIn("main-session brainstorming and design", text)
 
-    def test_sdd_dispatch_keeps_native_claude_and_named_worker_happy_path(self):
+    def test_sdd_dispatch_keeps_native_claude_design_and_named_worker_happy_path(self):
         text = SDD.read_text(encoding="utf-8").lower()
         self.assertIn("collision-resistant", text)
         self.assertIn("`start`", text)
         self.assertIn("`run`", text)
         self.assertIn("native claude", text)
-        self.assertIn("codex is opt-in", text)
+        self.assertIn("first-class implementer choice", text)
+        self.assertIn("not the default", text)
         self.assertNotIn("daemon ensure", text)
 
     def test_operator_reference_links_appendix_and_covers_common_surface(self):
@@ -197,7 +201,8 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         for fragment in ("continue", "does not pause", "does not wait"):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, callback.lower())
-        self.assertIn("native claude code remains the default", skill.lower())
+        self.assertIn("first-class implementer choice beside native claude", skill.lower())
+        self.assertIn("not the default", skill.lower())
         self.assertNotIn("callback token", callback.lower())
         self.assertNotIn("raw socket", callback.lower())
         self.assertNotIn("mcp", callback.lower())
