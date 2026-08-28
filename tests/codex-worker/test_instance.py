@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
-                                   load_managed_identity, resolve_instance)
+                                   derive_service_paths, load_managed_identity,
+                                   resolve_instance)
 import codex_worker.instance as instance_module
 from codex_worker.rpc import rpc_call as production_rpc_call
 
@@ -658,6 +659,13 @@ class InstanceResolutionTests(unittest.TestCase):
                                       self.state_home, self.temp_root, 501)
         self.assertLess(len(os.fsencode(paths.socket_path)), 100)
         self.assertNotIn("default", paths.socket_path.name)
+
+    def test_global_path_compatibility_export_ignores_all_instance_inputs(self):
+        paths = derive_service_paths("darwin", self.state_home.resolve(),
+                                     self.temp_root.resolve(), 501)
+        self.assertEqual(paths.durable_dir,
+                         self.state_home.resolve() / "superdev/codex-worker/service")
+        self.assertNotIn("instances", str(paths))
 
     def test_load_managed_identity_refuses_writable_ancestor_without_touching_metadata(self):
         identity = resolve_instance("unsafe-load-parent", {})

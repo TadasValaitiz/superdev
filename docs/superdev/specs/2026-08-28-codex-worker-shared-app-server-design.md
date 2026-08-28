@@ -462,7 +462,7 @@ regressions that still govern the new topology.
 | AH4 | Client exit does not stop the service; later attach/run resumes the same thread at port 4500. | UC4 / R1, R2, R7 | live |  |
 | AH5 | An occupied default port produces one typed refusal, preserves the peer, and never falls back. | UC5 / R2 | fast + live |  |
 | AH6 | Idle version replacement restarts durably, while any active turn blocks replacement without interruption. | UC6 / R7, R8 | fast + live |  |
-| AH7 | Real legacy registries import uniquely, deduplicate identically, and expose divergent names with every identity and explicit resolution. | UC7 / R9 | fast + live fixture |  |
+| AH7 | Real legacy registries import uniquely, deduplicate identically, and expose divergent names with every identity and explicit resolution. | UC7 / R9 | fast + live fixture | Task 1 fast foundation: [C1 review](../reviews/2026-08-28-codex-worker-shared-app-server-c1.md#task-1-foundation--global-domain-and-lossless-migration); live-sanitized receipt remains Task 5. |
 | AH8 | Stop/restart is absent from normal skill completion, refuses active work, and force reports every affected thread—including `unmapped_tui` rows—under supervised use. | UC8 / R7 | fast + checkride |  |
 | AH9 | Callback delivery still reaches the captured Claude room while global lookup and TUI control remain independent of Claude session identity. | UC9 / R6 | live |  |
 | AH10 | Installed Python 3.9 UV tool and all existing command families operate from unrelated directories through the global service. | UC10 / R10, R11 | package + live |  |

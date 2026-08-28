@@ -64,6 +64,40 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertEqual(json.loads(path.read_text())["schema_version"], 2)
 
+    def test_read_existing_is_strictly_read_only_and_replace_all_is_atomic(self):
+        registry = SessionRegistry(self.state_path)
+        first = registry.create("thread-one", self.cwd, "one", "model", "medium")
+        before = self.state_path.read_bytes()
+        before_stat = os.stat(self.state_path)
+
+        loaded = SessionRegistry.read_existing(self.state_path)
+
+        self.assertEqual(loaded.list(), [first])
+        self.assertEqual(self.state_path.read_bytes(), before)
+        self.assertEqual((os.stat(self.state_path).st_mode, os.stat(self.state_path).st_mtime_ns),
+                         (before_stat.st_mode, before_stat.st_mtime_ns))
+        second = loaded.create("thread-two", self.cwd, "two", "model", "medium")
+        loaded.replace_all([second])
+        self.assertEqual(SessionRegistry(self.state_path).list(), [second])
+
+    def test_read_existing_refuses_mode_hardening_instead_of_mutating_source(self):
+        SessionRegistry(self.state_path)
+        os.chmod(self.state_path, 0o644)
+        before = self.state_path.read_bytes()
+        with self.assertRaisesRegex(RegistryError, "mode-0600"):
+            SessionRegistry.read_existing(self.state_path)
+        self.assertEqual(self.state_path.read_bytes(), before)
+        self.assertEqual(stat.S_IMODE(os.stat(self.state_path).st_mode), 0o644)
+
+    def test_publish_snapshot_failed_first_replace_leaves_no_empty_authority(self):
+        source = SessionRegistry(Path(self.cwd) / "source.json")
+        record = source.create("thread-one", self.cwd, "one", "model", "medium")
+        target = Path(self.cwd) / "global" / "registry.json"
+        with mock.patch("codex_worker.registry.os.replace", side_effect=OSError("crash")):
+            with self.assertRaisesRegex(OSError, "crash"):
+                SessionRegistry.publish_snapshot(target, [record])
+        self.assertFalse(target.exists())
+
     def test_v1_records_load_without_loss_and_upgrade_on_next_write(self):
         self.write_v1_record(name="legacy")
         registry = SessionRegistry(self.state_path)

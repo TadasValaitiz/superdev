@@ -16,6 +16,7 @@ from .commands import (DaemonStatusResponse, DaemonStopResponse, FacadeFault,
                        FacadeFaultCode, InstanceSource, InstanceView)
 from .models import RpcFault
 from .rpc import _socket_accepts_connections
+from .service_domain import ServicePaths, derive_service_paths
 
 
 def validate_instance_id(value: str) -> str:
