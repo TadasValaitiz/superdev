@@ -1,3 +1,41 @@
+# v8.0.0 — the freshness architecture + the brainstorming experience (BREAKING)
+
+D47–D71, two arcs in one release:
+
+**The corpus and the seam (breaking paths):**
+- Corpus root: `docs/system-design/`, FLAT — filenames carry milestone+type (D69); the
+  old `design/` root and nested folders are gone from all skill text. Grandfather clause:
+  existing corpora stay where they are.
+- Two surfaces (D60): reconciled (`docs/system-design/`, architect-only, grab-and-trust)
+  vs operational (`docs/orchestration/`, stamped, prunable). Single-writer spaces with a
+  one-command git-log audit (D49).
+- Residue: rooms REPORT, orchestrator comprehends into typed ledgers — the shared
+  residue.jsonl inbox is retired (D51). Plan-time deviation pointers relay room→orchestrator→
+  architect immediately; show must go on (D61).
+- Checkpoint = ONE handover doc + a response BLOCK in the milestone decisions file + the
+  named reconcile commit (D52/D58/D60). Milestone handoff split (D49); N−1 operational
+  sediment pruned at close (D62).
+- ONE mode law (HUMAN/AUTONOMOUS) at every ruling gate, reserved forks always human (D59).
+- Doc markers: three positional plain-word forms, DOC-MARK bracket retired for docs
+  (D53/D70); `system-design/scripts/marker-census.sh` ships with selftest fixtures.
+- Execution proposal: orchestrator-authored via two opposed seats under the five
+  celebration rules (D55/D68); room briefs carry the five-part ARCHITECTURE CONTEXT block
+  with verbatim LOCKED quotes (D57).
+
+**The brainstorming experience (D56/D65–D67/D71):**
+- Angle-first sessions: census artifact (MEASURED/READ/FLAGGED) → amendable agenda →
+  angle-by-angle with companions written AT ANGLE CLOSE → whole-design variants → the
+  in-session reconcile sweep (re-runs after every later edit).
+- Fork Presentation Standard: situation · mechanism-with-example · consequences ·
+  recommendation; sketch-variants; the pick recorded as an event with riders; re-ask in full.
+- item-angle-template rebuilt to the bench teaching form (mental model, journeys with
+  "this means…", cannot-do, mismatch+salvage, depth bar, authority lines); decision
+  entries gain Decided-by/rider, Not-X, extension law, anti-patterns, lineage, inline
+  sketch receipts.
+- Reviewers rebuilt as experience probes; plans answer to the FULL SET — angles govern
+  spec silence (D71).
+- Gated by four review layers including an independent Codex reviewer (GO).
+
 # Superdev Release Notes
 
 ## v7.10.0 (2026-08-28)

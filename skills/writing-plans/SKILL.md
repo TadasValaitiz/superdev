@@ -166,7 +166,7 @@ line, it doesn't belong in the plan.]
 before coding — specific anchors, not whole documents: "spec §5.2", "domain
 model N.3 delta ledger rows for OrderSpec", "CLI surface family 1 table", "angle-02 §Concrete journey + its cannot-do fence" —
 the governing ANGLE sections whenever an angle touches this task's area —
-and, when a `design/` corpus exists, the governing map rows and the vision
+and, when a `docs/system-design/` corpus exists, the governing map rows and the vision
 doc for any RESHAPE/REPLACE territory (ground on the vision, not the dying code).
 Subagents have Read — point them at the truth instead of paraphrasing it.]
 
