@@ -11,7 +11,7 @@ change forces re-arbitration, this file holds the deeper thinking the spec disti
 - **Capture at the moment of decision** — during brainstorming that means the entry is
   written when the fork is resolved in dialogue, not reconstructed afterward. Memory of
   reasoning decays within hours; the log is written while the reasoning is alive.
-- **Shared numbering with the spec:** the spec's §6 Decisions are the distilled subset of
+- **Shared numbering with the spec:** numbering STARTS here (the log predates the spec); the spec's §6 later adopts the same D#s. the spec's §6 Decisions are the distilled subset of
   this log, same D-numbers. The log may hold more (dead ends, reversed calls, small forks
   that never graduate to the spec); the spec never holds a D# the log lacks.
 - **Every phase appends:** brainstorm and spec-writing forks (phase: brainstorm/spec),
@@ -32,18 +32,24 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 ---
 
 ## D<n> — <short title>
-**When:** <ISO-8601 UTC> · **Phase:** brainstorm | spec | plan | build ·
-**Status:** locked | provisional | superseded-by D<m>
+**When:** <ISO-8601 UTC — the rule; the worked example below predates it and shows a local offset> ·
+**Phase:** brainstorm | spec | plan | build, plus an optional qualifier ("optimization brainstorm") ·
+**Status:** locked | provisional | superseded-by D<m>, plus an optional scope qualifier ("locked for MVP")
 **Decided by:** <who, AND the selection event: which variant they picked and any RIDER
 they attached — e.g. "operator (live, in-session; selected C with an explicit
 sampler-extensibility requirement)". A rider is the operator amending the offered menu;
-it enters the law with the same force as the variant itself.>
+it enters the law with the same force as the variant itself. Other honest forms:
+"author (solo — logged for operator overturn)" for triviality-rule self-decisions;
+"inherited from <source>" for rulings imported from an incident/postmortem — never
+fabricate an operator selection that did not happen.>
 
 - **Trigger:** the question, observation, or drift event that forced this fork — name
   the AMBIGUITY that made it a fork, not just the topic.
-- **Options weighed:**
+- **Options weighed:** (mandatory, ≥2 — a fork with one option is not a fork)
   - A: <option> — gains <…> / sacrifices <…>
   - B: <option> — gains <…> / sacrifices <…>
+  <Each option's SACRIFICES live here; the COMPARATIVE reasoning that picked the winner
+  lives in Decided. Never duplicate the rejection argument across both.>
 - **Decided:** <choice + rider> — <the reasoning, including evidence consulted (files
   read, probes run, measurements cited with their honesty tier)>.
 - **Not X:** <when the decided thing could be mistaken for a neighbouring concept, say
@@ -52,15 +58,17 @@ it enters the law with the same force as the variant itself.>
   addition of this kind must contribute. Omit for rulings with no descendant class.>
 - **Anti-patterns:** <the specific cheap escapes implementers would reach for, forbidden
   by name — e.g. "sampler fields do not live in dict[str, Any]". Omit if none.>
-- **Rests on:** <D#s this builds on · ASSUMPTION A# · evidence | requirement R#> —
-  provisional status is mandatory when resting on an unratified assumption.
+- **Rests on:** <D#s this builds on · ASSUMPTION A# · evidence with its honesty tier:
+  MEASURED (command output, quoted) · READ (source/doc, file:line) · ASSERTED (claimed,
+  unverified — an ASSERTED load-bearing fact forces provisional status) · requirement R#>.
+  Provisional status is mandatory when resting on an unratified assumption.
 - **Affects:** R#…, spec §5.x, <files/interfaces/future surfaces once known>.
 - **Revisit-when:** <concrete, falsifiable reopening trigger — a condition, never a date>.
 ```
 
 ---
 
-## Worked example (condensed from a real entry — the bar, made concrete)
+## Worked example (condensed from a real entry — the bar, made concrete; the CONDENSATION dropped its Options block for space — real entries always carry one)
 
 > ## D461 — MVP allocation search supports feasible grid and seeded feasible generation behind an additive typed seam
 > **When:** 2026-08-27T10:03:00+03:00 · **Phase:** optimization brainstorm · **Status:** locked for MVP architecture

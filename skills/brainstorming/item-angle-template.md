@@ -13,6 +13,8 @@ words, heavy journeys may need ~2,000+. The density law underneath is sections-p
 words, not totals — no section carries more than ~160 words of unbroken prose. **A companion
 that only cites D#s is an index wearing angle clothes; delete it and write the angle.**
 
+**Section order is fixed as shown.** Omissions: `Current mismatch` only if genuinely none; `What X cannot do` and `Visible collisions` only when honestly empty (say so is unnecessary — just omit); `The central question`, `The mental model`, `Concrete journey`, and `Reconciled outcome` are never omitted. **Word-budget scope:** the ~600/~2,000 totals count the whole file; the ~160-word density law counts unbroken PROSE only — tables, sketches, and fences are exempt.
+
 **When it is written:** at the angle's CLOSE, while the collision detail is hot — never
 batched to the session's end. An angle that carried no real collisions closes into a
 paragraph of the session record instead; that is success, not omission.
@@ -23,15 +25,16 @@ anchors are acceptable for same-directory companions, file:line for anything far
 ```markdown
 # Angle N — <one-phrase name>
 
-**Purpose:** <one reader-oriented sentence: understand X without reading Y.>
-**Formal anchors:** [decision log](./<file>.md) D#… · <governing design §…> ·
-**Series:** N of M.
+**Purpose:** <one reader-oriented sentence: understand X without reading Y — Y is the decision log unless another document is the real dependency.>
+**Formal anchors:** [decision log](./<file>.md) D#… · <governing design §…> — the GOVERNING D#s only, not every D# touched.
+**Series:** N of M — at close-time M is often unknown: write `N of ? (open)` and retro-fill at the session's reconcile sweep. A solo angle is `1 of 1 (solo)`.
 
 > **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it (named below) · MISMATCH current code/text behaves
 > differently today · SEED-ILLUSTRATIVE worked example only, never a measurement.
-> <Gloss every status the body actually uses — a guide listing four while the body uses
-> six is the sharpest self-inconsistency a reviewer will find.>
+> <TRIM this shipped line to exactly the statuses the body uses, each glossed — a guide
+> listing statuses the body never uses, or missing ones it does, is the sharpest
+> self-inconsistency a reviewer will find. The five above are the menu, not the answer.>
 
 ## The central question
 <one sentence, self-contained — no term a stranger hasn't met yet.>
@@ -44,13 +47,13 @@ demolished in a line. Every misreading met at the door.>
 
 ## Boundaries
 <Where this journey starts, where it stops, which neighbouring concern owns what's outside
-— and which OTHER ANGLE owns each excluded piece, by number.>
+— and which OTHER ANGLE owns each excluded piece, by number. With no sibling angles, name the excluded concern and its owning session/design instead; an exclusion NOBODY owns is stated as unowned — and an unowned exclusion is itself a finding worth surfacing.>
 
 ## Concrete journey
 <The heart. Walk one entity/scenario end to end. One `###` subsection per load-bearing
 ruling:>
 
-### LOCKED — <the claim, as a sentence>
+### LOCKED — <the claim, as a sentence>   <!-- FLEXIBLE/MISMATCH claims that are load-bearing to the walk get ### headings too: '### MISMATCH — …'; the status word leads either way -->
 <The ruling explained in prose, with its shape shown where shape exists — a small frozen
 model, a formula, a file tree, a message flow, labeled with its epistemic weight
 ("FLEXIBLE sketch around locked laws"). Then ALWAYS the consequence: "This means…" —
@@ -62,7 +65,7 @@ the cheapest fix a reviewer will demand.>
 ownership, comparisons, and repeated mappings. Label invented figures SEED-ILLUSTRATIVE;
 cite measured ones with their source.>
 
-## What <the subject> cannot do
+## What <the subject — the component/mechanism the journey walked> cannot do
 <Capability fences as first-class content — the reader asking "can I…?" finds the no
 before building the yes. Include what the design does NOT guarantee.>
 
@@ -82,8 +85,8 @@ bare "later" is a finding. "DEFERRED: none" requires checking the governing D#s'
 revisit-when clauses first; they are usually live.>
 
 ## Reconciled outcome
-<What is LOCKED / FLEXIBLE / DEFERRED after this angle, in one short paragraph, closing
-with the angle's whole content in one sentence.>
+<The LOCKED / FLEXIBLE / DEFERRED tally, then the angle's whole content in one closing
+sentence — two short paragraphs are fine; the density law still applies.>
 ```
 
 ---
