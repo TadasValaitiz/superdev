@@ -154,7 +154,8 @@ codex-worker --socket "$SOCKET" session list >"$RUN_DIR/raw-session-list.json"
 
 python3 "$ROOT/tests/codex-worker/live_claude_evidence.py" \
   --transcript "$RUN_DIR/claude.stream.jsonl" --cwd "$REPO" \
-  --cli codex-worker --output "$RUN_DIR/validated-common-evidence.json"
+  --cli codex-worker --output "$RUN_DIR/validated-common-evidence.json" \
+  --literal-output "$RUN_DIR/sanitized-literal-commands.jsonl"
 python3 - "$RUN_DIR" "$ROOT" <<'PY'
 import json, sys
 from pathlib import Path

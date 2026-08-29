@@ -2,6 +2,7 @@
 """Validate that Claude drove only the PATH common codex-worker surface."""
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -58,6 +59,49 @@ REQUIRED_COMMAND_PATTERNS = (
     r"\bturn interrupt\b",
 )
 
+SECRET_PATTERN = re.compile(
+    r"(?i)(?:bearer\s+[a-z0-9._-]+|(?:api[_-]?key|access[_-]?token|oauth[_-]?token)\s*[:=]\s*[^\s,}]+)"
+)
+
+
+def literal_command_records(transcript: Path) -> List[Json]:
+    commands = {}  # type: Dict[str, str]
+    records = []  # type: List[Json]
+    for line in transcript.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        document = json.loads(line)
+        for value in _walk(document):
+            if value.get("type") == "tool_use" and value.get("name") == "Bash":
+                tool_id = str(value.get("id", ""))
+                command = value.get("input", {}).get("command")
+                assert tool_id and isinstance(command, str) and tool_id not in commands, value
+                commands[tool_id] = command
+            elif value.get("type") == "tool_result":
+                tool_id = str(value.get("tool_use_id", ""))
+                if tool_id in commands:
+                    records.append({
+                        "sequence": len(records) + 1,
+                        "command": commands.pop(tool_id),
+                        "output": _json_content(value.get("content")),
+                    })
+    assert not commands, {"unmatched_attempts": list(commands.values())}
+    assert len(records) == 26, {"completed_commands": len(records)}
+    encoded = json.dumps(records, sort_keys=True)
+    assert not SECRET_PATTERN.search(encoded), "literal command evidence contains a secret-like value"
+    return records
+
+
+def write_literal_records(transcript: Path, output: Path) -> Json:
+    records = literal_command_records(transcript)
+    rendered = "".join(json.dumps(record, sort_keys=True) + "\n" for record in records)
+    output.write_text(rendered, encoding="utf-8")
+    return {
+        "path": str(output),
+        "line_count": len(records),
+        "sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+    }
+
 
 def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     tool_commands = {}  # type: Dict[str, str]
@@ -97,6 +141,8 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
                     tool_results[tool_id] = _json_content(value.get("content"))
 
     assert all_commands, all_commands
+    assert len(all_commands) == 26, {"command_attempt_count": len(all_commands)}
+    assert len(tool_commands) == len(all_commands), "duplicate or empty Bash tool IDs"
     direct_codex = re.compile(r"(?:^|[;&|]\s*|\s)codex(?:\s|$)")
     assert not any(direct_codex.search(command) for command in all_commands), all_commands
     assert not any("mcp__" in command.lower() for command in all_commands), all_commands
@@ -164,6 +210,12 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
         "raw_codex_worker_invocation": False,
         "callback_event_ids": callback_ids,
         "coverage": coverage,
+        "command_attempt_count": len(all_commands),
+        "completed_command_count": len(broker_commands),
+        "unmatched_attempt_count": 0,
+        "codex_failure_count": sum(
+            1 for result in tool_results.values()
+            if result.get("error", {}).get("data", {}).get("kind") == "codex_failure"),
     }
 
 
@@ -173,8 +225,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--cwd", type=Path, required=True)
     parser.add_argument("--cli", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--literal-output", type=Path)
     args = parser.parse_args(argv)
     result = validate(args.transcript, args.cwd, args.cli)
+    if args.literal_output is not None:
+        result["literal_output"] = write_literal_records(args.transcript, args.literal_output)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, sort_keys=True))
     return 0

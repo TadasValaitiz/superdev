@@ -37,6 +37,13 @@
     "turn_steer": 1,
     "turn_wait": 3
   },
+  "command_accounting": {
+    "attempted": 26,
+    "codex_failure_count": 0,
+    "completed": 26,
+    "not_run": 0,
+    "unmatched_attempts": 0
+  },
   "constraints": {
     "direct_codex_invocation": false,
     "instance_selector": false,
@@ -56,6 +63,12 @@
     "line_count": 178,
     "path": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/claude.stream.jsonl",
     "sha256": "d46a3d6fccb7d2330b29b35daaf9f5d5e657f4689a7399121d6f272f9fc2df79"
+  },
+  "tracked_literal_transcript": {
+    "line_count": 26,
+    "path": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-commands.jsonl",
+    "sanitization": "Secret-pattern scan only; command argv and JSON outputs otherwise preserved literally",
+    "sha256": "a68a4be8abfccb61e064dc5ac61dd14da603150cec2fb735265ac7569a071288"
   },
   "scenario": "real-claude-path-caller",
   "session_id": "0d3a2187-8c24-45b0-a92f-9576e0aa82b9",

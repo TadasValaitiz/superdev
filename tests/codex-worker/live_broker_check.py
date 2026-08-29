@@ -120,6 +120,7 @@ class Recorder:
         self.transcript_path = self.run_dir / "transcript.jsonl"
         self.sequence = 0
         self._lock = threading.Lock()
+        self._started_attempts = {}  # type: Dict[int, str]
 
     def record(self, kind: str, payload: Json) -> None:
         with self._lock:
@@ -135,14 +136,18 @@ class Recorder:
 
     def record_completed(self, completed: subprocess.CompletedProcess, *, cwd: Path,
                          env: Dict[str, str], elapsed_seconds: float,
-                         substrate: str) -> None:
-        self.record("command", {
+                         substrate: str, attempt_id: Optional[str] = None) -> None:
+        payload = {
             "argv": list(completed.args), "cwd": str(cwd),
             "environment_allowlist": sorted(set(env) & ENVIRONMENT_ALLOWLIST),
             "stdout": completed.stdout, "stderr": completed.stderr,
             "returncode": completed.returncode, "exit": completed.returncode,
             "elapsed_seconds": elapsed_seconds, "substrate": substrate,
-        })
+        }  # type: Json
+        if attempt_id is not None:
+            payload["attempt_id"] = attempt_id
+            payload["terminal_for_started_attempt"] = True
+        self.record("command", payload)
 
     def run(self, argv: Sequence[str], *, cwd: Path, env: Dict[str, str],
             timeout: float, substrate: str) -> subprocess.CompletedProcess:
@@ -161,8 +166,11 @@ class Recorder:
         process = subprocess.Popen(
             list(argv), cwd=str(cwd), env=env, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True)
+        attempt_id = "%s-%d" % (self.scenario, self.sequence + 1)
+        self._started_attempts[process.pid] = attempt_id
         self.record("command_start", {
             "argv": list(argv), "cwd": str(cwd), "pid": process.pid,
+            "attempt_id": attempt_id,
             "environment_allowlist": sorted(set(env) & ENVIRONMENT_ALLOWLIST),
             "substrate": substrate,
         })
@@ -173,10 +181,35 @@ class Recorder:
                 substrate: str) -> subprocess.CompletedProcess:
         stdout, stderr = process.communicate(timeout=timeout)
         completed = subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
+        attempt_id = self._started_attempts.pop(process.pid, None)
+        assert attempt_id is not None, "collect must match one recorded command_start"
         self.record_completed(
             completed, cwd=cwd, env=env, elapsed_seconds=time.monotonic() - started,
-            substrate=substrate)
+            substrate=substrate, attempt_id=attempt_id)
         return completed
+
+
+def command_accounting(rows: List[Json]) -> Json:
+    starts = {row["attempt_id"] for row in rows if row.get("kind") == "command_start"}
+    terminals = {row["attempt_id"] for row in rows
+                 if row.get("kind") == "command" and row.get("attempt_id") is not None}
+    unmatched = sorted(starts - terminals)
+    commands = [row for row in rows if row.get("kind") == "command"]
+    codex_failures = 0
+    for row in commands:
+        try:
+            payload = json.loads(row.get("stdout", ""))
+        except (TypeError, ValueError):
+            continue
+        if payload.get("error", {}).get("data", {}).get("kind") == "codex_failure":
+            codex_failures += 1
+    return {
+        "attempted": len(commands) + len(unmatched),
+        "completed": len(commands),
+        "unmatched_attempts": unmatched,
+        "not_run": len(unmatched),
+        "codex_failure_count": codex_failures,
+    }
 
 
 def parse_cli(completed: subprocess.CompletedProcess, check: bool = True) -> Json:
@@ -228,6 +261,8 @@ def finish_scenario(recorder: Recorder, result: Json, cleanup_outcome: Json) -> 
     rows = [json.loads(line) for line in recorder.transcript_path.read_text(
         encoding="utf-8").splitlines() if line]
     sanitized = [sanitize_record(row) for row in rows]
+    accounting = command_accounting(sanitized)
+    assert accounting["unmatched_attempts"] == [], accounting
     transcript = tracked / "transcript.jsonl"
     transcript.write_text("".join(json.dumps(row, sort_keys=True, allow_nan=False) + "\n"
                                   for row in sanitized), encoding="utf-8")
@@ -238,6 +273,7 @@ def finish_scenario(recorder: Recorder, result: Json, cleanup_outcome: Json) -> 
         "raw_run_dir": str(recorder.run_dir.relative_to(ROOT)),
         "tracked_transcript": str(transcript.relative_to(ROOT)),
         "record_count": record_count,
+        "command_accounting": accounting,
         "result": sanitize_record(result),
         "durable_hashes": durable_hashes(recorder.run_dir),
         "cleanup": cleanup_outcome,

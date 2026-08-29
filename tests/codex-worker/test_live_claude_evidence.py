@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
@@ -44,6 +45,11 @@ class ClaudeEvidenceTests(unittest.TestCase):
             "turn_interrupt",
         })
         self.assertTrue(all(receipt["command_coverage"].values()))
+        self.assertEqual(receipt["command_accounting"], {
+            "attempted": 26, "completed": 26, "unmatched_attempts": 0,
+            "not_run": 0, "codex_failure_count": 0,
+        })
+        self.assertEqual(receipt["tracked_literal_transcript"]["line_count"], 26)
         self.assertEqual(receipt["cleanup"], {
             "claude_config_copied": False, "processes_remaining": 0,
             "runtime_deleted": True, "service_status": "stopped",
@@ -88,6 +94,10 @@ class ClaudeEvidenceTests(unittest.TestCase):
                 "codex-worker turn events --session session-2",
                 "codex-worker turn steer --session session-2 --prompt steer",
                 "codex-worker turn interrupt --session session-2",
+                "codex-worker turn start --session session-2 --prompt second",
+                "codex-worker turn wait --session session-2 --timeout 60",
+                "codex-worker turn start --session session-1 --prompt third",
+                "codex-worker turn wait --session session-1 --timeout 60",
             ]
             status = {"worker": worker, "daemon_status": "ready", "attached": True,
                       "active_turn_id": None, "latest_turn": completion["turn"],
@@ -115,6 +125,10 @@ class ClaudeEvidenceTests(unittest.TestCase):
             receipt = EVIDENCE.validate(transcript, cwd, "codex-worker")
             self.assertEqual(set(receipt["coverage"]), set(EVIDENCE.REQUIRED_COMMAND_PATTERNS))
             self.assertEqual(receipt["attach"]["thread_id"], "thread-1")
+            self.assertEqual(receipt["command_attempt_count"], 26)
+            self.assertEqual(receipt["completed_command_count"], 26)
+            self.assertEqual(receipt["unmatched_attempt_count"], 0)
+            self.assertEqual(receipt["codex_failure_count"], 0)
 
             for forbidden in ("codex app-server", "codex-worker --instance x status --name a",
                               "codex-worker --socket /tmp/s turn status --session x",
@@ -123,6 +137,22 @@ class ClaudeEvidenceTests(unittest.TestCase):
                 transcript.write_text("\n".join(map(json.dumps, changed)) + "\n")
                 with self.assertRaises(AssertionError):
                     EVIDENCE.validate(transcript, cwd, "codex-worker")
+
+    def test_tracked_literal_real_claude_outputs_are_reconstructable(self):
+        root = Path(__file__).parents[2]
+        evidence_root = (root / "docs" / "superdev" / "checkrides" /
+                         "2026-08-28-codex-worker-shared-app-server-evidence")
+        literal = evidence_root / "real-claude-commands.jsonl"
+        rows = [json.loads(line) for line in literal.read_text(encoding="utf-8").splitlines()]
+        receipt = json.loads((evidence_root / "real-claude-caller-summary.json").read_text(
+            encoding="utf-8"))["tracked_literal_transcript"]
+        self.assertEqual(hashlib.sha256(literal.read_bytes()).hexdigest(), receipt["sha256"])
+        self.assertEqual([row["sequence"] for row in rows], list(range(1, 27)))
+        self.assertTrue(all(set(row) == {"sequence", "command", "output"} for row in rows))
+        self.assertTrue(all(row["command"].startswith("codex-worker ") for row in rows))
+        self.assertTrue(all(set(row["output"]) == {"jsonrpc", "id", "result"}
+                            for row in rows))
+        self.assertFalse(EVIDENCE.SECRET_PATTERN.search(json.dumps(rows, sort_keys=True)))
 
 
 if __name__ == "__main__": unittest.main()

@@ -93,6 +93,19 @@ class LiveHarnessContractTests(unittest.TestCase):
             self.assertEqual(row["substrate"], "MEASURED real subprocess")
             self.assertEqual(row["elapsed_seconds"], 0.25)
 
+    def test_async_attempt_accounting_never_hides_an_unmatched_start(self):
+        rows = [
+            {"kind": "command", "stdout": '{"error":{"data":{"kind":"codex_failure"}}}'},
+            {"kind": "command_start", "attempt_id": "a"},
+        ]
+        accounting = LIVE.command_accounting(rows)
+        self.assertEqual(accounting, {
+            "attempted": 2, "completed": 1, "unmatched_attempts": ["a"],
+            "not_run": 1, "codex_failure_count": 1,
+        })
+        rows.append({"kind": "command", "attempt_id": "a", "stdout": "{}"})
+        self.assertEqual(LIVE.command_accounting(rows)["unmatched_attempts"], [])
+
     def test_every_run_has_owner_token_and_exact_cleanup_verification(self):
         source = SCRIPT.read_text(encoding="utf-8") + UV_SCRIPT.read_text(encoding="utf-8")
         for fragment in (
