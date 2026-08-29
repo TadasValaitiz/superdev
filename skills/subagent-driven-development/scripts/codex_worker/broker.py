@@ -31,6 +31,7 @@ from .runtime import (
     WaitTimeout,
 )
 from .service_domain import DEFAULT_PUBLIC_LISTENER, AttachView, validate_public_listener
+from .service import OwnedTeardownError
 from .websocket_gateway import DrainLease, ServiceMaintenanceGate
 
 
@@ -77,6 +78,9 @@ class MaintenanceLifecycle(Protocol):
         ...
 
     def terminate_owned(self, lease: DrainLease) -> None:
+        ...
+
+    def stopping(self) -> bool:
         ...
 
 
@@ -977,6 +981,12 @@ class WorkerBroker:
                 else self._with_record_identity(fault, record, turn_id))
 
 
+class MaintenanceTerminationError(RuntimeError):
+    def __init__(self, cause: str):
+        self.cause = cause
+        super().__init__("owned service teardown is incomplete")
+
+
 class MaintenanceCoordinator:
     """The only composition path from a drained gate to owned termination."""
 
@@ -990,6 +1000,8 @@ class MaintenanceCoordinator:
             raise ValueError("broker and lifecycle must share the exact maintenance gate")
         if not callable(getattr(lifecycle, "terminate_owned", None)):
             raise TypeError("lifecycle must terminate owned resources")
+        if not callable(getattr(lifecycle, "stopping", None)):
+            raise TypeError("lifecycle must report intentional stopping state")
         self._broker = broker
         self._lifecycle = lifecycle
         self._gate = gate
@@ -1006,6 +1018,14 @@ class MaintenanceCoordinator:
         if type(force) is not bool:
             raise ValueError("force must be bool")
         with self._gate.drain() as lease:
+            if self._lifecycle.stopping():
+                from .models import WorkerImpact
+                names = sorted(record.name for record in self._broker.registry.list()
+                               if record.name is not None)
+                self._terminate_owned(lease)
+                return MaintenanceResult.completed(
+                    action, ActiveInventory(), force, listener,
+                    WorkerImpact([], names))
             inventory = self._broker.list_active_threads()
             from .models import WorkerImpact
             records = self._broker.registry.list()
@@ -1016,6 +1036,12 @@ class MaintenanceCoordinator:
             if inventory.items and not force:
                 return MaintenanceResult.refused(
                     inventory, action, listener, workers)
-            self._lifecycle.terminate_owned(lease)
+            self._terminate_owned(lease)
             return MaintenanceResult.completed(
                 action, inventory, force, listener, workers)
+
+    def _terminate_owned(self, lease: DrainLease) -> None:
+        try:
+            self._lifecycle.terminate_owned(lease)
+        except OwnedTeardownError as exc:
+            raise MaintenanceTerminationError(exc.cause) from exc

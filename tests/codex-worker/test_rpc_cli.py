@@ -779,6 +779,7 @@ class RpcServerTests(unittest.TestCase):
 
     def test_force_stop_during_stopping_returns_completed_and_shuts_rpc_server(self):
         from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.models import ActiveInventory, MaintenanceResult, WorkerImpact
         from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
                                           ListenerExposure)
         from codex_worker.service_domain import ServiceConfig
@@ -794,13 +795,15 @@ class RpcServerTests(unittest.TestCase):
             def daemon_status(self):
                 return {"worker_names": ["known-idle"]}
 
-        class ClosedMaintenance:
+        class StoppingMaintenance:
             def stop(self, force):
-                raise AssertionError("stopping convergence must not query inventory")
+                return MaintenanceResult.completed(
+                    "stop", ActiveInventory(), force,
+                    workers=WorkerImpact([], ["known-idle"]))
 
         broker = Broker()
         facade = ServiceFacade(ServiceFacadeDeps(
-            Service(), broker, ClosedMaintenance(), object(),
+            Service(), broker, StoppingMaintenance(), object(),
             ServiceConfig("ws://127.0.0.1:4500", "8.0.0",
                           "00000000-0000-0000-0000-000000000004")))
         server = self.start_server(broker=broker, service_facade=facade)

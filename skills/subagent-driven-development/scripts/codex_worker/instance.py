@@ -1015,16 +1015,25 @@ class ServiceManager:
         while True:
             endpoint_exists = (self.deps.paths.rpc_socket.exists()
                                or self.deps.paths.rpc_socket.is_symlink())
-            live = any(self.deps.pid_alive(pid)
-                       for pid in (before.pid, before.app_server_pid))
-            if self._probe_readiness() is None and not endpoint_exists and not live:
+            live_pids = [pid for pid in (before.pid, before.app_server_pid)
+                         if pid is not None and self.deps.pid_alive(pid)]
+            if (self._probe_readiness() is None
+                    and not endpoint_exists and not live_pids):
                 return
             if self.deps.monotonic() >= deadline:
                 raise FacadeFault(
                     FacadeFaultCode.DAEMON_STOP_FAILED,
                     "Global service did not stop after guarded maintenance",
                     "daemon_stop_failed", retryable=True,
-                    details={"reason": "stop_timeout", "durable_state": "preserved"})
+                    details={"reason": "stop_timeout", "durable_state": "preserved",
+                             "rpc_endpoint_present": endpoint_exists,
+                             "live_pids": live_pids},
+                    next_actions=[
+                        {"command": "codex-worker daemon status",
+                         "reason": "Inspect the exact residual global service state"},
+                        {"command": "codex-worker daemon stop",
+                         "reason": "Retry the idempotent guarded stop"},
+                    ])
             self.deps.wait(0.01)
 
     def _parse_maintenance(self, value: dict, action: str) -> MaintenanceResult:

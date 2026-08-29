@@ -1415,9 +1415,11 @@ class GlobalServiceFacadeTests(unittest.TestCase):
             facade.readiness(StatusServiceRequest())
         self.assertEqual(broker_error.exception.kind, "broker_error")
 
-    def test_force_stop_while_service_is_stopping_skips_closed_transport_inventory(self):
+    def test_degraded_nonstopping_service_still_refuses_active_nonforce_stop(self):
         from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
         from codex_worker.commands import StopServiceRequest
+        from codex_worker.models import (ActiveInventory, ActiveThreadItem,
+                                         MaintenanceResult)
         from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
                                           ListenerExposure)
         from codex_worker.service_domain import ServiceConfig
@@ -1429,29 +1431,54 @@ class GlobalServiceFacadeTests(unittest.TestCase):
                     "/tmp/private.sock", ListenerExposure.LOOPBACK,
                     GatewayAuthentication.NONE)
 
+        active = ActiveInventory([ActiveThreadItem(
+            "active-thread", "unmapped_tui", None, None, "active-turn", ("active",))])
         class Broker:
             def daemon_status(self):
-                return {"worker_names": ["known-idle"]}
-
-        class ClosedMaintenance:
+                return {"worker_names": []}
+        class ActiveMaintenance:
             def stop(self, force):
-                raise AssertionError("stopping convergence must not query closed transport")
+                return MaintenanceResult.refused(active)
 
         facade = ServiceFacade(ServiceFacadeDeps(
-            Service(), Broker(), ClosedMaintenance(), object(),
+            Service(), Broker(), ActiveMaintenance(), object(),
             ServiceConfig("ws://127.0.0.1:4500", "8.1.0",
                           "00000000-0000-0000-0000-000000000003")))
 
-        result = facade.stop(StopServiceRequest(True))
+        result = facade.stop(StopServiceRequest(False))
 
-        self.assertIsInstance(result, Ok)
-        self.assertEqual(result.value.to_dict(), {
-            "action": "stop", "status": "completed", "forced": True,
-            "listener": None, "inventory": {"items": []},
-            "workers": {"active_names": [], "idle_names": ["known-idle"],
-                        "active_count": 0, "idle_count": 1, "total_count": 1},
+        self.assertIsInstance(result, Err)
+        self.assertEqual((result.error.code, result.error.kind),
+                         (FacadeFaultCode.SERVICE_BUSY, "service_busy"))
+        self.assertEqual(result.error.details["active"][0]["thread_id"],
+                         "active-thread")
+
+    def test_incomplete_owned_teardown_is_typed_and_has_safe_retry_actions(self):
+        from codex_worker.broker import MaintenanceTerminationError
+        from codex_worker.commands import StopServiceRequest
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+
+        class Maintenance:
+            def stop(self, force):
+                raise MaintenanceTerminationError("OSError")
+
+        facade = ServiceFacade(ServiceFacadeDeps(
+            object(), object(), Maintenance(), object(), object()))
+        result = facade.stop(StopServiceRequest(False))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual((result.error.code, result.error.kind, result.error.retryable),
+                         (FacadeFaultCode.DAEMON_STOP_FAILED,
+                          "daemon_stop_failed", True))
+        self.assertEqual(result.error.details, {
+            "reason": "owned_teardown_incomplete", "cause": "OSError",
             "durable_state": "preserved",
         })
+        self.assertEqual([action["command"] for action in result.error.next_actions], [
+            "codex-worker daemon status", "codex-worker daemon stop",
+        ])
+        worker_cli._validate_wire_recovery_actions({
+            "error": {"data": result.error.to_dict()}})
 
 if __name__ == "__main__":
     unittest.main()

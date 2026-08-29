@@ -320,6 +320,7 @@ class WorkerBrokerTests(unittest.TestCase):
             def terminate_owned(self, lease):
                 self.gate.authorize(lease)
                 self.terminated += 1
+            def stopping(self): return False
 
         lifecycle = Lifecycle(self.gate)
         coordinator = MaintenanceCoordinator(self.broker, lifecycle)
@@ -353,6 +354,7 @@ class WorkerBrokerTests(unittest.TestCase):
             def terminate_owned(self, lease):
                 self.gate.authorize(lease)
                 self.terminated += 1
+            def stopping(self): return False
 
         lifecycle = Lifecycle(self.gate)
         coordinator = MaintenanceCoordinator(self.broker, lifecycle)
@@ -368,11 +370,66 @@ class WorkerBrokerTests(unittest.TestCase):
         class Lifecycle:
             def __init__(self, gate): self.gate, self.terminated = gate, 0
             def terminate_owned(self, lease): self.terminated += 1
+            def stopping(self): return False
 
         lifecycle = Lifecycle(self.gate)
         with self.assertRaises(RpcFault):
             MaintenanceCoordinator(self.broker, lifecycle).stop(force=True)
         self.assertEqual(lifecycle.terminated, 0)
+
+    def test_owned_teardown_error_is_a_typed_maintenance_failure(self):
+        from codex_worker.broker import MaintenanceTerminationError
+        from codex_worker.service import OwnedTeardownError
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate = gate
+            def stopping(self): return False
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                raise OwnedTeardownError("OSError")
+
+        with self.assertRaises(MaintenanceTerminationError) as caught:
+            MaintenanceCoordinator(self.broker, Lifecycle(self.gate)).stop(force=True)
+        self.assertEqual(caught.exception.cause, "OSError")
+
+    def test_stop_queued_behind_force_converges_without_closed_transport_inventory(self):
+        self.registry.create_worker(
+            "idle-thread", self.cwd, "known-idle", "medium",
+            "fake-model-a", "medium", "full")
+        entered = threading.Event()
+        release = threading.Event()
+
+        class Lifecycle:
+            def __init__(self, gate):
+                self.gate = gate
+                self.is_stopping = False
+            def stopping(self):
+                return self.is_stopping
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.is_stopping = True
+                entered.set()
+                release.wait(timeout=1.0)
+
+        lifecycle = Lifecycle(self.gate)
+        coordinator = MaintenanceCoordinator(self.broker, lifecycle)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            forced = pool.submit(coordinator.stop, True)
+            self.assertTrue(entered.wait(timeout=1.0))
+            self.codex.thread_pages = {None: CodexCallError(
+                "transport_error", "thread/list", {"message": "connection closed"})}
+            queued = pool.submit(coordinator.stop, False)
+            release.set()
+            first = forced.result(timeout=1.0)
+            second = queued.result(timeout=1.0)
+
+        self.assertEqual((first.status, first.forced), ("completed", True))
+        self.assertEqual((second.status, second.forced), ("completed", False))
+        self.assertEqual(second.inventory.to_dict(), {"items": []})
+        self.assertEqual(second.workers.to_dict(), {
+            "active_names": [], "idle_names": ["known-idle"],
+            "active_count": 0, "idle_count": 1, "total_count": 1,
+        })
 
     def test_typed_specs_use_provider_accurate_access_seams(self):
         from codex_worker.broker import SessionStartSpec, TurnStartSpec

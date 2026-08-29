@@ -20,6 +20,7 @@ from codex_worker.service import (
     GlobalWorkerServiceDeps,
     GlobalWorkerServiceStatus,
     ListenerExposure,
+    OwnedTeardownError,
     _ensure_owner_directory,
     _spawn_codex,
 )
@@ -249,6 +250,45 @@ class GlobalWorkerServiceTests(unittest.TestCase):
                          [(pid, signal.SIGTERM), (pid, signal.SIGKILL)])
         self.assertTrue(reaped["value"])
 
+    def test_transient_post_kill_poll_error_does_not_abandon_owned_group(self):
+        harness = ServiceHarness()
+        state = {"killed": False, "poll_failed": False, "reaped": False}
+
+        class Process:
+            pid = 9481
+            def poll(self):
+                if state["killed"] and not state["poll_failed"]:
+                    state["poll_failed"] = True
+                    raise ChildProcessError("transient waitpid race")
+                if state["killed"]:
+                    state["reaped"] = True
+                    return -signal.SIGKILL
+                return None
+            def wait(self, timeout=None):
+                if not state["killed"]:
+                    raise subprocess.TimeoutExpired("codex", timeout)
+                state["reaped"] = True
+                return -signal.SIGKILL
+
+        process = Process()
+        base = harness.deps()
+        service = GlobalWorkerService(
+            self.paths, self.config, lambda unused: None, None,
+            GlobalWorkerServiceDeps(
+                base.spawn_codex, base.create_connection, base.create_gateway,
+                lambda pid: pid, lambda: 42,
+                lambda pgid, signum: (
+                    harness.group_signals.append((pgid, signum)),
+                    state.__setitem__("killed", True) if signum == signal.SIGKILL else None),
+                lambda unused_pgid: not state["reaped"]),
+            codex_argv=("/opt/bin/codex",))
+
+        service._terminate_owned_process_group(process, process.pid)
+
+        self.assertEqual(harness.group_signals, [
+            (process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)])
+        self.assertTrue(state["reaped"])
+
     def test_reused_or_unverified_group_is_never_signalled(self):
         harness = ServiceHarness(); group = {"offset": 0}
         base = harness.deps()
@@ -259,8 +299,9 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         service = self.make_service(harness); service.start(); group["offset"] = 1
         lifecycle = service._lifecycle_for_composition()
         with lifecycle.gate.drain() as lease:
-            with self.assertRaises(PermissionError):
+            with self.assertRaises(OwnedTeardownError) as caught:
                 lifecycle.terminate_owned(lease)
+        self.assertEqual(caught.exception.cause, "PermissionError")
         self.assertEqual(harness.group_signals, [])
         harness.processes[0].terminate()
 
@@ -473,8 +514,9 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         service.start()
         lifecycle = service._lifecycle_for_composition()
         with lifecycle.gate.drain() as lease:
-            with self.assertRaises(OSError):
+            with self.assertRaises(OwnedTeardownError) as caught:
                 lifecycle.terminate_owned(lease)
+        self.assertEqual(caught.exception.cause, "OSError")
         self.assertFalse(service.status().ready)
         self.assertTrue(harness.gateways[0].closed)
         self.assertTrue(harness.connections[0][3].closed)
@@ -494,8 +536,10 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.addCleanup(replacement.close)
         lifecycle = service._lifecycle_for_composition()
         with lifecycle.gate.drain() as lease:
-            with self.assertRaisesRegex(PermissionError, "changed after readiness"):
+            with self.assertRaises(OwnedTeardownError) as caught:
                 lifecycle.terminate_owned(lease)
+        self.assertEqual(caught.exception.cause, "PermissionError")
+        self.assertIn("changed after readiness", str(caught.exception.__cause__))
         self.assertTrue(service.paths.private_codex_socket.exists())
 
     def test_load_bearing_service_seams_and_frozen_status_are_exact(self):

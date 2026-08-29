@@ -6,7 +6,8 @@ import shlex
 import uuid
 from typing import Callable, Optional, Protocol, runtime_checkable
 
-from .broker import (AnnotationPolicy, ModelSelectionError, NativeCodexProxy,
+from .broker import (AnnotationPolicy, MaintenanceTerminationError,
+                     ModelSelectionError, NativeCodexProxy,
                      SessionStartSpec, TurnStartSpec)
 from .app_server import CodexCallError
 from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatusView,
@@ -769,12 +770,6 @@ class ServiceFacade:
 
     def stop(self, request: StopServiceRequest):
         try:
-            if not self.deps.service.status().ready:
-                daemon = self.deps.broker.daemon_status()
-                workers = WorkerImpact(
-                    [], sorted(daemon.get("worker_names", [])))
-                return Ok(MaintenanceResult.completed(
-                    "stop", ActiveInventory(), request.force, workers=workers))
             return self._maintenance_result(
                 self.deps.maintenance.stop(request.force))
         except BaseException as exc:
@@ -838,6 +833,19 @@ class ServiceFacade:
                 "Legacy worker name has multiple preserved threads",
                 "legacy_name_conflict", details={"candidates": exc.candidates},
                 next_actions=exc.next_actions)
+        if isinstance(exc, MaintenanceTerminationError):
+            return FacadeFault(
+                FacadeFaultCode.DAEMON_STOP_FAILED,
+                "Global service teardown is incomplete", "daemon_stop_failed",
+                retryable=True,
+                details={"reason": "owned_teardown_incomplete",
+                         "cause": exc.cause, "durable_state": "preserved"},
+                next_actions=[
+                    {"command": "codex-worker daemon status",
+                     "reason": "Inspect the exact global service state"},
+                    {"command": "codex-worker daemon stop",
+                     "reason": "Retry the idempotent guarded stop"},
+                ])
         if isinstance(exc, RpcFault):
             if exc.kind in ("internal_error", "broker_error"):
                 raise exc

@@ -743,6 +743,32 @@ class GlobalServiceManagerTests(unittest.TestCase):
             self.manager.deps, rpc_call=rpc, pid_alive=lambda unused_pid: False))
         manager._await_stopped(before)
 
+    def test_shutdown_timeout_reports_exact_residual_basis_and_safe_retry_actions(self):
+        from codex_worker import cli as worker_cli
+
+        before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
+        self.paths.rpc_socket.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.rpc_socket.touch()
+        ticks = iter((0.0, 3.0))
+        manager = ServiceManager(replace(
+            self.manager.deps,
+            rpc_call=lambda *unused: (_ for _ in ()).throw(OSError("stopping")),
+            monotonic=lambda: next(ticks), wait=lambda unused: None,
+            pid_alive=lambda pid: pid == 1234))
+
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager._await_stopped(before)
+
+        self.assertEqual(caught.exception.details, {
+            "reason": "stop_timeout", "durable_state": "preserved",
+            "rpc_endpoint_present": True, "live_pids": [1234],
+        })
+        self.assertEqual([action["command"] for action in caught.exception.next_actions], [
+            "codex-worker daemon status", "codex-worker daemon stop",
+        ])
+        worker_cli._validate_wire_recovery_actions({
+            "error": {"data": caught.exception.to_dict()}})
+
     def test_stopped_status_corrupt_durable_files_fail_as_closed_operational_faults(self):
         self.paths.durable_dir.mkdir(parents=True, mode=0o700)
         self.paths.registry_path.write_text("{secret-invalid", encoding="utf-8")

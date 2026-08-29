@@ -79,6 +79,12 @@ class GatewayAuthentication(str, Enum):
     NONE = "none"
 
 
+class OwnedTeardownError(RuntimeError):
+    def __init__(self, cause: str):
+        self.cause = cause
+        super().__init__("owned service teardown is incomplete")
+
+
 @dataclass(frozen=True)
 class GlobalWorkerServiceStatus(StrictModel):
     ready: bool
@@ -122,6 +128,9 @@ class _ServiceLifecycle:
     def terminate_owned(self, lease: DrainLease) -> None:
         self._gate.authorize(lease)
         self._service._terminate_resources()
+
+    def stopping(self) -> bool:
+        return self._service._stopping
 
 
 def _spawn_codex(argv: Sequence[str], cwd: str,
@@ -245,6 +254,7 @@ class GlobalWorkerService:
         self._connection = None  # type: Optional[CodexConnection]
         self._gateway = None  # type: Optional[WebSocketGateway]
         self._private_socket_identity = None  # type: Optional[os.stat_result]
+        self._stopping = False
 
     @property
     def private_endpoint(self) -> str:
@@ -303,7 +313,8 @@ class GlobalWorkerService:
         process = self._process
         gateway = self._gateway
         ready = bool(
-            process is not None
+            not self._stopping
+            and process is not None
             and process.poll() is None
             and self._connection is not None
             and gateway is not None
@@ -387,7 +398,10 @@ class GlobalWorkerService:
             self._deps.signal_process_group(pgid, signal.SIGKILL)
         deadline = time.monotonic() + 2.0
         while self._deps.process_group_exists(pgid) and time.monotonic() < deadline:
-            process.poll()
+            try:
+                process.poll()
+            except OSError:
+                pass
             time.sleep(0.01)
         if self._deps.process_group_exists(pgid):
             raise RuntimeError("owned Codex process group remained live")
@@ -395,35 +409,37 @@ class GlobalWorkerService:
             process.wait(timeout=2.0)
 
     def _terminate_resources(self, suppress_errors: bool = False) -> None:
+        self._stopping = True
         gateway = self._gateway
         connection = self._connection
         process = self._process
         owned_pgid = self._owned_pgid
         private_socket_identity = self._private_socket_identity
-        self._gateway = None
-        self._connection = None
-        self._process = None
-        self._owned_pgid = None
-        self._private_socket_identity = None
         errors = []
         if gateway is not None:
             try:
                 gateway.close()
+                self._gateway = None
             except Exception as exc:
                 errors.append(exc)
         if connection is not None:
             try:
                 connection.close()
+                self._connection = None
             except Exception as exc:
                 errors.append(exc)
         if process is not None and process.poll() is None:
             try:
                 self._terminate_owned_process_group(process, owned_pgid)
+                self._process = None
+                self._owned_pgid = None
             except Exception as exc:
                 errors.append(exc)
         elif process is not None and owned_pgid is not None:
             try:
                 self._terminate_owned_process_group(process, owned_pgid)
+                self._process = None
+                self._owned_pgid = None
             except Exception as exc:
                 errors.append(exc)
         private_socket = self.paths.private_codex_socket
@@ -437,7 +453,10 @@ class GlobalWorkerService:
                     raise PermissionError(
                         "private Codex socket changed after readiness")
                 os.unlink(str(private_socket))
+                self._private_socket_identity = None
             except Exception as exc:
                 errors.append(exc)
+        else:
+            self._private_socket_identity = None
         if errors and not suppress_errors:
-            raise errors[0]
+            raise OwnedTeardownError(type(errors[0]).__name__) from errors[0]
