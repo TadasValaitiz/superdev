@@ -231,6 +231,9 @@ class RecoveryActionTests(unittest.TestCase):
                         {"command": command, "reason": "bad"}]}}})
         cli._validate_wire_recovery_actions({"error": {"data": {"next_actions": [{
             "command": "codex-worker run --name x --prompt ';'", "reason": "safe"}]}}})
+        cli._validate_wire_recovery_actions({"error": {"data": {"next_actions": [{
+            "command": "codex-worker run --name x --prompt '<'", "reason": "safe"}, {
+            "command": "codex-worker run --name x --prompt '>'", "reason": "safe"}]}}})
 
     def test_completion_recovery_commands_are_inside_the_exhaustive_guard(self):
         for command in ("missing-tool status", "codex-worker daemon serve --bad",

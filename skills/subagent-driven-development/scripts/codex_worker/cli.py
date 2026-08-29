@@ -997,7 +997,7 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
         if "\n" in command or "\r" in command:
             raise ValueError("recovery action must be one direct argv")
         tokens = shlex.split(command)
-        if not tokens or "<" in command or ">" in command:
+        if not tokens:
             raise ValueError("recovery action is not literal")
         if _has_unquoted_shell_syntax(command):
             raise ValueError("recovery action must be one direct argv")
@@ -1048,6 +1048,6 @@ def _has_unquoted_shell_syntax(command: str) -> bool:
             continue
         if character in "'\"":
             quote = character
-        elif character in ";&|`$()#*?[]{}":
+        elif character in ";&|`$()#*?[]{}<>":
             return True
     return escaped or quote is not None
