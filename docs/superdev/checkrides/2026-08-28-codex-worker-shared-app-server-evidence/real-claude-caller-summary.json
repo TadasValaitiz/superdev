@@ -8,6 +8,8 @@
   "checkride_verdict": "PENDING controller executor/evaluator",
   "cleanup": {
     "claude_config_copied": false,
+    "literal_record": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-cleanup.json",
+    "literal_record_sha256": "dd79412a24a98d9f6d61aeee6557e1de297bd3269f259c54f3eb99a1b78160d6",
     "processes_remaining": 0,
     "runtime_deleted": true,
     "service_status": "stopped",
@@ -68,7 +70,7 @@
     "line_count": 26,
     "path": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-commands.jsonl",
     "sanitization": "Secret-pattern scan only; command argv and JSON outputs otherwise preserved literally",
-    "sha256": "a68a4be8abfccb61e064dc5ac61dd14da603150cec2fb735265ac7569a071288"
+    "sha256": "e50cf2e337f45f1237747b84cf2d54e7b1cba3126473eb5b0c1a92f9b4b0a7f0"
   },
   "scenario": "real-claude-path-caller",
   "session_id": "0d3a2187-8c24-45b0-a92f-9576e0aa82b9",

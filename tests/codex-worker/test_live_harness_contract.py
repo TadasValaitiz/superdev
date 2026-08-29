@@ -101,10 +101,38 @@ class LiveHarnessContractTests(unittest.TestCase):
         accounting = LIVE.command_accounting(rows)
         self.assertEqual(accounting, {
             "attempted": 2, "completed": 1, "unmatched_attempts": ["a"],
+            "duplicate_attempt_ids": [], "terminal_without_start": [],
             "not_run": 1, "codex_failure_count": 1,
         })
         rows.append({"kind": "command", "attempt_id": "a", "stdout": "{}"})
         self.assertEqual(LIVE.command_accounting(rows)["unmatched_attempts"], [])
+        rows.append({"kind": "command_start", "attempt_id": "a"})
+        duplicate = LIVE.command_accounting(rows)
+        self.assertEqual(duplicate["attempted"], 3)
+        self.assertEqual(duplicate["duplicate_attempt_ids"], ["a"])
+        self.assertEqual(duplicate["unmatched_attempts"], ["a"])
+        rows.append({"kind": "command", "attempt_id": "a", "stdout": "{}"})
+        rows.append({"kind": "command", "attempt_id": "a", "stdout": "{}"})
+        self.assertEqual(LIVE.command_accounting(rows)["terminal_without_start"], ["a"])
+
+    def test_finish_preserves_unmatched_attempt_as_measured_not_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            old_root = LIVE.ROOT
+            try:
+                LIVE.ROOT = Path(td)
+                recorder = LIVE.Recorder(
+                    "preflight-package", live_root=Path(td) / ".superdev" / "live")
+                recorder.record("command_start", {
+                    "attempt_id": "preflight-package-1", "argv": ["codex-worker", "--version"]})
+
+                summary = LIVE.finish_scenario(recorder, {}, {})
+            finally:
+                LIVE.ROOT = old_root
+
+            self.assertEqual(summary["status"], "MEASURED incomplete")
+            self.assertEqual(summary["command_accounting"]["unmatched_attempts"],
+                             ["preflight-package-1"])
+            self.assertEqual(summary["command_accounting"]["not_run"], 1)
 
     def test_every_run_has_owner_token_and_exact_cleanup_verification(self):
         source = SCRIPT.read_text(encoding="utf-8") + UV_SCRIPT.read_text(encoding="utf-8")

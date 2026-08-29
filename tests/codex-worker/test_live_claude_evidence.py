@@ -18,7 +18,10 @@ class ClaudeEvidenceTests(unittest.TestCase):
     def test_real_claude_auth_and_worker_state_have_an_explicit_isolation_boundary(self):
         source = LIVE_SCRIPT.read_text(encoding="utf-8")
         wrapper = WRAPPER.read_text(encoding="utf-8")
-        self.assertIn('env -u CLAUDE_CONFIG_DIR HOME="$REAL_HOME" claude -p', source)
+        self.assertIn('env -u CLAUDE_CONFIG_DIR HOME="$CLAUDE_CALLER_HOME" claude -p', source)
+        self.assertIn('install -m 600 "$REAL_HOME/.claude.json"', source)
+        self.assertIn('rm -f "$CLAUDE_CALLER_HOME/.claude.json"', source)
+        self.assertNotIn('HOME="$REAL_HOME" claude', source)
         self.assertIn('codex_worker_isolation_wrapper.sh', source)
         self.assertIn('codex-worker.uv-real', source)
         self.assertNotIn('cp "$REAL_HOME/.claude.json"', source)
@@ -50,11 +53,23 @@ class ClaudeEvidenceTests(unittest.TestCase):
             "not_run": 0, "codex_failure_count": 0,
         })
         self.assertEqual(receipt["tracked_literal_transcript"]["line_count"], 26)
-        self.assertEqual(receipt["cleanup"], {
-            "claude_config_copied": False, "processes_remaining": 0,
-            "runtime_deleted": True, "service_status": "stopped",
-            "socket_listeners_remaining": 0,
-        })
+        cleanup = receipt["cleanup"]
+        self.assertEqual({key: cleanup[key] for key in (
+            "claude_config_copied", "processes_remaining", "runtime_deleted",
+            "service_status", "socket_listeners_remaining")}, {
+                "claude_config_copied": False, "processes_remaining": 0,
+                "runtime_deleted": True, "service_status": "stopped",
+                "socket_listeners_remaining": 0,
+            })
+        cleanup_record = Path(__file__).parents[2] / cleanup["literal_record"]
+        self.assertEqual(hashlib.sha256(cleanup_record.read_bytes()).hexdigest(),
+                         cleanup["literal_record_sha256"])
+        literal_cleanup = json.loads(cleanup_record.read_text(encoding="utf-8"))
+        self.assertEqual([row["exit"] for row in literal_cleanup["cleanup_commands"]],
+                         [0, 0, 0])
+        self.assertEqual(literal_cleanup["cleanup_commands"][-1]["result"]["status"],
+                         "stopped")
+        self.assertEqual(literal_cleanup["owner_verification"]["token"], "[REDACTED]")
 
     def test_validates_path_only_complete_family_coverage(self):
         with tempfile.TemporaryDirectory() as td:
@@ -148,7 +163,11 @@ class ClaudeEvidenceTests(unittest.TestCase):
             encoding="utf-8"))["tracked_literal_transcript"]
         self.assertEqual(hashlib.sha256(literal.read_bytes()).hexdigest(), receipt["sha256"])
         self.assertEqual([row["sequence"] for row in rows], list(range(1, 27)))
-        self.assertTrue(all(set(row) == {"sequence", "command", "output"} for row in rows))
+        self.assertTrue(all(set(row) == {
+            "sequence", "attempt_id", "terminal_attempt_id", "command",
+            "exit", "exit_basis", "output"} for row in rows))
+        self.assertTrue(all(row["exit"] == 0 for row in rows))
+        self.assertTrue(all(row["attempt_id"] == row["terminal_attempt_id"] for row in rows))
         self.assertTrue(all(row["command"].startswith("codex-worker ") for row in rows))
         self.assertTrue(all(set(row["output"]) == {"jsonrpc", "id", "result"}
                             for row in rows))

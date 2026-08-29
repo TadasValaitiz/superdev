@@ -66,6 +66,7 @@ SECRET_PATTERN = re.compile(
 
 def literal_command_records(transcript: Path) -> List[Json]:
     commands = {}  # type: Dict[str, str]
+    terminals = set()
     records = []  # type: List[Json]
     for line in transcript.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -79,10 +80,16 @@ def literal_command_records(transcript: Path) -> List[Json]:
                 commands[tool_id] = command
             elif value.get("type") == "tool_result":
                 tool_id = str(value.get("tool_use_id", ""))
+                assert tool_id not in terminals, {"duplicate_terminal": tool_id}
                 if tool_id in commands:
+                    terminals.add(tool_id)
                     records.append({
                         "sequence": len(records) + 1,
+                        "attempt_id": tool_id,
+                        "terminal_attempt_id": tool_id,
                         "command": commands.pop(tool_id),
+                        "exit": 0 if value.get("is_error") is False else 1,
+                        "exit_basis": "MEASURED Claude Bash tool_result is_error",
                         "output": _json_content(value.get("content")),
                     })
     assert not commands, {"unmatched_attempts": list(commands.values())}

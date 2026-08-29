@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Six finally-safe isolated behavioral scenarios for the global worker service."""
 import argparse
+import collections
 import datetime
 import hashlib
 import importlib.util
@@ -190,10 +191,17 @@ class Recorder:
 
 
 def command_accounting(rows: List[Json]) -> Json:
-    starts = {row["attempt_id"] for row in rows if row.get("kind") == "command_start"}
-    terminals = {row["attempt_id"] for row in rows
-                 if row.get("kind") == "command" and row.get("attempt_id") is not None}
-    unmatched = sorted(starts - terminals)
+    start_ids = [row["attempt_id"] for row in rows if row.get("kind") == "command_start"]
+    terminal_ids = [row["attempt_id"] for row in rows
+                    if row.get("kind") == "command" and row.get("attempt_id") is not None]
+    starts = collections.Counter(start_ids)
+    terminals = collections.Counter(terminal_ids)
+    unmatched = sorted(attempt_id for attempt_id, count in starts.items()
+                       for _ in range(max(0, count - terminals[attempt_id])))
+    duplicates = sorted(attempt_id for attempt_id, count in starts.items() if count > 1)
+    terminal_without_start = sorted(
+        attempt_id for attempt_id, count in terminals.items()
+        for _ in range(max(0, count - starts[attempt_id])))
     commands = [row for row in rows if row.get("kind") == "command"]
     codex_failures = 0
     for row in commands:
@@ -204,9 +212,12 @@ def command_accounting(rows: List[Json]) -> Json:
         if payload.get("error", {}).get("data", {}).get("kind") == "codex_failure":
             codex_failures += 1
     return {
-        "attempted": len(commands) + len(unmatched),
+        "attempted": len([row for row in commands if row.get("attempt_id") is None])
+                     + len(start_ids),
         "completed": len(commands),
         "unmatched_attempts": unmatched,
+        "duplicate_attempt_ids": duplicates,
+        "terminal_without_start": terminal_without_start,
         "not_run": len(unmatched),
         "codex_failure_count": codex_failures,
     }
@@ -262,13 +273,15 @@ def finish_scenario(recorder: Recorder, result: Json, cleanup_outcome: Json) -> 
         encoding="utf-8").splitlines() if line]
     sanitized = [sanitize_record(row) for row in rows]
     accounting = command_accounting(sanitized)
-    assert accounting["unmatched_attempts"] == [], accounting
+    complete = (accounting["unmatched_attempts"] == []
+                and accounting["duplicate_attempt_ids"] == []
+                and accounting["terminal_without_start"] == [])
     transcript = tracked / "transcript.jsonl"
     transcript.write_text("".join(json.dumps(row, sort_keys=True, allow_nan=False) + "\n"
                                   for row in sanitized), encoding="utf-8")
     record_count = len(sanitized)
     summary = {
-        "status": "MEASURED complete",
+        "status": "MEASURED complete" if complete else "MEASURED incomplete",
         "scenario": recorder.scenario,
         "raw_run_dir": str(recorder.run_dir.relative_to(ROOT)),
         "tracked_transcript": str(transcript.relative_to(ROOT)),
@@ -292,7 +305,7 @@ def finish_scenario(recorder: Recorder, result: Json, cleanup_outcome: Json) -> 
                             encoding="utf-8")
     scan = secret_scan((transcript, summary_path))
     assert scan == summary["secret_scan"]
-    assert record_count == sum(1 for _ in transcript.open(encoding="utf-8"))
+    assert record_count == len(transcript.read_text(encoding="utf-8").splitlines())
     print(json.dumps(summary, sort_keys=True))
     return summary
 
