@@ -1421,6 +1421,29 @@ class GlobalServiceFacadeTests(unittest.TestCase):
             facade.readiness(StatusServiceRequest())
         self.assertEqual(broker_error.exception.kind, "broker_error")
 
+    def test_unavailable_nonforce_impact_is_typed_without_invented_workers(self):
+        from codex_worker.facade import ServiceFacade
+        from codex_worker.models import MaintenanceResult
+
+        result = MaintenanceResult.unavailable(
+            "stop", "refused", False, None, "upstream_inventory_unavailable")
+        projected = ServiceFacade._maintenance_result(result)
+
+        self.assertIsInstance(projected, Err)
+        self.assertEqual(projected.error.code, FacadeFaultCode.SERVICE_BUSY)
+        self.assertEqual(projected.error.details, {
+            "action": "stop",
+            "impact": {"availability": "unavailable",
+                       "reason": "upstream_inventory_unavailable"},
+            "durable_state": "preserved",
+        })
+        self.assertEqual(projected.error.next_actions, [{
+            "command": "codex-worker daemon status",
+            "reason": "Inspect the global service before retrying maintenance",
+        }])
+        worker_cli._validate_wire_recovery_actions({
+            "error": {"data": projected.error.to_dict()}})
+
     def test_degraded_public_status_reports_fault_with_measured_active_inventory(self):
         from codex_worker.commands import StatusServiceRequest
         from codex_worker.facade import ServiceFacade, ServiceFacadeDeps

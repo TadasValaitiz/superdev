@@ -3,6 +3,7 @@ import fcntl
 import io
 import json
 import os
+import signal
 import socket
 import shlex
 import stat
@@ -2100,6 +2101,29 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self._stop_daemon()
         self.assertFalse(_pid_exists(app_server_pid))
         self.assertFalse(private_socket.exists())
+
+    def test_force_stop_skips_blocked_owned_child_inventory_and_converges(self):
+        app_server_pid = self.app_server_pid
+        os.kill(app_server_pid, signal.SIGSTOP)
+        try:
+            completed = self._run("daemon", "stop", "--force", timeout=15)
+        finally:
+            if _pid_exists(app_server_pid):
+                os.kill(app_server_pid, signal.SIGCONT)
+
+        payload = self._json(completed)["result"]
+        self.assertEqual((payload["status"], payload["forced"]),
+                         ("completed", True))
+        self.assertEqual(payload["inventory"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertEqual(payload["workers"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertFalse(_pid_exists(app_server_pid))
+        self.assertFalse(self.private_codex_socket.exists())
 
     def test_concurrent_clients_share_one_daemon_without_crossing_results(self):
         self.env["FAKE_CODEX_DELAY"] = "1.0"

@@ -118,6 +118,8 @@ codex-worker CLI ── protected Unix RPC ── GlobalWorkerService
 - No completion/callback/finally path stops the service. Idle version replacement is the
   sole automatic restart path. Maintenance acquires the service mutation gate, drains forwarded
   mutations, pages authoritative all-source `thread/list`, and fails closed on inventory error.
+  Explicit force is the D30 exception: it excludes new mutations but may close an already-blocked
+  owned request, skips upstream inventory, and tears down only the verified owned lifecycle.
 
 **Interface / contract:** `ServiceStatusView` includes worker/app-server PIDs, versions,
 listener, exposure/auth projection, worker/session/active-turn counts, migration state,
@@ -350,7 +352,9 @@ Every fault reports measured listener/version/activity and known identities with
 tokens. Recovery actions never include force automatically. Maintenance impact includes
 active and idle worker names/counts plus durable-state promise. Forced stop/restart is
 accepted only from the explicit command model and is never emitted by a callback, skill,
-or retry action.
+or retry action. If degraded upstream inventory cannot be measured, forced maintenance reports
+inventory and worker impact as explicitly unavailable, with no synthesized rows, IDs, or counts;
+non-force refuses without teardown.
 
 Active threads without a `WorkerRecord` remain first-class impact rows with `worker: null`,
 their Codex `thread_id`, and `origin: "unmapped_tui"`; lack of wrapper metadata never removes
@@ -361,7 +365,8 @@ The active inventory is app-server-wide, not registry-wide:
 ```text
 page thread/list(cursor, sourceKinds=[])
   collect every thread where status.type == "active"
-  inventory/page/protocol error -> refuse maintenance
+  non-force inventory/page/protocol error -> refuse maintenance
+  explicit force -> skip upstream inventory, report impact unavailable, tear down verified owner
 ```
 
 **Depends on:** §5.1 inventory; §5.3 conflicts.

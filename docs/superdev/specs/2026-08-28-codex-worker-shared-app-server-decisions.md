@@ -134,7 +134,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - A: keep stop, refuse active work, and reserve force for supervised maintenance — gains recoverability with explicit blast-radius control / sacrifices a completely frictionless shutdown.
   - B: remove stop from the CLI — gains maximal accidental-shutdown resistance / sacrifices supported maintenance and port recovery.
   - C: retain unconditional stop — gains simplicity / sacrifices shared-service safety.
-- **Decided:** A. `daemon stop` is machine-wide maintenance and refuses while any turn is active. `daemon stop --force` is a highly visible exceptional operation that reports affected workers. The skill marks both as dangerous and forbids agent use without explicit human supervision and agreement; neither appears in normal completion/cleanup recipes.
+- **Decided:** A. `daemon stop` is machine-wide maintenance and refuses while any turn is active. `daemon stop --force` is a highly visible exceptional operation that reports affected workers when inventory is measurable, or the explicit unavailable impact required by D30 when the owned runtime is degraded. The skill marks both as dangerous and forbids agent use without explicit human supervision and agreement; neither appears in normal completion/cleanup recipes.
 - **Not permission inferred from task completion:** finishing a worker, Claude session, plan, or orchestrator milestone grants no authority to stop the service.
 - **Extension law:** every future service-wide destructive/disruptive command carries the same active-work preflight, impact projection, and supervised-human requirement.
 - **Anti-patterns:** no automatic stop in `finally`; no stop suggested as routine recovery; no `--force` hidden in next actions; no treating absence of locally visible work as proof the global service is idle.
@@ -658,3 +658,23 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   isolated credential copy independently, and emits every D28 field for commands and assertions.
 - **Affects:** historical real-Claude cleanup erratum and affected cleanup reride rows.
 - **Revisit-when:** the required reride has produced a fully measured tracked cleanup record.
+
+## D30 — Forced maintenance must not depend on responsive upstream inventory
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** implementation erratum after an owned SIGSTOP child blocked supervised force
+
+- **Trigger:** both the managed force-stop preflight and the drained maintenance coordinator
+  synchronously enumerated Codex threads. A stopped or degraded owned child therefore prevented
+  the explicit recovery operation that was supposed to terminate it.
+- **Decided:** `daemon stop --force` uses strict internal readiness for its managed preflight and,
+  under the shared maintenance drain, never calls upstream inventory. The forced drain excludes
+  new mutations but may proceed past an already-forwarded request that cannot settle; owned
+  teardown closes that request while terminating only the pinned, identity-verified lifecycle.
+- **Honesty law:** when force cannot measure upstream impact, both `inventory` and `workers` report
+  `availability: unavailable` with reason `upstream_inventory_unavailable`; they contain no
+  invented rows, names, IDs, or counts. Non-force still attempts authoritative inventory and
+  refuses without teardown if it is unavailable. Any incomplete owned teardown remains a typed,
+  actionable `daemon_stop_failed`.
+- **Affects:** D8 force-impact wording, managed stop preflight, maintenance gate/coordinator,
+  strict maintenance result, public SIGSTOP acceptance row.
+- **Revisit-when:** upstream inventory has a bounded, independently responsive snapshot API.

@@ -613,6 +613,12 @@ def _stopped_service_status(listener: str, version: str, workers: WorkerImpact,
         migration, "preserved")
 
 
+@dataclass(frozen=True)
+class _StopBasis:
+    pid: Optional[int]
+    app_server_pid: Optional[int]
+
+
 class ServiceManager:
     """Concurrency-safe client supervisor for the sole machine-local service."""
     def __init__(self, deps: ServiceDeps):
@@ -1052,6 +1058,16 @@ class ServiceManager:
 
     @staticmethod
     def _busy(result: MaintenanceResult) -> FacadeFault:
+        if result.impact_unavailable_reason is not None:
+            return FacadeFault(
+                FacadeFaultCode.SERVICE_BUSY,
+                "Global service impact is unavailable", "service_busy",
+                details={"impact": {
+                    "availability": "unavailable",
+                    "reason": result.impact_unavailable_reason,
+                }},
+                next_actions=[{"command": "codex-worker daemon status",
+                               "reason": "Inspect the global service before retrying maintenance"}])
         return FacadeFault(
             FacadeFaultCode.SERVICE_BUSY, "Global service has active work", "service_busy",
             details={"active": [item.to_dict() for item in result.inventory.items],
@@ -1062,7 +1078,18 @@ class ServiceManager:
     def stop(self, force: bool = False) -> dict:
         if type(force) is not bool: raise ValueError("force must be bool")
         with acquire_start_lock(self.deps.paths.start_lock):
-            before = self._probe()
+            if force:
+                try:
+                    before = self._probe_readiness()
+                except FacadeFault as exc:
+                    if exc.code != FacadeFaultCode.CODEX_FAILURE:
+                        raise
+                    before = _StopBasis(None, None)
+                if (before is None and (self.deps.paths.rpc_socket.exists()
+                                        or self.deps.paths.rpc_socket.is_symlink())):
+                    before = _StopBasis(None, None)
+            else:
+                before = self._probe()
             if before is None:
                 return MaintenanceResult.completed(
                     "stop", ActiveInventory(), force, workers=self._durable_workers()).to_dict()

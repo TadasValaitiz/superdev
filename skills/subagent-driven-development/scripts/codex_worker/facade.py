@@ -830,6 +830,22 @@ class ServiceFacade:
         if not isinstance(result, MaintenanceResult):
             raise TypeError("maintenance returned an invalid result")
         if result.status == "refused":
+            if result.impact_unavailable_reason is not None:
+                return Err(FacadeFault(
+                    FacadeFaultCode.SERVICE_BUSY,
+                    "Global service impact is unavailable", "service_busy",
+                    details={
+                        "action": result.action,
+                        "impact": {
+                            "availability": "unavailable",
+                            "reason": result.impact_unavailable_reason,
+                        },
+                        "durable_state": result.durable_state,
+                    },
+                    next_actions=[{
+                        "command": "codex-worker daemon status",
+                        "reason": "Inspect the global service before retrying maintenance",
+                    }]))
             active = [item.to_dict() for item in result.inventory.items]
             return Err(FacadeFault(
                 FacadeFaultCode.SERVICE_BUSY,

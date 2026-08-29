@@ -725,6 +725,32 @@ class GlobalServiceManagerTests(unittest.TestCase):
         self.assertEqual(manager.status().status, "ready")
         self.assertEqual(observed, [("service/status", 30.0)])
 
+    def test_force_stop_preflight_uses_hidden_readiness_not_inventory_status(self):
+        self.ready = self.status_payload()
+
+        result = self.manager.stop(force=True)
+
+        methods = [call[1] for call in self.calls]
+        self.assertEqual(methods[:2], ["service/readiness", "service/stop"])
+        self.assertNotIn("service/status", methods)
+        self.assertEqual((result["status"], result["forced"]),
+                         ("completed", True))
+
+    def test_force_stop_continues_past_typed_degraded_readiness(self):
+        self.ready = self.status_payload()
+        degraded = instance_module.FacadeFault(
+            FacadeFaultCode.CODEX_FAILURE,
+            "Global service components are degraded", "codex_failure",
+            details={"reason": "service_degraded"})
+
+        with mock.patch.object(
+                self.manager, "_probe_readiness", side_effect=[degraded, None]):
+            result = self.manager.stop(force=True)
+
+        self.assertIn("service/stop", [call[1] for call in self.calls])
+        self.assertEqual((result["status"], result["forced"]),
+                         ("completed", True))
+
     def test_shutdown_poll_treats_typed_stopping_readiness_as_not_ready(self):
         before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
         observations = iter([True, False])

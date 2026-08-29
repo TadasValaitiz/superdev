@@ -71,10 +71,12 @@ _MISSING_PENDING = object()
 class DrainLease:
     """Short-lived authorization issued only while one exact gate is drained."""
 
-    def __init__(self, authority: object, gate_token: object):
+    def __init__(self, authority: object, gate_token: object,
+                 allows_active_mutations: bool = False):
         if authority is not _LEASE_AUTHORITY:
             raise TypeError("DrainLease values are issued by ServiceMaintenanceGate")
         self._gate_token = gate_token
+        self._allows_active_mutations = allows_active_mutations
         self._live = True
 
     def _expire(self) -> None:
@@ -120,14 +122,16 @@ class ServiceMaintenanceGate:
                     self._condition.notify_all()
 
     @contextmanager
-    def drain(self) -> Iterator[DrainLease]:
+    def drain(self, force: bool = False) -> Iterator[DrainLease]:
+        if type(force) is not bool:
+            raise ValueError("force drain must be bool")
         with self._condition:
             while self._draining:
                 self._condition.wait()
             self._draining = True
-            while self._active_mutations:
+            while self._active_mutations and not force:
                 self._condition.wait()
-            lease = DrainLease(_LEASE_AUTHORITY, self._gate_token)
+            lease = DrainLease(_LEASE_AUTHORITY, self._gate_token, force)
             self._lease = lease
         try:
             yield lease
@@ -146,7 +150,8 @@ class ServiceMaintenanceGate:
                     or not lease._live
                     or self._lease is not lease
                     or not self._draining
-                    or self._active_mutations != 0):
+                    or (self._active_mutations != 0
+                        and not lease._allows_active_mutations)):
                 raise PermissionError("a live drain lease from this maintenance gate is required")
 
 

@@ -253,6 +253,26 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MaintenanceResult("stop", "completed", False, None, inventory)
 
+    def test_unavailable_maintenance_impact_is_explicit_and_has_no_counts_or_ids(self):
+        result = MaintenanceResult.unavailable(
+            "stop", "completed", True, None, "upstream_inventory_unavailable")
+        wire = result.to_dict()
+        self.assertEqual(wire["inventory"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertEqual(wire["workers"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertNotIn("items", wire["inventory"])
+        self.assertNotIn("active_count", wire["workers"])
+        self.assertEqual(MaintenanceResult.from_dict(wire), result)
+        malformed = dict(wire)
+        malformed["durable_state"] = "discarded"
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(malformed)
+
     def test_inventory_malformed_cursor_loop_and_upstream_error_all_fail_closed(self):
         failures = [
             {None: {"data": "not-a-list", "nextCursor": None,
@@ -301,7 +321,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(len(self.codex.start_calls), 1)
         self.assertFalse(self.codex.shutdown_called)
 
-    def test_maintenance_refuses_any_active_item_and_force_reports_unmapped_before_termination(self):
+    def test_nonforce_reports_unmapped_and_force_skips_blocked_inventory(self):
         self.registry.create_worker(
             "idle-thread", self.cwd, "idle-worker", "medium",
             "fake-model-a", "medium", "full")
@@ -332,10 +352,15 @@ class WorkerBrokerTests(unittest.TestCase):
             "active_count": 0, "idle_count": 1, "total_count": 1})
         self.assertEqual(lifecycle.terminated, 0)
 
+        self.codex.calls = []
         forced = coordinator.stop(force=True)
         self.assertEqual(forced.status, "completed")
         self.assertTrue(forced.forced)
-        self.assertEqual(forced.inventory.items[0].thread_id, "tui-thread")
+        self.assertIsNone(forced.inventory)
+        self.assertIsNone(forced.workers)
+        self.assertEqual(forced.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(self.codex.calls, [])
         self.assertEqual(lifecycle.terminated, 1)
         self.assertFalse(hasattr(coordinator, "gate"))
         self.assertFalse(hasattr(coordinator, "terminate_owned"))
@@ -363,7 +388,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(refused.listener, "ws://localhost:4600")
         self.assertEqual(lifecycle.terminated, 0)
 
-    def test_maintenance_inventory_error_never_terminates_service(self):
+    def test_nonforce_inventory_error_refuses_without_terminating_service(self):
         self.codex.thread_pages = {None: CodexCallError(
             "transport_error", "thread/list", {"message": "gone"})}
 
@@ -373,9 +398,30 @@ class WorkerBrokerTests(unittest.TestCase):
             def stopping(self): return False
 
         lifecycle = Lifecycle(self.gate)
-        with self.assertRaises(RpcFault):
-            MaintenanceCoordinator(self.broker, lifecycle).stop(force=True)
+        result = MaintenanceCoordinator(self.broker, lifecycle).stop(force=False)
+        self.assertEqual((result.status, result.forced), ("refused", False))
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
         self.assertEqual(lifecycle.terminated, 0)
+
+    def test_force_skips_unavailable_inventory_and_terminates_owned_lifecycle(self):
+        self.codex.thread_pages = {None: CodexCallError(
+            "transport_error", "thread/list", {"message": "blocked"})}
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        result = MaintenanceCoordinator(self.broker, lifecycle).stop(force=True)
+        self.assertEqual((result.status, result.forced), ("completed", True))
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(self.codex.calls, [])
+        self.assertEqual(lifecycle.terminated, 1)
 
     def test_owned_teardown_error_is_a_typed_maintenance_failure(self):
         from codex_worker.broker import MaintenanceTerminationError

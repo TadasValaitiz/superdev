@@ -174,6 +174,30 @@ class MaintenanceGateTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             gate.authorize(lease)
 
+    def test_forced_drain_excludes_new_mutations_without_waiting_for_blocked_owned_work(self):
+        gate = ServiceMaintenanceGate()
+        entered = threading.Event()
+        release = threading.Event()
+
+        def mutate():
+            with gate.mutation("turn/start"):
+                entered.set()
+                release.wait(1)
+
+        thread = threading.Thread(target=mutate)
+        thread.start()
+        self.assertTrue(entered.wait(1))
+        try:
+            with gate.drain(force=True) as lease:
+                self.assertEqual(gate.active_mutations, 1)
+                gate.authorize(lease)
+                with self.assertRaises(ServiceBusyError):
+                    with gate.mutation("turn/steer"):
+                        pass
+        finally:
+            release.set()
+            thread.join(1)
+
 
 class GatewayTests(unittest.TestCase):
     def setUp(self):

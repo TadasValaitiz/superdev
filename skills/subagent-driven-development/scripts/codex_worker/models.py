@@ -278,9 +278,10 @@ class MaintenanceResult:
     status: str
     forced: bool
     listener: Optional[str]
-    inventory: ActiveInventory
-    workers: WorkerImpact = field(default_factory=WorkerImpact)
+    inventory: Optional[ActiveInventory]
+    workers: Optional[WorkerImpact] = field(default_factory=WorkerImpact)
     durable_state: str = "preserved"
+    impact_unavailable_reason: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.action not in ("stop", "restart"):
@@ -297,14 +298,24 @@ class MaintenanceResult:
         if self.listener is not None:
             from .service_domain import validate_public_listener
             validate_public_listener(self.listener)
-        if not isinstance(self.inventory, ActiveInventory):
-            raise ValueError("maintenance inventory must be ActiveInventory")
-        if not isinstance(self.workers, WorkerImpact):
-            raise ValueError("maintenance workers must be WorkerImpact")
-        if self.status == "refused" and (self.forced or not self.inventory.items):
-            raise ValueError("maintenance refusal requires non-forced active impact")
-        if (self.status == "completed" and self.inventory.items
-                and not self.forced):
+        impact_available = self.impact_unavailable_reason is None
+        if impact_available:
+            if not isinstance(self.inventory, ActiveInventory):
+                raise ValueError("maintenance inventory must be ActiveInventory")
+            if not isinstance(self.workers, WorkerImpact):
+                raise ValueError("maintenance workers must be WorkerImpact")
+        else:
+            if self.impact_unavailable_reason != "upstream_inventory_unavailable":
+                raise ValueError("maintenance impact unavailable reason is invalid")
+            if self.inventory is not None or self.workers is not None:
+                raise ValueError("unavailable maintenance impact cannot carry inventory")
+        if self.status == "refused":
+            if self.forced:
+                raise ValueError("maintenance refusal cannot be forced")
+            if impact_available and not self.inventory.items:
+                raise ValueError("maintenance refusal requires active or unavailable impact")
+        if (self.status == "completed" and impact_available
+                and self.inventory.items and not self.forced):
             raise ValueError("active maintenance completion must be forced")
         if self.durable_state != "preserved":
             raise ValueError("maintenance must preserve durable state")
@@ -322,14 +333,26 @@ class MaintenanceResult:
         return cls(action, "completed", forced, listener, inventory,
                    workers or WorkerImpact())
 
+    @classmethod
+    def unavailable(cls, action: str, status: str, forced: bool,
+                    listener: Optional[str], reason: str):
+        return cls(action, status, forced, listener, None, None,
+                   "preserved", reason)
+
     def to_dict(self) -> JsonObject:
         return {
             "action": self.action,
             "status": self.status,
             "forced": self.forced,
             "listener": self.listener,
-            "inventory": self.inventory.to_dict(),
-            "workers": self.workers.to_dict(),
+            "inventory": (self.inventory.to_dict() if self.inventory is not None else {
+                "availability": "unavailable",
+                "reason": self.impact_unavailable_reason,
+            }),
+            "workers": (self.workers.to_dict() if self.workers is not None else {
+                "availability": "unavailable",
+                "reason": self.impact_unavailable_reason,
+            }),
             "durable_state": self.durable_state,
         }
 
@@ -339,6 +362,18 @@ class MaintenanceResult:
                     "durable_state"}
         if not isinstance(value, dict) or set(value) != required:
             raise ValueError("invalid MaintenanceResult fields")
+        if value["durable_state"] != "preserved":
+            raise ValueError("maintenance must preserve durable state")
+        unavailable = {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        }
+        if value["inventory"] == unavailable or value["workers"] == unavailable:
+            if value["inventory"] != unavailable or value["workers"] != unavailable:
+                raise ValueError("maintenance unavailable impact must be consistent")
+            return cls.unavailable(
+                value["action"], value["status"], value["forced"], value["listener"],
+                "upstream_inventory_unavailable")
         return cls(value["action"], value["status"], value["forced"],
                    value["listener"], ActiveInventory.from_dict(value["inventory"]),
                    WorkerImpact.from_dict(value["workers"]), value["durable_state"])

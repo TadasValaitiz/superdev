@@ -1017,7 +1017,7 @@ class MaintenanceCoordinator:
                   force: bool) -> MaintenanceResult:
         if type(force) is not bool:
             raise ValueError("force must be bool")
-        with self._gate.drain() as lease:
+        with self._gate.drain(force=force) as lease:
             if self._lifecycle.stopping():
                 from .models import WorkerImpact
                 names = sorted(record.name for record in self._broker.registry.list()
@@ -1026,7 +1026,17 @@ class MaintenanceCoordinator:
                 return MaintenanceResult.completed(
                     action, ActiveInventory(), force, listener,
                     WorkerImpact([], names))
-            inventory = self._broker.list_active_threads()
+            if force:
+                self._terminate_owned(lease)
+                return MaintenanceResult.unavailable(
+                    action, "completed", True, listener,
+                    "upstream_inventory_unavailable")
+            try:
+                inventory = self._broker.list_active_threads()
+            except RpcFault:
+                return MaintenanceResult.unavailable(
+                    action, "refused", False, listener,
+                    "upstream_inventory_unavailable")
             from .models import WorkerImpact
             records = self._broker.registry.list()
             all_names = {record.name for record in records if record.name is not None}
