@@ -330,6 +330,9 @@ class GlobalWorkerService:
             authentication=GatewayAuthentication.NONE,
         )
 
+    def stopping(self) -> bool:
+        return self._stopping
+
     def _listener_exposure(self) -> ListenerExposure:
         host = urlsplit(self.config.listener).hostname
         if host is not None and host.lower() == "localhost":
@@ -368,7 +371,11 @@ class GlobalWorkerService:
 
     @staticmethod
     def _terminate_unpinned_process(process: OwnedProcess) -> None:
-        if process.poll() is not None:
+        try:
+            exited = process.poll() is not None
+        except OSError:
+            exited = False
+        if exited:
             process.wait(timeout=0)
             return
         process.terminate()
@@ -385,10 +392,19 @@ class GlobalWorkerService:
             return
         if pgid <= 1 or pgid == self._deps.current_process_group():
             raise PermissionError("refusing unsafe Codex process group")
-        if process.poll() is None:
-            current = self._deps.get_process_group(process.pid)
-            if current != pgid or current != process.pid:
-                raise PermissionError("Codex process group identity changed")
+        try:
+            exited = process.poll() is not None
+        except OSError:
+            exited = False
+        if exited:
+            if self._deps.process_group_exists(pgid):
+                raise PermissionError(
+                    "refusing to signal a process group after its pinned leader exited")
+            process.wait(timeout=0)
+            return
+        current = self._deps.get_process_group(process.pid)
+        if current != pgid or current != process.pid:
+            raise PermissionError("Codex process group identity changed")
         self._deps.signal_process_group(pgid, signal.SIGTERM)
         try:
             process.wait(timeout=2.0)
@@ -428,14 +444,7 @@ class GlobalWorkerService:
                 self._connection = None
             except Exception as exc:
                 errors.append(exc)
-        if process is not None and process.poll() is None:
-            try:
-                self._terminate_owned_process_group(process, owned_pgid)
-                self._process = None
-                self._owned_pgid = None
-            except Exception as exc:
-                errors.append(exc)
-        elif process is not None and owned_pgid is not None:
+        if process is not None:
             try:
                 self._terminate_owned_process_group(process, owned_pgid)
                 self._process = None

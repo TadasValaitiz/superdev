@@ -1389,13 +1389,14 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         from codex_worker.service_domain import ServiceConfig
 
         class Service:
-            def __init__(self): self.failure = None
+            def __init__(self): self.failure, self.is_stopping = None, True
             def status(self):
                 if self.failure is not None: raise self.failure
                 return GlobalWorkerServiceStatus(
                     False, "ws://127.0.0.1:4500", "8.1.0", 22,
                     "/tmp/private.sock", ListenerExposure.LOOPBACK,
                     GatewayAuthentication.NONE)
+            def stopping(self): return self.is_stopping
         class NeverUsed:
             def __getattr__(self, name): raise AssertionError(name)
         service = Service()
@@ -1407,6 +1408,11 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         stopped = facade.readiness(StatusServiceRequest())
         self.assertIsInstance(stopped, Err)
         self.assertEqual(stopped.error.kind, "daemon_stopped")
+        service.is_stopping = False
+        degraded = facade.readiness(StatusServiceRequest())
+        self.assertIsInstance(degraded, Err)
+        self.assertEqual(degraded.error.kind, "codex_failure")
+        self.assertEqual(degraded.error.details["reason"], "service_degraded")
         service.failure = RuntimeError("programming defect")
         with self.assertRaisesRegex(RuntimeError, "programming defect"):
             facade.readiness(StatusServiceRequest())
@@ -1414,6 +1420,38 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         with self.assertRaises(RpcFault) as broker_error:
             facade.readiness(StatusServiceRequest())
         self.assertEqual(broker_error.exception.kind, "broker_error")
+
+    def test_degraded_public_status_reports_fault_with_measured_active_inventory(self):
+        from codex_worker.commands import StatusServiceRequest
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.models import ActiveInventory, ActiveThreadItem
+        from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
+                                          ListenerExposure)
+
+        active = ActiveInventory([ActiveThreadItem(
+            "active-thread", "unmapped_tui", None, None, "active-turn", ("active",))])
+        class Service:
+            def status(self):
+                return GlobalWorkerServiceStatus(
+                    False, "ws://127.0.0.1:4500", "8.1.0", 42,
+                    "/tmp/private.sock", ListenerExposure.LOOPBACK,
+                    GatewayAuthentication.NONE)
+            def stopping(self): return False
+        class Broker:
+            def list_active_threads(self): return active
+            def daemon_status(self): return {"worker_names": []}
+
+        facade = ServiceFacade(ServiceFacadeDeps(
+            Service(), Broker(), object(), object(), object()))
+        result = facade.status(StatusServiceRequest())
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual((result.error.code, result.error.kind),
+                         (FacadeFaultCode.CODEX_FAILURE, "codex_failure"))
+        self.assertEqual(result.error.details, {
+            "reason": "service_degraded", "active": active.to_dict()["items"],
+            "durable_state": "preserved",
+        })
 
     def test_degraded_nonstopping_service_still_refuses_active_nonforce_stop(self):
         from codex_worker.facade import ServiceFacade, ServiceFacadeDeps

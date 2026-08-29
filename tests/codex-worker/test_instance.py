@@ -734,9 +734,11 @@ class GlobalServiceManagerTests(unittest.TestCase):
         def rpc(unused_socket, method, unused_params, unused_timeout):
             self.assertEqual(method, "service/readiness")
             if next(observations):
+                from codex_worker.commands import FacadeFault
                 self.paths.rpc_socket.unlink()
-                raise RpcFault(FacadeFaultCode.DAEMON_STOPPED.value,
-                               "Global service is stopping", "daemon_stopped")
+                return {"jsonrpc": "2.0", "id": "cli", "error": FacadeFault(
+                    FacadeFaultCode.DAEMON_STOPPED,
+                    "Global service is stopping", "daemon_stopped").to_dict()}
             raise OSError("stopped")
 
         manager = ServiceManager(replace(

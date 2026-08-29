@@ -305,6 +305,50 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertEqual(harness.group_signals, [])
         harness.processes[0].terminate()
 
+    def test_exited_leader_never_authorizes_signalling_numeric_group(self):
+        harness = ServiceHarness()
+        process = type("ExitedProcess", (), {
+            "pid": 9551,
+            "poll": lambda self: 0,
+            "wait": lambda self, timeout=None: 0,
+        })()
+        base = harness.deps()
+        service = GlobalWorkerService(
+            self.paths, self.config, lambda unused: None, None,
+            GlobalWorkerServiceDeps(
+                base.spawn_codex, base.create_connection, base.create_gateway,
+                lambda pid: pid, lambda: 42, harness.signal_group,
+                lambda unused_pgid: True),
+            codex_argv=("/opt/bin/codex",))
+
+        with self.assertRaises(PermissionError):
+            service._terminate_owned_process_group(process, process.pid)
+
+        self.assertEqual(harness.group_signals, [])
+
+    def test_initial_teardown_poll_error_still_attempts_all_owned_resources(self):
+        harness = ServiceHarness()
+        service = self.make_service(harness)
+        service.start()
+        process = harness.processes[0]
+        original_poll = process.poll
+        calls = {"value": 0}
+        def transient_poll():
+            calls["value"] += 1
+            if calls["value"] == 1:
+                raise ChildProcessError("transient initial waitpid race")
+            return original_poll()
+        process.poll = transient_poll
+
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            lifecycle.terminate_owned(lease)
+
+        self.assertTrue(harness.gateways[0].closed)
+        self.assertTrue(harness.connections[0][3].closed)
+        self.assertIsNotNone(process.poll())
+        self.assertIsNone(service._process)
+
     def test_group_zero_and_current_group_are_refused_without_group_signal(self):
         for unsafe in (0, 42):
             with self.subTest(pgid=unsafe):

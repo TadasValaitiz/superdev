@@ -691,6 +691,7 @@ class WorkerFacade:
 @runtime_checkable
 class ServicePort(Protocol):
     def status(self): ...
+    def stopping(self) -> bool: ...
 
 
 @runtime_checkable
@@ -726,13 +727,25 @@ class ServiceFacade:
         del request
         try:
             service = self.deps.service.status()
+            stopping = False if service.ready else self.deps.service.stopping()
             daemon = self.deps.broker.daemon_status()
-            inventory = (self.deps.broker.list_active_threads()
-                         if service.ready else ActiveInventory())
+            inventory = (ActiveInventory() if stopping
+                         else self.deps.broker.list_active_threads())
             all_names = set(daemon.get("worker_names", []))
             active_names = {item.worker for item in inventory.items
                             if item.worker is not None}
             workers = WorkerImpact(sorted(active_names), sorted(all_names - active_names))
+            if not service.ready and not stopping:
+                return Err(FacadeFault(
+                    FacadeFaultCode.CODEX_FAILURE,
+                    "Global service components are degraded", "codex_failure",
+                    details={"reason": "service_degraded",
+                             "active": inventory.to_dict()["items"],
+                             "durable_state": "preserved"},
+                    next_actions=[{
+                        "command": "codex-worker daemon status",
+                        "reason": "Reinspect the degraded global service state",
+                    }]))
             migration = self.deps.migrator.scan_and_apply()
             status = "ready" if service.ready else "stopping"
             return Ok(ServiceStatusResponse(
@@ -756,6 +769,16 @@ class ServiceFacade:
         try:
             service = self.deps.service.status()
             if not service.ready:
+                if not self.deps.service.stopping():
+                    return Err(FacadeFault(
+                        FacadeFaultCode.CODEX_FAILURE,
+                        "Global service components are degraded", "codex_failure",
+                        details={"reason": "service_degraded",
+                                 "durable_state": "preserved"},
+                        next_actions=[{
+                            "command": "codex-worker daemon status",
+                            "reason": "Inspect the degraded global service state",
+                        }]))
                 return Err(FacadeFault(
                     FacadeFaultCode.DAEMON_STOPPED,
                     "Global service is stopping", "daemon_stopped",

@@ -729,7 +729,9 @@ class ServiceManager:
             return None
         try:
             return ServiceReadinessResponse.from_dict(self._result(response))
-        except FacadeFault:
+        except FacadeFault as exc:
+            if exc.kind in ("daemon_unavailable", "daemon_stopped"):
+                return None
             raise
         except (TypeError, ValueError) as exc:
             raise FacadeFault(
