@@ -3,6 +3,7 @@ import inspect
 import signal
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -195,6 +196,58 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertFalse(descendant_alive["value"])
         self.assertTrue(harness.gateways[0].closed)
         self.assertFalse(self.paths.private_codex_socket.exists())
+
+    def test_sigkill_reaps_owned_wrapper_before_group_liveness_verdict(self):
+        harness = ServiceHarness()
+        reaped = {"value": False}
+
+        class DelayedKillProcess(FakeProcess):
+            def __init__(self, socket_path, mode=0o600):
+                super().__init__(socket_path, mode)
+                self.killed = False
+
+            def wait(self, timeout=None):
+                if not self.killed:
+                    raise subprocess.TimeoutExpired("codex", timeout)
+                reaped["value"] = True
+                self.returncode = -signal.SIGKILL
+                return self.returncode
+
+            def poll(self):
+                if self.killed:
+                    self.socket.close()
+                    reaped["value"] = True
+                    self.returncode = -signal.SIGKILL
+                return self.returncode
+
+        def spawn(argv, cwd, env):
+            socket_path = Path(argv[-1][len("unix://"):])
+            process = DelayedKillProcess(socket_path)
+            harness.processes.append(process)
+            harness.groups[process.pid] = process
+            return process
+
+        def signal_group(pgid, signum):
+            harness.group_signals.append((pgid, signum))
+            if signum == signal.SIGKILL:
+                harness.groups[pgid].killed = True
+
+        base = harness.deps()
+        harness.deps = lambda: GlobalWorkerServiceDeps(
+            spawn, base.create_connection, base.create_gateway,
+            base.get_process_group, base.current_process_group, signal_group,
+            lambda unused_pgid: not reaped["value"])
+        service = self.make_service(harness)
+        service.start()
+
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            lifecycle.terminate_owned(lease)
+
+        pid = harness.processes[0].pid
+        self.assertEqual(harness.group_signals,
+                         [(pid, signal.SIGTERM), (pid, signal.SIGKILL)])
+        self.assertTrue(reaped["value"])
 
     def test_reused_or_unverified_group_is_never_signalled(self):
         harness = ServiceHarness(); group = {"offset": 0}

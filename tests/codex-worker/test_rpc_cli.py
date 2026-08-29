@@ -777,6 +777,47 @@ class RpcServerTests(unittest.TestCase):
             "name": "legacy-a", "thread_id": "thread-a", "as_name": None}, 1)
         self.assertEqual(resolved["result"]["thread_id"], "thread-a")
 
+    def test_force_stop_during_stopping_returns_completed_and_shuts_rpc_server(self):
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
+                                          ListenerExposure)
+        from codex_worker.service_domain import ServiceConfig
+
+        class Service:
+            def status(self):
+                return GlobalWorkerServiceStatus(
+                    False, "ws://127.0.0.1:4500", "8.0.0", None,
+                    "/tmp/private.sock", ListenerExposure.LOOPBACK,
+                    GatewayAuthentication.NONE)
+
+        class Broker(FakeBroker):
+            def daemon_status(self):
+                return {"worker_names": ["known-idle"]}
+
+        class ClosedMaintenance:
+            def stop(self, force):
+                raise AssertionError("stopping convergence must not query inventory")
+
+        broker = Broker()
+        facade = ServiceFacade(ServiceFacadeDeps(
+            Service(), broker, ClosedMaintenance(), object(),
+            ServiceConfig("ws://127.0.0.1:4500", "8.0.0",
+                          "00000000-0000-0000-0000-000000000004")))
+        server = self.start_server(broker=broker, service_facade=facade)
+
+        response = rpc_call(
+            server.socket_path, "service/stop", {"force": True}, timeout=1.0)
+
+        self.assertEqual(response["result"], {
+            "action": "stop", "status": "completed", "forced": True,
+            "listener": None, "inventory": {"items": []},
+            "workers": {"active_names": [], "idle_names": ["known-idle"],
+                        "active_count": 0, "idle_count": 1, "total_count": 1},
+            "durable_state": "preserved",
+        })
+        server._test_thread.join(timeout=1.0)
+        self.assertFalse(server._test_thread.is_alive())
+
     def test_encode_response_preserves_the_shared_rpc_sum_type_serializer(self):
         encoded = encode_response("x", fault=RpcFault(-32001, "unknown", "unknown_session"))
         self.assertEqual(json.loads(encoded.decode("utf-8")), {

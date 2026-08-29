@@ -387,6 +387,7 @@ class GlobalWorkerService:
             self._deps.signal_process_group(pgid, signal.SIGKILL)
         deadline = time.monotonic() + 2.0
         while self._deps.process_group_exists(pgid) and time.monotonic() < deadline:
+            process.poll()
             time.sleep(0.01)
         if self._deps.process_group_exists(pgid):
             raise RuntimeError("owned Codex process group remained live")

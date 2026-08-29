@@ -1415,5 +1415,43 @@ class GlobalServiceFacadeTests(unittest.TestCase):
             facade.readiness(StatusServiceRequest())
         self.assertEqual(broker_error.exception.kind, "broker_error")
 
+    def test_force_stop_while_service_is_stopping_skips_closed_transport_inventory(self):
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.commands import StopServiceRequest
+        from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
+                                          ListenerExposure)
+        from codex_worker.service_domain import ServiceConfig
+
+        class Service:
+            def status(self):
+                return GlobalWorkerServiceStatus(
+                    False, "ws://127.0.0.1:4500", "8.1.0", None,
+                    "/tmp/private.sock", ListenerExposure.LOOPBACK,
+                    GatewayAuthentication.NONE)
+
+        class Broker:
+            def daemon_status(self):
+                return {"worker_names": ["known-idle"]}
+
+        class ClosedMaintenance:
+            def stop(self, force):
+                raise AssertionError("stopping convergence must not query closed transport")
+
+        facade = ServiceFacade(ServiceFacadeDeps(
+            Service(), Broker(), ClosedMaintenance(), object(),
+            ServiceConfig("ws://127.0.0.1:4500", "8.1.0",
+                          "00000000-0000-0000-0000-000000000003")))
+
+        result = facade.stop(StopServiceRequest(True))
+
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(result.value.to_dict(), {
+            "action": "stop", "status": "completed", "forced": True,
+            "listener": None, "inventory": {"items": []},
+            "workers": {"active_names": [], "idle_names": ["known-idle"],
+                        "active_count": 0, "idle_count": 1, "total_count": 1},
+            "durable_state": "preserved",
+        })
+
 if __name__ == "__main__":
     unittest.main()

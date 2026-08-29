@@ -769,6 +769,12 @@ class ServiceFacade:
 
     def stop(self, request: StopServiceRequest):
         try:
+            if not self.deps.service.status().ready:
+                daemon = self.deps.broker.daemon_status()
+                workers = WorkerImpact(
+                    [], sorted(daemon.get("worker_names", [])))
+                return Ok(MaintenanceResult.completed(
+                    "stop", ActiveInventory(), request.force, workers=workers))
             return self._maintenance_result(
                 self.deps.maintenance.stop(request.force))
         except BaseException as exc:
