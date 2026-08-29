@@ -100,7 +100,7 @@ PY
       2>"$RUN_DIR/cleanup-status-before.stderr" || before_rc=$?
     before_elapsed=$((SECONDS-started))
     started=$SECONDS
-    python3 - "$RUN_DIR/cleanup-status-before.json" "$RUNTIME_REAL" \
+    python3 - "$RUN_DIR/cleanup-status-before.json" "$RUNTIME" \
       "$RUN_DIR/cleanup-pid-binding.json" <<'PY' || pid_rc=$?
 import hashlib, json, os, pathlib, subprocess, sys
 status=json.load(open(sys.argv[1],encoding="utf-8"))["result"]
