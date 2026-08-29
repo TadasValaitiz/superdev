@@ -309,6 +309,8 @@ class MaintenanceResult:
                 raise ValueError("maintenance impact unavailable reason is invalid")
             if self.inventory is not None or self.workers is not None:
                 raise ValueError("unavailable maintenance impact cannot carry inventory")
+            if self.status == "completed" and not self.forced:
+                raise ValueError("unavailable maintenance completion must be forced")
         if self.status == "refused":
             if self.forced:
                 raise ValueError("maintenance refusal cannot be forced")

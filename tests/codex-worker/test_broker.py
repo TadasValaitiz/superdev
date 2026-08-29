@@ -272,6 +272,14 @@ class WorkerBrokerTests(unittest.TestCase):
         malformed["durable_state"] = "discarded"
         with self.assertRaises(ValueError):
             MaintenanceResult.from_dict(malformed)
+        malformed = dict(wire)
+        malformed["forced"] = False
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(malformed)
+        with self.assertRaises(ValueError):
+            MaintenanceResult.unavailable(
+                "stop", "completed", False, None,
+                "upstream_inventory_unavailable")
 
     def test_inventory_malformed_cursor_loop_and_upstream_error_all_fail_closed(self):
         failures = [
