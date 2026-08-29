@@ -183,7 +183,8 @@ def build_parser() -> argparse.ArgumentParser:
     stop_service.set_defaults(method="service/stop", managed_daemon=True)
     stop_service.add_argument(
         "--force", action="store_true",
-        help="interrupt every reported active name/session/thread/turn")
+        help=("interrupt every measured active name/session/thread/turn; accepts an "
+              "unknown global blast radius if degraded inventory is unavailable"))
     restart_service = daemon_sub.add_parser(
         "restart", help="dangerous supervised global restart",
         description="Restart the one global service while preserving durable state; active work refuses unless --force explicitly accepts global impact.")
@@ -191,7 +192,8 @@ def build_parser() -> argparse.ArgumentParser:
     restart_service.add_argument("--app-server-listen", type=_public_listener)
     restart_service.add_argument(
         "--force", action="store_true",
-        help="interrupt every reported active name/session/thread/turn")
+        help=("interrupt every measured active name/session/thread/turn; accepts an "
+              "unknown global blast radius if degraded inventory is unavailable"))
 
     migration = families.add_parser("migration", help="inspect or resolve legacy imports")
     migration_sub = migration.add_subparsers(
@@ -281,7 +283,8 @@ def _add_public_limits(parser: argparse.ArgumentParser) -> None:
     generic = ("Uses the one machine-wide service and global worker names. It may replace an "
                "incompatible idle service, but never forces active work or performs cleanup stop.")
     danger = ("Machine-wide and human-supervised. Active work refuses unless --force is "
-              "explicitly supplied; --force may interrupt every reported active turn.")
+              "explicitly supplied. Healthy force reports every measured active turn; "
+              "degraded force accepts an unknown global blast radius when inventory is unavailable.")
     raw = ("Without the expert global --socket bypass, requires the existing strictly ready "
            "service and never auto-starts it. --socket targets only that exact Unix endpoint.")
 

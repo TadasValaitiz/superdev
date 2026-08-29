@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.app_server import CodexCallError
-from codex_worker.broker import MaintenanceCoordinator, ModelSelectionError, WorkerBroker
+from codex_worker.broker import (FORCE_INVENTORY_TIMEOUT_SECONDS,
+                                 MaintenanceCoordinator, ModelSelectionError, WorkerBroker)
 from codex_worker.models import (ActiveInventory, ActiveThreadItem, IdentifierSelector,
                                  MaintenanceResult, RpcFault)
 from codex_worker.registry import SessionRegistry
@@ -49,6 +50,7 @@ class FakeCodex:
         self.control_hook = None
         self.steer_return_id = None
         self.calls = []
+        self.call_timeouts = []
         self.thread_pages = {}
         self.thread_reads = {}
         self.turn_pages = {}
@@ -57,7 +59,8 @@ class FakeCodex:
     def list_models(self):
         return list(self.models)
 
-    def call(self, method, params):
+    def call(self, method, params, timeout=120.0):
+        self.call_timeouts.append((method, timeout))
         self.calls.append((method, dict(params)))
         if method == "thread/list":
             value = self.thread_pages.get(params.get("cursor"))
@@ -282,6 +285,9 @@ class WorkerBrokerTests(unittest.TestCase):
                 "upstream_inventory_unavailable")
 
     def test_inventory_malformed_cursor_loop_and_upstream_error_all_fail_closed(self):
+        for timeout in (0, -1, float("nan"), float("inf"), True):
+            with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                self.broker.list_active_threads(timeout=timeout)
         failures = [
             {None: {"data": "not-a-list", "nextCursor": None,
                     "backwardsCursor": None}},
@@ -329,7 +335,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(len(self.codex.start_calls), 1)
         self.assertFalse(self.codex.shutdown_called)
 
-    def test_nonforce_reports_unmapped_and_force_skips_blocked_inventory(self):
+    def test_healthy_force_reports_complete_unmapped_inventory_before_termination(self):
         self.registry.create_worker(
             "idle-thread", self.cwd, "idle-worker", "medium",
             "fake-model-a", "medium", "full")
@@ -361,15 +367,27 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(lifecycle.terminated, 0)
 
         self.codex.calls = []
+        self.codex.call_timeouts = []
         forced = coordinator.stop(force=True)
         self.assertEqual(forced.status, "completed")
         self.assertTrue(forced.forced)
-        self.assertIsNone(forced.inventory)
-        self.assertIsNone(forced.workers)
-        self.assertEqual(forced.impact_unavailable_reason,
-                         "upstream_inventory_unavailable")
-        self.assertEqual(self.codex.calls, [])
+        self.assertEqual(forced.inventory.items[0].thread_id, "tui-thread")
+        self.assertIsNone(forced.impact_unavailable_reason)
+        self.assertEqual(self.codex.calls[0],
+                         ("thread/list", {"sourceKinds": []}))
+        inventory_timeout = next(
+            timeout for method, timeout in self.codex.call_timeouts
+            if method == "thread/list")
+        self.assertGreater(inventory_timeout, 0)
+        self.assertLessEqual(inventory_timeout,
+                             FORCE_INVENTORY_TIMEOUT_SECONDS)
         self.assertEqual(lifecycle.terminated, 1)
+        self.codex.calls = []
+        restarted = coordinator.restart("ws://127.0.0.1:4600", force=True)
+        self.assertEqual(restarted.inventory.items[0].thread_id, "tui-thread")
+        self.assertEqual(restarted.listener, "ws://127.0.0.1:4600")
+        self.assertIsNone(restarted.impact_unavailable_reason)
+        self.assertEqual(lifecycle.terminated, 2)
         self.assertFalse(hasattr(coordinator, "gate"))
         self.assertFalse(hasattr(coordinator, "terminate_owned"))
 
@@ -428,7 +446,8 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual((result.status, result.forced), ("completed", True))
         self.assertEqual(result.impact_unavailable_reason,
                          "upstream_inventory_unavailable")
-        self.assertEqual(self.codex.calls, [])
+        self.assertEqual(self.codex.calls,
+                         [("thread/list", {"sourceKinds": []})])
         self.assertEqual(lifecycle.terminated, 1)
 
     def test_owned_teardown_error_is_a_typed_maintenance_failure(self):

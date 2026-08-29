@@ -119,7 +119,9 @@ codex-worker CLI ── protected Unix RPC ── GlobalWorkerService
   sole automatic restart path. Maintenance acquires the service mutation gate, drains forwarded
   mutations, pages authoritative all-source `thread/list`, and fails closed on inventory error.
   Explicit force is the D30 exception: it excludes new mutations but may close an already-blocked
-  owned request, skips upstream inventory, and tears down only the verified owned lifecycle.
+  owned request. Healthy force uses bounded authoritative inventory and reports complete impact;
+  degraded inventory failure falls back to explicit unavailable impact before tearing down only
+  the verified owned lifecycle.
 
 **Interface / contract:** `ServiceStatusView` includes worker/app-server PIDs, versions,
 listener, exposure/auth projection, worker/session/active-turn counts, migration state,
@@ -366,7 +368,8 @@ The active inventory is app-server-wide, not registry-wide:
 page thread/list(cursor, sourceKinds=[])
   collect every thread where status.type == "active"
   non-force inventory/page/protocol error -> refuse maintenance
-  explicit force -> skip upstream inventory, report impact unavailable, tear down verified owner
+  healthy explicit force -> bounded inventory, complete impact, tear down verified owner
+  degraded force inventory failure -> impact unavailable, tear down verified owner
 ```
 
 **Depends on:** §5.1 inventory; §5.3 conflicts.
@@ -468,7 +471,7 @@ regressions that still govern the new topology.
 | AH5 | An occupied default port produces one typed refusal, preserves the peer, and never falls back. | UC5 / R2 | fast + live | Task 2 fast/real-bind foundation: [C1 review](../reviews/2026-08-28-codex-worker-shared-app-server-c1.md#task-2-foundation--private-websocket-transport-and-maintenance-gateway); live default-port receipt remains Task 5. |
 | AH6 | Idle version replacement restarts durably, while any active turn blocks replacement without interruption. | UC6 / R7, R8 | fast + live | Task 3 exact-gate inventory/refusal foundation: [C2 review](../reviews/2026-08-28-codex-worker-shared-app-server-c2.md#task-3-foundation--authoritative-reconciliation-and-complete-activity-inventory); public replacement and live receipt remain Tasks 4–5. |
 | AH7 | Real legacy registries import uniquely, deduplicate identically, and expose divergent names with every identity and explicit resolution. | UC7 / R9 | fast + live fixture | Task 1 fast foundation: [C1 review](../reviews/2026-08-28-codex-worker-shared-app-server-c1.md#task-1-foundation--global-domain-and-lossless-migration); live-sanitized receipt remains Task 5. |
-| AH8 | Stop/restart is absent from normal skill completion, refuses active work, and force reports every affected thread—including `unmapped_tui` rows—under supervised use. | UC8 / R7 | fast + checkride | Task 3 complete-inventory/force-impact foundation: [C2 review](../reviews/2026-08-28-codex-worker-shared-app-server-c2.md#task-3-foundation--authoritative-reconciliation-and-complete-activity-inventory); public supervised surface and checkride remain Tasks 4–5. |
+| AH8 | Stop/restart is absent from normal skill completion, refuses active work, and healthy force reports every affected thread—including `unmapped_tui` rows—under supervised use; degraded force explicitly reports an unknown/unavailable blast radius without fabricated identities. | UC8 / R7 | fast + checkride | Task 3 complete-inventory/force-impact foundation: [C2 review](../reviews/2026-08-28-codex-worker-shared-app-server-c2.md#task-3-foundation--authoritative-reconciliation-and-complete-activity-inventory); public supervised surface and checkride remain Tasks 4–5. |
 | AH9 | Callback delivery still reaches the captured Claude room while global lookup and TUI control remain independent of Claude session identity. | UC9 / R6 | live | Task 3 callback-independence/exactly-once reconciliation foundation: [C2 review](../reviews/2026-08-28-codex-worker-shared-app-server-c2.md#task-3-foundation--authoritative-reconciliation-and-complete-activity-inventory); composed live receipt remains Task 5. |
 | AH10 | Installed Python 3.9 UV tool and all existing command families operate from unrelated directories through the global service. | UC10 / R10, R11 | package + live |  |
 | AH11 | The global service binds the exact connectable public listener override and status honestly reports non-loopback/auth exposure without leaking credentials. | UC10 / R11 | fast + live fixture | Task 2 exact-override/exposure foundation: [C1 review](../reviews/2026-08-28-codex-worker-shared-app-server-c1.md#task-2-foundation--private-websocket-transport-and-maintenance-gateway); installed live receipt remains Task 5. |

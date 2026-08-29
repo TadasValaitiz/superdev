@@ -158,7 +158,8 @@ class _Native:
                          "createdAt": 1, "updatedAt": 2}
         return {"goal": self.goal}
 
-    def call(self, method, params):
+    def call(self, method, params, timeout=120.0):
+        del timeout
         self.native_calls.append((method, dict(params)))
         if method == "thread/goal/set":
             return self.goal_set(params["threadId"], params.get("objective"),

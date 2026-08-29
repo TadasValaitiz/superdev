@@ -667,10 +667,12 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   synchronously enumerated Codex threads. A stopped or degraded owned child therefore prevented
   the explicit recovery operation that was supposed to terminate it.
 - **Decided:** `daemon stop --force` and `daemon restart --force` use strict internal readiness
-  for their managed preflight and, under the shared maintenance drain, never call upstream inventory. The forced drain excludes
-  new mutations but may proceed past an already-forwarded request that cannot settle; owned
-  teardown closes that request while terminating only the pinned, identity-verified lifecycle.
-- **Honesty law:** when force cannot measure upstream impact, both `inventory` and `workers` report
+  for their managed preflight. Under the shared maintenance drain, a responsive healthy runtime
+  gets one bounded authoritative inventory and reports every affected thread, including
+  `unmapped_tui`. If that bounded inventory fails or times out, force may continue against only the
+  pinned, identity-verified lifecycle. The forced drain excludes new mutations but may proceed past
+  an already-forwarded request that cannot settle; owned teardown closes that request.
+- **Honesty law:** when degraded force cannot measure upstream impact, both `inventory` and `workers` report
   `availability: unavailable` with reason `upstream_inventory_unavailable`; they contain no
   invented rows, names, IDs, or counts. Non-force still attempts authoritative inventory and
   refuses without teardown if it is unavailable. Any incomplete owned teardown remains a typed,

@@ -294,7 +294,9 @@ class PublicHelpLimitsTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()) as output:
                     parser.parse_args(["daemon", action, "--help"])
             help_text = output.getvalue()
-            for fragment in ("Machine-wide", "Active work", "--force", "every reported"):
+            for fragment in ("Machine-wide", "Active work", "--force",
+                             "every measured", "unknown global blast radius",
+                             "inventory is unavailable"):
                 self.assertIn(fragment, help_text)
 
     def test_managed_raw_help_states_no_autostart_boundary(self):

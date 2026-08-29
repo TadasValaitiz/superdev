@@ -1,6 +1,8 @@
 """High-level durable session and turn contract for the Codex worker daemon."""
 import os
 import shlex
+import time
+import math
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -33,6 +35,9 @@ from .runtime import (
 from .service_domain import DEFAULT_PUBLIC_LISTENER, AttachView, validate_public_listener
 from .service import OwnedTeardownError
 from .websocket_gateway import DrainLease, ServiceMaintenanceGate
+
+
+FORCE_INVENTORY_TIMEOUT_SECONDS = 2.0
 
 
 class ModelSelectionError(RpcFault):
@@ -550,8 +555,12 @@ class WorkerBroker:
         except CodexProtocolError as exc:
             raise self._from_lower(exc, record) from exc
 
-    def list_active_threads(self) -> ActiveInventory:
+    def list_active_threads(self, timeout: float = 120.0) -> ActiveInventory:
         """Page the all-source app-server inventory; any ambiguity fails closed."""
+        if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
+                or not math.isfinite(timeout) or timeout <= 0):
+            raise ValueError("inventory timeout must be positive")
+        deadline = time.monotonic() + timeout
         try:
             records = self.registry.list()
         except RegistryError as exc:
@@ -566,7 +575,10 @@ class WorkerBroker:
                 params = {"sourceKinds": []}  # type: JsonObject
                 if cursor is not None:
                     params["cursor"] = cursor
-                result = self.codex.call("thread/list", params)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CodexCallError("timeout", "thread/list")
+                result = self.codex.call("thread/list", params, timeout=remaining)
                 self._validate_inventory_page(result)
                 for thread in result["data"]:
                     status = thread["status"]
@@ -586,7 +598,11 @@ class WorkerBroker:
             raise self._codex_fault(exc) from exc
         items = []
         for thread_id, active_flags in active.items():
-            turn_id = self._inventory_turn_id(thread_id)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._codex_fault(
+                    CodexCallError("timeout", "thread/read"))
+            turn_id = self._inventory_turn_id(thread_id, remaining)
             record = by_thread.get(thread_id)
             if record is None:
                 items.append(ActiveThreadItem(
@@ -597,10 +613,10 @@ class WorkerBroker:
                     turn_id, active_flags))
         return ActiveInventory(items)
 
-    def _inventory_turn_id(self, thread_id: str) -> str:
+    def _inventory_turn_id(self, thread_id: str, timeout: float) -> str:
         try:
             result = self.codex.call("thread/read", {
-                "threadId": thread_id, "includeTurns": True})
+                "threadId": thread_id, "includeTurns": True}, timeout=timeout)
             thread = result.get("thread") if isinstance(result, dict) else None
             turns = thread.get("turns") if isinstance(thread, dict) else None
             active = ([turn for turn in turns
@@ -1026,14 +1042,15 @@ class MaintenanceCoordinator:
                 return MaintenanceResult.completed(
                     action, ActiveInventory(), force, listener,
                     WorkerImpact([], names))
-            if force:
-                self._terminate_owned(lease)
-                return MaintenanceResult.unavailable(
-                    action, "completed", True, listener,
-                    "upstream_inventory_unavailable")
             try:
-                inventory = self._broker.list_active_threads()
+                inventory = self._broker.list_active_threads(
+                    timeout=FORCE_INVENTORY_TIMEOUT_SECONDS if force else 120.0)
             except RpcFault:
+                if force:
+                    self._terminate_owned(lease)
+                    return MaintenanceResult.unavailable(
+                        action, "completed", True, listener,
+                        "upstream_inventory_unavailable")
                 return MaintenanceResult.unavailable(
                     action, "refused", False, listener,
                     "upstream_inventory_unavailable")

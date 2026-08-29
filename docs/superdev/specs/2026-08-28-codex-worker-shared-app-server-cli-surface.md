@@ -213,9 +213,11 @@ codex-worker daemon stop [--force]
 
 These commands are dangerous maintenance controls. Without `--force`, either refuses when
 any turn is active, or when authoritative inventory is unavailable. With `--force`, a responsive
-runtime may report measured impact; a degraded runtime reports inventory and worker impact as
+healthy runtime reports every measured affected thread, including unmapped TUI work; a degraded
+runtime reports inventory and worker impact as
 explicitly unavailable, without invented names/IDs/counts, before terminating only the verified
-owned global runtime. The skill and normal automation MUST NOT invoke stop or restart as cleanup.
+owned global runtime. Selecting force therefore accepts an unknown global blast radius when
+inventory is unavailable. The skill and normal automation MUST NOT invoke stop or restart as cleanup.
 A caller disconnect never stops the service.
 
 `daemon shutdown` is removed from the public grammar. The internal RPC shutdown method uses
