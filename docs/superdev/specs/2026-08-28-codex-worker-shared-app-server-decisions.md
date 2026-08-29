@@ -668,7 +668,8 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   the explicit recovery operation that was supposed to terminate it.
 - **Decided:** `daemon stop --force` and `daemon restart --force` use strict internal readiness
   for their managed preflight. Under the shared maintenance drain, a responsive healthy runtime
-  gets one bounded authoritative inventory and reports every affected thread, including
+  gets one authoritative inventory bounded end-to-end across send-lock acquisition, transport,
+  retries, pagination, and active-thread reads, and reports every affected thread, including
   `unmapped_tui`. If that bounded inventory fails or times out, force may continue against only the
   pinned, identity-verified lifecycle. The forced drain excludes new mutations but may proceed past
   an already-forwarded request that cannot settle; owned teardown closes that request.

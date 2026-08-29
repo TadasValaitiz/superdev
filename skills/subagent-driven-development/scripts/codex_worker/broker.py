@@ -3,6 +3,8 @@ import os
 import shlex
 import time
 import math
+import queue
+import threading
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -1043,8 +1045,8 @@ class MaintenanceCoordinator:
                     action, ActiveInventory(), force, listener,
                     WorkerImpact([], names))
             try:
-                inventory = self._broker.list_active_threads(
-                    timeout=FORCE_INVENTORY_TIMEOUT_SECONDS if force else 120.0)
+                inventory = (self._bounded_force_inventory() if force else
+                             self._broker.list_active_threads(timeout=120.0))
             except RpcFault:
                 if force:
                     self._terminate_owned(lease)
@@ -1066,6 +1068,33 @@ class MaintenanceCoordinator:
             self._terminate_owned(lease)
             return MaintenanceResult.completed(
                 action, inventory, force, listener, workers)
+
+    def _bounded_force_inventory(self) -> ActiveInventory:
+        outcome = queue.Queue(maxsize=1)  # type: queue.Queue
+
+        def load() -> None:
+            try:
+                outcome.put((True, self._broker.list_active_threads(
+                    timeout=FORCE_INVENTORY_TIMEOUT_SECONDS)))
+            except BaseException as exc:
+                outcome.put((False, exc))
+
+        worker = threading.Thread(
+            target=load, name="codex-force-inventory", daemon=True)
+        worker.start()
+        worker.join(timeout=FORCE_INVENTORY_TIMEOUT_SECONDS)
+        if worker.is_alive():
+            raise RpcFault(
+                -32020, "forced maintenance inventory timed out",
+                "codex_failure", details={"reason": "inventory_timeout"})
+        succeeded, value = outcome.get_nowait()
+        if succeeded:
+            if not isinstance(value, ActiveInventory):
+                raise TypeError("force inventory returned an invalid result")
+            return value
+        if isinstance(value, RpcFault):
+            raise value
+        raise value
 
     def _terminate_owned(self, lease: DrainLease) -> None:
         try:

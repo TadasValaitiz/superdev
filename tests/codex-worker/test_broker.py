@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from dataclasses import FrozenInstanceError
 from concurrent.futures import ThreadPoolExecutor
@@ -449,6 +450,42 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(self.codex.calls,
                          [("thread/list", {"sourceKinds": []})])
         self.assertEqual(lifecycle.terminated, 1)
+
+    def test_force_inventory_bounds_blocked_send_before_unavailable_fallback(self):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        original_call = self.codex.call
+
+        def blocked_call(method, params, timeout=120.0):
+            if method == "thread/list":
+                entered.set()
+                release.wait(timeout=1.0)
+                finished.set()
+            return original_call(method, params, timeout)
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        self.codex.call = blocked_call
+        started = time.monotonic()
+        try:
+            with mock.patch("codex_worker.broker.FORCE_INVENTORY_TIMEOUT_SECONDS", 0.05):
+                result = MaintenanceCoordinator(
+                    self.broker, lifecycle).stop(force=True)
+        finally:
+            release.set()
+        self.assertTrue(entered.is_set())
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(lifecycle.terminated, 1)
+        self.assertTrue(finished.wait(timeout=1.0))
 
     def test_owned_teardown_error_is_a_typed_maintenance_failure(self):
         from codex_worker.broker import MaintenanceTerminationError
