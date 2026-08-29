@@ -997,12 +997,9 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
         if "\n" in command or "\r" in command:
             raise ValueError("recovery action must be one direct argv")
         tokens = shlex.split(command)
-        shell_lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|`$()")
-        shell_lexer.whitespace_split = True
-        shell_tokens = list(shell_lexer)
         if not tokens or "<" in command or ">" in command:
             raise ValueError("recovery action is not literal")
-        if any(token and set(token) <= set(";&|`$()") for token in shell_tokens):
+        if _has_unquoted_shell_syntax(command):
             raise ValueError("recovery action must be one direct argv")
         if tokens[0] == "codex-worker":
             if any(tokens[index:index + 2] == ["daemon", "serve"]
@@ -1029,3 +1026,28 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
         elif (not Path(tokens[0]).is_absolute() or not Path(tokens[0]).is_file()
               or not os.access(tokens[0], os.X_OK)):
             raise ValueError("recovery action executable does not exist: %s" % tokens[0])
+
+
+def _has_unquoted_shell_syntax(command: str) -> bool:
+    quote = None
+    escaped = False
+    for character in command:
+        if character in "\r\n":
+            return True
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+            continue
+        if quote is not None:
+            if character == quote:
+                quote = None
+            elif quote == '"' and character in "$`":
+                return True
+            continue
+        if character in "'\"":
+            quote = character
+        elif character in ";&|`$()#*?[]{}":
+            return True
+    return escaped or quote is not None

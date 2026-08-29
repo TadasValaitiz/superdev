@@ -221,12 +221,16 @@ class RecoveryActionTests(unittest.TestCase):
                         "codex-worker daemon serve -h --bad",
                         "missing-tool status", "/etc/hosts",
                         "/bin/ls /tmp; /usr/bin/false",
+                        "/bin/ls /tmp # ignored",
+                        "/bin/ls /tmp/*",
                         "/bin/ls /tmp\n/usr/bin/false",
                         "/bin/ls /tmp # comment\n/usr/bin/false"):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, "recovery"):
                 cli._validate_wire_recovery_actions({
                     "error": {"data": {"next_actions": [
                         {"command": command, "reason": "bad"}]}}})
+        cli._validate_wire_recovery_actions({"error": {"data": {"next_actions": [{
+            "command": "codex-worker run --name x --prompt ';'", "reason": "safe"}]}}})
 
     def test_completion_recovery_commands_are_inside_the_exhaustive_guard(self):
         for command in ("missing-tool status", "codex-worker daemon serve --bad",
