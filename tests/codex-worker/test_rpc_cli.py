@@ -1418,6 +1418,35 @@ class CliTests(unittest.TestCase):
             "kind", "retryable", "source", "details", "known_ids", "next_actions",
         })
 
+    def test_known_stopped_worker_rpc_refusal_keeps_ids_and_runnable_actions(self):
+        known = {
+            "name": "stopped-worker", "session_id": "session-known",
+            "thread_id": "thread-known", "turn_id": None,
+        }
+        actions = [
+            {"command": "codex-worker daemon start", "reason": "Start the service"},
+            {"command": "codex-worker status --name stopped-worker",
+             "reason": "Check the known worker"},
+            {"command": "codex --remote ws://127.0.0.1:4500 resume thread-known",
+             "reason": "Resume the known thread"},
+        ]
+
+        def fake_stopped(socket_path, method, params, timeout):
+            fault = FacadeFault(
+                FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped",
+                "daemon_stopped", known_ids=known, next_actions=actions)
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "error": rpc_module.FacadeRpcFault(fault).to_dict()}
+
+        completed = self.run_cli(
+            ["status", "--name", known["name"]], fake_rpc=fake_stopped,
+            include_socket=False)
+
+        payload = self.assert_json_error(completed, 3, "daemon_stopped")
+        self.assertEqual(payload["error"]["data"]["known_ids"], known)
+        self.assertEqual(payload["error"]["data"]["next_actions"], actions)
+        cli._validate_wire_recovery_actions(payload)
+
     def test_legacy_instance_environment_has_no_routing_effect(self):
         with mock.patch.dict(os.environ, {"CODEX_WORKER_INSTANCE": "hostile; no"}), \
                 mock.patch.object(cli, "rpc_call", side_effect=self.fake_rpc_success), \

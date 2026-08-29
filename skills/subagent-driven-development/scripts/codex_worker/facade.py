@@ -217,7 +217,7 @@ class WorkerFacade:
                                                 response.latest_turn, callback)
             return Ok(response)
         except (UnknownSession, SessionDetached):
-            return Err(self._stopped_fault(request.name, None))
+            return Err(self._stopped_fault(request.name, record))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, request.name))
 

@@ -24,7 +24,8 @@ from codex_worker.instance import InstanceIdentity
 from codex_worker.commands import InstanceSource
 from codex_worker.models import IdentifierSelector, RpcFault
 from codex_worker.registry import SessionRegistry
-from codex_worker.runtime import RuntimeStore
+from codex_worker.runtime import RuntimeStore, UnknownSession
+from codex_worker import cli as worker_cli
 from codex_worker.callback_store import CallbackStore
 from codex_worker.callback_dispatcher import TerminalCallbackDispatcher
 from codex_worker.websocket_gateway import ServiceMaintenanceGate
@@ -1279,6 +1280,29 @@ class FacadeTests(unittest.TestCase):
             ["codex", "--remote", "ws://127.0.0.1:4500", "resume", record.thread_id],
         ])
         self.assertNotIn("<", json.dumps(fault.next_actions))
+
+    def test_fresh_runtime_missing_known_worker_preserves_ids_and_runnable_stopped_actions(self):
+        record = self._record("stopped-fresh-runtime")
+        self.runtime.status = lambda unused_session: (_ for _ in ()).throw(
+            UnknownSession("fresh runtime has no attachment"))
+
+        result = self._facade().status(WorkerStatusRequest(record.name))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual((result.error.code, result.error.kind),
+                         (FacadeFaultCode.DAEMON_STOPPED, "daemon_stopped"))
+        self.assertEqual(result.error.known_ids, {
+            "name": record.name, "session_id": record.session_id,
+            "thread_id": record.thread_id, "turn_id": None,
+        })
+        self.assertEqual([shlex.split(action["command"])
+                          for action in result.error.next_actions], [
+            ["codex-worker", "daemon", "start"],
+            ["codex-worker", "status", "--name", record.name],
+            ["codex", "--remote", "ws://127.0.0.1:4500", "resume", record.thread_id],
+        ])
+        worker_cli._validate_wire_recovery_actions({
+            "error": {"data": result.error.to_dict()}})
 
     def test_recovery_commands_ignore_legacy_instance_identity(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
