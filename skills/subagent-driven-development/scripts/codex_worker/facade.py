@@ -374,6 +374,11 @@ class WorkerFacade:
     def _corrected_start_actions(self, request, supported_efforts):
         if not supported_efforts or request.output_schema is not None:
             return []
+        dynamic_values = [request.prompt, request.cwd, request.model, request.goal,
+                          supported_efforts[0]]
+        if any(isinstance(value, str) and ("\r" in value or "\n" in value)
+               for value in dynamic_values):
+            return []
         args = [
             "start", "--name", shlex.quote(request.name),
             "--prompt", shlex.quote(request.prompt),

@@ -22,7 +22,7 @@ class ClaudeEvidenceTests(unittest.TestCase):
         self.assertIn('install -m 600 "$REAL_HOME/.claude.json"', source)
         self.assertIn('AUTH_FILE_DEV_INO=$(stat', source)
         self.assertIn('os.unlink(str(auth))', source)
-        self.assertIn('"external_claude_config_modified":False', source)
+        self.assertNotIn('"external_claude_config_modified":False', source)
         self.assertLess(source.index('cleanup-owner-before.json'),
                         source.index('daemon stop >"$RUN_DIR/cleanup-stop.json"'))
         self.assertIn('cleanup-pid-binding.json', source)

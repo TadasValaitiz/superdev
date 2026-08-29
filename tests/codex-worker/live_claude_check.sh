@@ -193,7 +193,6 @@ value={"status":"MEASURED cleanup", "commands":rows,
        "owner_token_verified":int(sys.argv[7]) == 0,
        "isolated_auth_copy_created":bool(sys.argv[8]),
        "isolated_auth_copy_removed":bool(sys.argv[8]) and int(sys.argv[9]) == 0,
-       "external_claude_config_modified":False,
        "runtime_path":runtime, "runtime_deleted":False}
 output.write_text(json.dumps(value,indent=2,sort_keys=True)+"\n", encoding="utf-8")
 PY

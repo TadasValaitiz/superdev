@@ -589,6 +589,20 @@ class FacadeTests(unittest.TestCase):
             },
         })
 
+    def test_unsupported_effort_multiline_values_omit_unpasteable_action(self):
+        self.broker.model_list = lambda: {"models": [{
+            "id": "gpt-5.6-terra", "is_default": True,
+            "supported_efforts": ["low"],
+        }]}
+
+        result = self._facade().start(StartWorkerRequest(
+            name="retry-multiline", prompt="line one\nline two",
+            cwd=self.cwd, effort="high"))
+
+        self.assertIsInstance(result, Err)
+        self.assertEqual(result.error.kind, "effort_unsupported")
+        self.assertEqual(result.error.next_actions, [])
+
     def _facade(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
         return WorkerFacade(FacadeDeps(self.registry, self.broker, self.runtime,
