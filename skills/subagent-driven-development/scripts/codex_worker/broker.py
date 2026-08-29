@@ -1036,6 +1036,11 @@ class MaintenanceCoordinator:
         if type(force) is not bool:
             raise ValueError("force must be bool")
         with self._gate.drain(force=force) as lease:
+            if force and self._gate.active_mutations:
+                self._terminate_owned(lease)
+                return MaintenanceResult.unavailable(
+                    action, "completed", True, listener,
+                    "upstream_inventory_unavailable")
             if self._lifecycle.stopping():
                 from .models import WorkerImpact
                 names = sorted(record.name for record in self._broker.registry.list()

@@ -487,6 +487,38 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(lifecycle.terminated, 1)
         self.assertTrue(finished.wait(timeout=1.0))
 
+    def test_force_with_unsettled_mutation_never_claims_measured_impact(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        def mutate():
+            with self.gate.mutation("thread/start"):
+                entered.set()
+                release.wait(timeout=1.0)
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        mutation = threading.Thread(target=mutate)
+        mutation.start()
+        self.assertTrue(entered.wait(timeout=1.0))
+        lifecycle = Lifecycle(self.gate)
+        try:
+            result = MaintenanceCoordinator(
+                self.broker, lifecycle).stop(force=True)
+        finally:
+            release.set()
+            mutation.join(timeout=1.0)
+
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(self.codex.calls, [])
+        self.assertEqual(lifecycle.terminated, 1)
+
     def test_owned_teardown_error_is_a_typed_maintenance_failure(self):
         from codex_worker.broker import MaintenanceTerminationError
         from codex_worker.service import OwnedTeardownError

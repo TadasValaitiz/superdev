@@ -119,7 +119,8 @@ codex-worker CLI ── protected Unix RPC ── GlobalWorkerService
   sole automatic restart path. Maintenance acquires the service mutation gate, drains forwarded
   mutations, pages authoritative all-source `thread/list`, and fails closed on inventory error.
   Explicit force is the D30 exception: it excludes new mutations but may close an already-blocked
-  owned request. Healthy force uses end-to-end bounded authoritative inventory and reports complete impact;
+  owned request. Healthy force with zero already-forwarded mutations uses end-to-end bounded
+  authoritative inventory and reports complete impact; any unsettled mutation makes impact unavailable;
   degraded inventory failure falls back to explicit unavailable impact before tearing down only
   the verified owned lifecycle.
 
