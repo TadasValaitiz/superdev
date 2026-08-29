@@ -513,3 +513,63 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** `ServicePaths`, legacy compatibility models, migration planner/commit order, callback
   store import API, artifact evidence and AH7/AH9.
 - **Revisit-when:** callbacks move into one transactional database with registry/migration state.
+
+## D21 — Separate internal startup readiness from authoritative public status
+**When:** 2026-08-29T00:00:00Z · **Phase:** build · **Status:** provisional (Task 4 interface erratum)
+**Decided by:** operator after Task 5 isolated live startup exposed cold-inventory coupling
+
+- **Trigger:** the managed child bound both its private RPC socket and public listener in about
+  200 ms, but the parent terminated it at the two-second startup deadline. Its readiness poll used
+  public `service/status`, whose authoritative projection synchronously enumerates upstream Codex
+  threads; a cold or blocked inventory made a healthy service look unready.
+- **Options weighed:** lengthen startup timeouts, weaken public status, or add one private liveness
+  handshake. Longer waits retain the incorrect dependency, while weakening status loses the
+  operator's authoritative inventory view.
+- **Decided:** add private JSON-RPC `service/readiness`, absent from CLI parsing and help. It reports
+  only exact readiness, service version, daemon/app-server PIDs, configured listener, and the
+  pre-readiness migration invariant. The managed startup/reuse loop validates the closed response,
+  listener, and exact version without enumerating threads. Malformed and wrong-version responses
+  terminate only the just-spawned generation and return typed refusals.
+- **Public contract:** `service/status` remains authoritative and may be slower because it retains
+  inventory and migration projection. Explicit `daemon start` still returns that public shape after
+  the private readiness gate; common worker commands use only the private gate.
+- **Rests on:** D4/D10/D14/D17; Task 5 live evidence; strict dataclass seam exception D18.
+- **Affects:** Task 4 manager/facade/RPC interface, startup regression tests, live common commands.
+- **Revisit-when:** Codex exposes a constant-time authoritative thread inventory or an atomic native
+  service readiness primitive.
+
+## D22 — Own and verify the complete Codex process group
+**When:** 2026-08-29T00:04:00Z · **Phase:** build · **Status:** provisional (Task 4 lifecycle erratum)
+**Decided by:** operator after Task 5 lifecycle evidence exposed a reparented native child
+
+- **Trigger:** supervised restart terminated the spawned Node `codex` wrapper but left its native
+  app-server child reparented to PID 1. The replacement could become ready while an owned child and
+  private listener from the prior generation remained alive.
+- **Decided:** spawn Codex with a new session, pin the verified PGID equal to its positive leader PID,
+  and reject group 0, the daemon's current group, or any changed leader→group mapping. Maintenance
+  sends TERM, then KILL when necessary, only to that pinned group; it reaps the wrapper and verifies
+  the group is absent before termination returns and replacement readiness is possible.
+- **Safety law:** no unpinned, reused, current, or zero PGID is signalled. A post-spawn identity
+  mismatch fails closed. Direct wrapper termination is limited to the pre-pin failure path.
+- **Evidence:** deterministic descendant/reparent, group-zero/current, and reuse controls plus the
+  isolated lifecycle lane's active refusal, supervised force, and no-descendant/no-listener check.
+- **Affects:** Task 4 service ownership seam and Task 5 finally-safe cleanup.
+- **Revisit-when:** Codex exposes a single native process whose lifecycle provably includes every
+  descendant, or the launcher supplies an equivalent verified process-tree handle.
+
+## D23 — Accept additive fields in the native rate-limit envelope
+**When:** 2026-08-29T00:24:00Z · **Phase:** build · **Status:** provisional (measured compatibility erratum)
+**Decided by:** implementer after the required real-Claude caller exercised Codex 0.150.1
+
+- **Trigger:** the live `limits` command reached Codex 0.150.1 successfully, but the adapter
+  rejected the response because it required the top-level envelope to contain only
+  `rateLimits`. The measured response also contained `rateLimitsByLimitId` and
+  `rateLimitResetCredits`, while `rateLimits` remained a JSON object with the expected data.
+- **Decided:** require a present object-valued `rateLimits` field and ignore additive top-level
+  fields. Missing or non-object `rateLimits` remains a typed protocol error; no limit value is
+  inferred, merged, or relabelled.
+- **Evidence:** a deterministic additive-field positive control plus malformed-envelope negative
+  control, followed by the real Claude PATH-only `limits` success on Codex 0.150.1.
+- **Affects:** the inherited limits family and Task 5 real-Claude acceptance evidence only.
+- **Revisit-when:** Codex removes or retypes `rateLimits`, or the product decides to expose the
+  additional limit-ID/reset-credit families publicly.

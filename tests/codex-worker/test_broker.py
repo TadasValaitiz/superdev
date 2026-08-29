@@ -472,6 +472,20 @@ class WorkerBrokerTests(unittest.TestCase):
             NativeCodexProxy(Raw()).rate_limits_read()
         self.assertEqual(caught.exception.kind, "protocol_error")
 
+    def test_native_proxy_accepts_additive_rate_limit_envelope_fields(self):
+        from codex_worker.broker import NativeCodexProxy
+        class Raw:
+            def call(self, method, params):
+                return {
+                    "rateLimits": {"primary": {"usedPercent": 21}},
+                    "rateLimitsByLimitId": {"codex": {"primary": {"usedPercent": 21}}},
+                    "rateLimitResetCredits": {"availableCount": 0, "credits": []},
+                }
+
+        value = NativeCodexProxy(Raw()).rate_limits_read()
+
+        self.assertEqual(value["rateLimits"]["primary"]["usedPercent"], 21)
+
     def test_read_only_resume_has_no_creation_only_fallback_field(self):
         from codex_worker.broker import SessionResumeSpec
         from codex_worker.commands import AccessMode

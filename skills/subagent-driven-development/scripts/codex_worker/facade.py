@@ -19,7 +19,8 @@ from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatu
                        FACADE_FAULT_KINDS, MigrationStatusRequest,
                        MigrationStatusResponse,
                        ResolveLegacyConflictRequest, RestartServiceRequest,
-                       ServiceStatusResponse, StatusServiceRequest, StopServiceRequest)
+                       ServiceReadinessResponse, ServiceStatusResponse,
+                       StatusServiceRequest, StopServiceRequest)
 from .models import ActiveInventory, IdentifierSelector, RpcFault, SessionRecord
 from .registry import LegacyNameConflict, RegistryError
 from .runtime import SessionDetached, UnknownSession, WaitTimeout
@@ -714,6 +715,19 @@ class ServiceFacade:
                 migration.to_dict(), "preserved"))
         except BaseException as exc:
             return Err(self._fault(exc, "service_status_failed"))
+
+    def readiness(self, request: StatusServiceRequest):
+        """Return the internal liveness handshake without enumerating threads."""
+        del request
+        try:
+            service = self.deps.service.status()
+            if not service.ready:
+                raise RuntimeError("global service is not ready")
+            return Ok(ServiceReadinessResponse(
+                "ready", service.worker_version, os.getpid(), service.codex_pid,
+                service.listener, True))
+        except BaseException as exc:
+            return Err(self._fault(exc, "service_readiness_failed"))
 
     def stop(self, request: StopServiceRequest):
         try:

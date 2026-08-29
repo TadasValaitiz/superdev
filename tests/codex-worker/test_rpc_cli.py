@@ -618,6 +618,10 @@ class RpcServerTests(unittest.TestCase):
     def test_service_and_migration_rpc_use_strict_requests_and_public_faults(self):
         calls = []
         class ServiceFacade:
+            def readiness(self, request):
+                calls.append(("readiness", request.to_dict()))
+                return Ok(type("View", (), {"to_dict": lambda self: {
+                    "status": "ready", "service_version": "8.1.0"}})())
             def status(self, request):
                 calls.append(("status", request.to_dict()))
                 return Ok(type("View", (), {"to_dict": lambda self: {"status": "ready"}})())
@@ -635,6 +639,8 @@ class RpcServerTests(unittest.TestCase):
                 calls.append(("migration_resolve", request.to_dict()))
                 return Ok(type("View", (), {"to_dict": lambda self: {"thread_id": request.thread_id}})())
         server = self.start_server(service_facade=ServiceFacade())
+        self.assertEqual(rpc_call(server.socket_path, "service/readiness", {}, 1)["result"],
+                         {"status": "ready", "service_version": "8.1.0"})
         self.assertEqual(rpc_call(server.socket_path, "service/status", {}, 1)["result"],
                          {"status": "ready"})
         refused = rpc_call(server.socket_path, "service/stop", {"force": False}, 1)
@@ -1033,6 +1039,8 @@ class CliTests(unittest.TestCase):
             def require_external_codex(self):
                 raise AssertionError("a ready managed peer must not require client PATH codex")
             def ensure_running(self, listener=None):
+                return type("Readiness", (), {"status": "ready"})()
+            def status(self):
                 return type("Status", (), {"to_dict": lambda self: {
                     "status": "ready", "instance": {"instance": "chosen"},
                 }})()

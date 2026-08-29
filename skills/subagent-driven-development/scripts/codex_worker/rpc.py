@@ -198,6 +198,8 @@ COMMON_METHODS = {
 }
 
 SERVICE_METHODS = {
+    # Private managed-startup handshake. Intentionally absent from CLI parsing/help.
+    "service/readiness": ("readiness", StatusServiceRequest),
     "service/status": ("status", StatusServiceRequest),
     "service/stop": ("stop", StopServiceRequest),
     "service/restart": ("restart", RestartServiceRequest),

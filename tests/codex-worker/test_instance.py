@@ -558,6 +558,11 @@ class GlobalServiceManagerTests(unittest.TestCase):
 
         def rpc(socket_path, method, params, timeout):
             self.calls.append((socket_path, method, params))
+            if method == "service/readiness":
+                if self.ready is None: raise OSError("stopped")
+                return {"jsonrpc": "2.0", "id": "cli", "result":
+                        self.readiness_payload(self.ready["listener"],
+                                               self.ready["service_version"])}
             if method == "service/status":
                 if self.ready is None: raise OSError("stopped")
                 return {"jsonrpc": "2.0", "id": "cli", "result": dict(self.ready)}
@@ -595,6 +600,86 @@ class GlobalServiceManagerTests(unittest.TestCase):
                               "deduplicated_count": 0, "conflict_count": 0,
                               "sources": [], "conflicts": []}, "durable_state": "preserved"}
 
+    def readiness_payload(self, listener=DEFAULT_PUBLIC_LISTENER, version="8.1.0"):
+        return {"status": "ready", "service_version": version, "pid": 1234,
+                "app_server_pid": 5678, "listener": listener,
+                "migration_ready": True}
+
+    def test_cold_blocked_inventory_cannot_prevent_managed_startup(self):
+        running = {"value": False}
+        process = Process(running=True)
+        terminated = []
+
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method == "service/readiness":
+                if not running["value"]:
+                    raise OSError("stopped")
+                return {"jsonrpc": "2.0", "id": "cli",
+                        "result": self.readiness_payload()}
+            if method == "service/status":
+                raise AssertionError("cold inventory must not run in startup readiness")
+            raise AssertionError(method)
+
+        def spawn(unused_argv, unused_log):
+            running["value"] = True
+            return process
+
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc, lambda: 0.0,
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        ready = manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual((ready.status, ready.service_version, ready.listener),
+                         ("ready", "8.1.0", DEFAULT_PUBLIC_LISTENER))
+        self.assertEqual(terminated, [])
+
+    def test_malformed_hidden_readiness_is_refused_and_spawn_is_terminated(self):
+        running = {"value": False}
+        clock = {"value": 0.0}
+        process = Process(running=True); terminated = []
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method != "service/readiness" or not running["value"]:
+                raise OSError("stopped")
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": {"status": "ready", "service_version": "8.1.0"}}
+        def spawn(unused_argv, unused_log):
+            running["value"] = True; return process
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc,
+            lambda: clock.__setitem__("value", clock["value"] + 0.1) or clock["value"],
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.CODEX_PROTOCOL_ERROR)
+        self.assertEqual(terminated, [process])
+
+    def test_wrong_version_hidden_readiness_is_refused_and_spawn_is_terminated(self):
+        running = {"value": False}
+        clock = {"value": 0.0}
+        process = Process(running=True); terminated = []
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method != "service/readiness" or not running["value"]:
+                raise OSError("stopped")
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": self.readiness_payload(version="8.0.0")}
+        def spawn(unused_argv, unused_log):
+            running["value"] = True; return process
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc,
+            lambda: clock.__setitem__("value", clock["value"] + 0.1) or clock["value"],
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.TOOL_VERSION_MISMATCH)
+        self.assertEqual(terminated, [process])
+
     def test_five_concurrent_clients_create_one_fixed_listener_generation(self):
         results = []
         threads = [threading.Thread(target=lambda: results.append(
@@ -623,6 +708,16 @@ class GlobalServiceManagerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code,
                          instance_module.FacadeFaultCode.SERVICE_CONFIG_CONFLICT)
         self.assertEqual(len(self.spawns), 1)
+
+    def test_public_status_allows_authoritative_inventory_latency(self):
+        observed = []
+        def rpc(unused_socket, method, unused_params, timeout):
+            observed.append((method, timeout))
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": self.status_payload()}
+        manager = ServiceManager(replace(self.manager.deps, rpc_call=rpc))
+        self.assertEqual(manager.status().status, "ready")
+        self.assertEqual(observed, [("service/status", 30.0)])
 
     def test_stopped_status_corrupt_durable_files_fail_as_closed_operational_faults(self):
         self.paths.durable_dir.mkdir(parents=True, mode=0o700)

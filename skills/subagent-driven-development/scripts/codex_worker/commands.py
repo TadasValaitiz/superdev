@@ -643,6 +643,29 @@ class ServiceStatusResponse(StrictModel):
 
 
 @dataclass(frozen=True)
+class ServiceReadinessResponse(StrictModel):
+    """Private startup handshake; deliberately excludes worker inventory."""
+    status: str
+    service_version: str
+    pid: int
+    app_server_pid: int
+    listener: str
+    migration_ready: bool
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from .service_domain import validate_public_listener
+        validate_public_listener(self.listener)
+        if self.status != "ready" or not self.service_version:
+            raise ValueError("readiness requires an exact ready status and version")
+        for value in (self.pid, self.app_server_pid):
+            if type(value) is not int or value <= 0:
+                raise ValueError("readiness pids must be positive")
+        if self.migration_ready is not True:
+            raise ValueError("readiness requires completed migration")
+
+
+@dataclass(frozen=True)
 class RestartServiceResponse(StrictModel):
     maintenance: JsonObject
     service: ServiceStatusResponse

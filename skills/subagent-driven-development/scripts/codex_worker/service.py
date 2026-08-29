@@ -1,6 +1,8 @@
 """Lifecycle composition for one global Codex worker service generation."""
 import ipaddress
+import errno
 import os
+import signal
 import stat
 import subprocess
 import time
@@ -62,6 +64,10 @@ class GlobalWorkerServiceDeps:
     spawn_codex: SpawnCodex
     create_connection: CreateConnection
     create_gateway: CreateGateway
+    get_process_group: Callable[[int], int] = os.getpgid
+    current_process_group: Callable[[], int] = os.getpgrp
+    signal_process_group: Callable[[int, int], None] = os.killpg
+    process_group_exists: Callable[[int], bool] = lambda pgid: _process_group_exists(pgid)
 
 
 class ListenerExposure(str, Enum):
@@ -127,7 +133,20 @@ def _spawn_codex(argv: Sequence[str], cwd: str,
         stderr=subprocess.DEVNULL,
         cwd=cwd,
         env=dict(env),
+        start_new_session=True,
     )
+
+
+def _process_group_exists(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return False
+        if exc.errno == errno.EPERM:
+            return True
+        raise
 
 
 def _create_connection(endpoint: str,
@@ -222,6 +241,7 @@ class GlobalWorkerService:
         self._lifecycle_capability = _ServiceLifecycle(
             _LIFECYCLE_ISSUER, self, self._maintenance_gate)
         self._process = None  # type: Optional[OwnedProcess]
+        self._owned_pgid = None  # type: Optional[int]
         self._connection = None  # type: Optional[CodexConnection]
         self._gateway = None  # type: Optional[WebSocketGateway]
         self._private_socket_identity = None  # type: Optional[os.stat_result]
@@ -249,6 +269,7 @@ class GlobalWorkerService:
             process = self._deps.spawn_codex(
                 argv, str(self.paths.durable_dir), codex_child_env())
             self._process = process
+            self._owned_pgid = self._pin_process_group(process)
             self._wait_private_socket(process)
             connection = self._deps.create_connection(
                 self.private_endpoint, self._on_notification, self._approval_handler)
@@ -321,14 +342,67 @@ class GlobalWorkerService:
                 pass
         self._terminate_resources(suppress_errors=True)
 
+    def _pin_process_group(self, process: OwnedProcess) -> int:
+        pid = process.pid
+        try:
+            pgid = self._deps.get_process_group(pid)
+            current = self._deps.current_process_group()
+            if (type(pid) is not int or pid <= 1 or type(pgid) is not int
+                    or pgid != pid or pgid <= 1 or pgid == current):
+                raise PermissionError("Codex process group is not a new owned session")
+            return pgid
+        except BaseException:
+            self._terminate_unpinned_process(process)
+            raise
+
+    @staticmethod
+    def _terminate_unpinned_process(process: OwnedProcess) -> None:
+        if process.poll() is not None:
+            process.wait(timeout=0)
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2.0)
+
+    def _terminate_owned_process_group(
+            self, process: OwnedProcess, pgid: Optional[int]) -> None:
+        if pgid is None:
+            self._terminate_unpinned_process(process)
+            return
+        if pgid <= 1 or pgid == self._deps.current_process_group():
+            raise PermissionError("refusing unsafe Codex process group")
+        if process.poll() is None:
+            current = self._deps.get_process_group(process.pid)
+            if current != pgid or current != process.pid:
+                raise PermissionError("Codex process group identity changed")
+        self._deps.signal_process_group(pgid, signal.SIGTERM)
+        try:
+            process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            pass
+        if self._deps.process_group_exists(pgid):
+            self._deps.signal_process_group(pgid, signal.SIGKILL)
+        deadline = time.monotonic() + 2.0
+        while self._deps.process_group_exists(pgid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if self._deps.process_group_exists(pgid):
+            raise RuntimeError("owned Codex process group remained live")
+        if process.poll() is None:
+            process.wait(timeout=2.0)
+
     def _terminate_resources(self, suppress_errors: bool = False) -> None:
         gateway = self._gateway
         connection = self._connection
         process = self._process
+        owned_pgid = self._owned_pgid
         private_socket_identity = self._private_socket_identity
         self._gateway = None
         self._connection = None
         self._process = None
+        self._owned_pgid = None
         self._private_socket_identity = None
         errors = []
         if gateway is not None:
@@ -343,12 +417,12 @@ class GlobalWorkerService:
                 errors.append(exc)
         if process is not None and process.poll() is None:
             try:
-                process.terminate()
-                try:
-                    process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=2.0)
+                self._terminate_owned_process_group(process, owned_pgid)
+            except Exception as exc:
+                errors.append(exc)
+        elif process is not None and owned_pgid is not None:
+            try:
+                self._terminate_owned_process_group(process, owned_pgid)
             except Exception as exc:
                 errors.append(exc)
         private_socket = self.paths.private_codex_socket

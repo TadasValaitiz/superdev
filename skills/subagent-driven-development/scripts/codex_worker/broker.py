@@ -135,7 +135,7 @@ class NativeCodexProxy:
         return {"turns": result["data"], "nextCursor": result["nextCursor"]}
     def rate_limits_read(self) -> JsonObject:
         result = self._call("account/rateLimits/read", {})
-        if set(result) != {"rateLimits"} or not isinstance(result["rateLimits"], dict):
+        if "rateLimits" not in result or not isinstance(result["rateLimits"], dict):
             self._protocol("account/rateLimits/read", "malformed rate limits")
         return result
 

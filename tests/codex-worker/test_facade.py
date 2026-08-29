@@ -1,6 +1,7 @@
 import ast
 import sys
 import json
+import os
 import shlex
 import tempfile
 import unittest
@@ -1284,9 +1285,12 @@ class GlobalServiceFacadeTests(unittest.TestCase):
                 return GlobalWorkerServiceStatus(True, listener, "8.1.0", 22,
                     "/tmp/private.sock", ListenerExposure.LOOPBACK,
                     GatewayAuthentication.NONE)
+        inventory_calls = []
         class Broker:
             def daemon_status(self): return {"daemon_pid": 21, "session_count": 1}
-            def list_active_threads(self): return active
+            def list_active_threads(self):
+                inventory_calls.append("inventory")
+                return active
         class Coordinator:
             def stop(self, force): return MaintenanceResult.refused(active, "stop", None)
         class Migrator:
@@ -1295,7 +1299,14 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         facade = ServiceFacade(ServiceFacadeDeps(
             Service(), Broker(), Coordinator(), Migrator(),
             ServiceConfig(listener, "8.1.0", "00000000-0000-0000-0000-000000000002")))
+        readiness = facade.readiness(StatusServiceRequest())
+        self.assertIsInstance(readiness, Ok)
+        self.assertEqual(readiness.value.to_dict(), {
+            "status": "ready", "service_version": "8.1.0", "pid": os.getpid(),
+            "app_server_pid": 22, "listener": listener, "migration_ready": True})
+        self.assertEqual(inventory_calls, [])
         status = facade.status(StatusServiceRequest())
+        self.assertEqual(inventory_calls, ["inventory"])
         self.assertIsInstance(status, Ok)
         self.assertEqual(status.value.attach_command,
                          "codex --remote ws://localhost:4600")

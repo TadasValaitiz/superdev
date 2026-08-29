@@ -20,7 +20,8 @@ from urllib.parse import urlsplit
 
 from .commands import (DaemonStatusResponse, DaemonStopResponse, FacadeFault,
                        FacadeFaultCode, InstanceSource, InstanceView,
-                       RestartServiceResponse, ServiceStatusResponse)
+                       RestartServiceResponse, ServiceReadinessResponse,
+                       ServiceStatusResponse)
 from .models import (ActiveInventory, MaintenanceResult, RpcFault, WorkerImpact)
 from .path_security import unsafe_ancestor
 from .rpc import _socket_accepts_connections
@@ -696,7 +697,7 @@ class ServiceManager:
     def _probe(self) -> Optional[ServiceStatusResponse]:
         try:
             response = self.deps.rpc_call(
-                str(self.deps.paths.rpc_socket), "service/status", {}, 0.2)
+                str(self.deps.paths.rpc_socket), "service/status", {}, 30.0)
         except (OSError, RpcFault) as exc:
             if isinstance(exc, RpcFault) and exc.kind not in ("daemon_unavailable",):
                 raise
@@ -709,6 +710,26 @@ class ServiceManager:
             raise FacadeFault(
                 FacadeFaultCode.CODEX_PROTOCOL_ERROR,
                 "Global service returned malformed status", "codex_protocol_error",
+                details={"reason": type(exc).__name__,
+                         "socket_path": str(self.deps.paths.rpc_socket)}) from exc
+
+    def _probe_readiness(self) -> Optional[ServiceReadinessResponse]:
+        try:
+            response = self.deps.rpc_call(
+                str(self.deps.paths.rpc_socket), "service/readiness", {}, 0.2)
+        except (OSError, RpcFault) as exc:
+            if isinstance(exc, RpcFault) and exc.kind not in ("daemon_unavailable",):
+                raise
+            return None
+        try:
+            return ServiceReadinessResponse.from_dict(self._result(response))
+        except FacadeFault:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.CODEX_PROTOCOL_ERROR,
+                "Global service returned malformed readiness",
+                "codex_protocol_error",
                 details={"reason": type(exc).__name__,
                          "socket_path": str(self.deps.paths.rpc_socket)}) from exc
 
@@ -770,7 +791,7 @@ class ServiceManager:
     def _ensure_running_locked(
             self, requested: Optional[str], replacement: bool = False
     ) -> ServiceStatusResponse:
-        ready = self._probe()
+        ready = self._probe_readiness()
         if ready is not None:
             if ready.status != "ready":
                 raise FacadeFault(
@@ -854,7 +875,11 @@ class ServiceManager:
                          "durable_state": "preserved"}) from exc
         deadline = self.deps.monotonic() + 2.0
         while True:
-            status = self._probe()
+            try:
+                status = self._probe_readiness()
+            except BaseException:
+                self.deps.terminate_spawn(process)
+                raise
             if status is not None:
                 if status.listener != config.listener:
                     self.deps.terminate_spawn(process)
@@ -966,14 +991,14 @@ class ServiceManager:
                 "--generation", config.generation_id,
                 "--startup-receipt", str(receipt)]
 
-    def _await_stopped(self, before: ServiceStatusResponse) -> None:
+    def _await_stopped(self, before) -> None:
         deadline = self.deps.monotonic() + 2.0
         while True:
             endpoint_exists = (self.deps.paths.rpc_socket.exists()
                                or self.deps.paths.rpc_socket.is_symlink())
             live = any(self.deps.pid_alive(pid)
                        for pid in (before.pid, before.app_server_pid))
-            if self._probe() is None and not endpoint_exists and not live:
+            if self._probe_readiness() is None and not endpoint_exists and not live:
                 return
             if self.deps.monotonic() >= deadline:
                 raise FacadeFault(
@@ -1036,7 +1061,14 @@ class ServiceManager:
                     {"listener": requested, "force": force}, 30.0)), "restart")
                 if impact.status == "refused": raise self._busy(impact)
                 self._await_stopped(current)
-            status = self._ensure_running_locked(requested, replacement=True)
+            self._ensure_running_locked(requested, replacement=True)
+            status = self._probe()
+            if status is None:
+                raise FacadeFault(
+                    FacadeFaultCode.DAEMON_START_FAILED,
+                    "Global service stopped before public status projection",
+                    "daemon_start_failed", details={"reason": "status_unavailable",
+                                                     "durable_state": "preserved"})
             return RestartServiceResponse(impact.to_dict(), status).to_dict()
 
     def _durable_workers(self) -> WorkerImpact:

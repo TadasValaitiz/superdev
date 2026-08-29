@@ -1,10 +1,12 @@
 import os
 import inspect
+import signal
 import socket
 import stat
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -18,6 +20,7 @@ from codex_worker.service import (
     GlobalWorkerServiceStatus,
     ListenerExposure,
     _ensure_owner_directory,
+    _spawn_codex,
 )
 from codex_worker.path_security import unsafe_ancestor
 from codex_worker.service_domain import ServiceConfig, derive_service_paths
@@ -103,12 +106,15 @@ class ServiceHarness:
         self.processes = []
         self.connections = []
         self.gateways = []
+        self.group_signals = []
+        self.groups = {}
 
     def spawn(self, argv, cwd, env):
         self.argv.append((tuple(argv), cwd, env))
         socket_path = Path(argv[-1][len("unix://"):])
         process = FakeProcess(socket_path, self.socket_mode)
         self.processes.append(process)
+        self.groups[process.pid] = process
         return process
 
     def connect(self, endpoint, on_notification, approval_handler):
@@ -122,7 +128,18 @@ class ServiceHarness:
         return gateway
 
     def deps(self):
-        return GlobalWorkerServiceDeps(self.spawn, self.connect, self.gateway)
+        return GlobalWorkerServiceDeps(
+            self.spawn, self.connect, self.gateway,
+            get_process_group=lambda pid: pid,
+            current_process_group=lambda: 42,
+            signal_process_group=self.signal_group,
+            process_group_exists=lambda pgid: self.groups[pgid].poll() is None)
+
+    def signal_group(self, pgid, signum):
+        self.group_signals.append((pgid, signum))
+        process = self.groups[pgid]
+        if process.poll() is None:
+            process.terminate()
 
 
 class FailingCloseHarness(ServiceHarness):
@@ -144,6 +161,69 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         root = Path(self.temporary.name)
         self.paths = derive_service_paths("darwin", root / "state", root / "tmp", os.getuid())
         self.config = ServiceConfig("ws://127.0.0.1:4500", "8.1.0", "00000000-0000-0000-0000-000000000001")
+
+    def test_production_codex_spawn_creates_a_new_session_process_group(self):
+        sentinel = object()
+        with mock.patch("codex_worker.service.subprocess.Popen",
+                        return_value=sentinel) as popen:
+            self.assertIs(_spawn_codex(("codex", "app-server"), "/tmp", {"A": "B"}),
+                          sentinel)
+        self.assertIs(popen.call_args.kwargs["start_new_session"], True)
+
+    def test_owned_group_kills_reparented_descendant_before_termination_returns(self):
+        harness = ServiceHarness()
+        descendant_alive = {"value": True}
+        def signal_group(pgid, signum):
+            harness.group_signals.append((pgid, signum))
+            process = harness.groups[pgid]
+            if signum == signal.SIGTERM:
+                process.terminate()  # wrapper exits; descendant remains in pinned group
+            elif signum == signal.SIGKILL:
+                descendant_alive["value"] = False
+        base = harness.deps()
+        harness.deps = lambda: GlobalWorkerServiceDeps(
+            base.spawn_codex, base.create_connection, base.create_gateway,
+            base.get_process_group, base.current_process_group, signal_group,
+            lambda pgid: descendant_alive["value"])
+        service = self.make_service(harness); service.start()
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            lifecycle.terminate_owned(lease)
+        pid = harness.processes[0].pid
+        self.assertEqual(harness.group_signals,
+                         [(pid, signal.SIGTERM), (pid, signal.SIGKILL)])
+        self.assertFalse(descendant_alive["value"])
+        self.assertTrue(harness.gateways[0].closed)
+        self.assertFalse(self.paths.private_codex_socket.exists())
+
+    def test_reused_or_unverified_group_is_never_signalled(self):
+        harness = ServiceHarness(); group = {"offset": 0}
+        base = harness.deps()
+        harness.deps = lambda: GlobalWorkerServiceDeps(
+            base.spawn_codex, base.create_connection, base.create_gateway,
+            lambda pid: pid + group["offset"], base.current_process_group,
+            base.signal_process_group, base.process_group_exists)
+        service = self.make_service(harness); service.start(); group["offset"] = 1
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            with self.assertRaises(PermissionError):
+                lifecycle.terminate_owned(lease)
+        self.assertEqual(harness.group_signals, [])
+        harness.processes[0].terminate()
+
+    def test_group_zero_and_current_group_are_refused_without_group_signal(self):
+        for unsafe in (0, 42):
+            with self.subTest(pgid=unsafe):
+                harness = ServiceHarness(); base = harness.deps()
+                harness.deps = lambda: GlobalWorkerServiceDeps(
+                    base.spawn_codex, base.create_connection, base.create_gateway,
+                    lambda unused_pid, value=unsafe: value,
+                    base.current_process_group, base.signal_process_group,
+                    base.process_group_exists)
+                service = self.make_service(harness)
+                with self.assertRaises(PermissionError): service.start()
+                self.assertEqual(harness.group_signals, [])
+                self.assertEqual(harness.processes[0].poll(), 0)
 
     def make_service(self, harness):
         service = GlobalWorkerService(

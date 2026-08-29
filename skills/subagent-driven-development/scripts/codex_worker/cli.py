@@ -423,8 +423,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         _require_loaded_plugin_version(args)
         if args.family == "daemon" and args.action == "start":
             manager = _service_manager()
+            manager.ensure_running(args.app_server_listen)
             response = {"jsonrpc": "2.0", "id": "cli",
-                        "result": manager.ensure_running(args.app_server_listen).to_dict()}
+                        "result": manager.status().to_dict()}
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "status" and not args.socket:
