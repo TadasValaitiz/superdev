@@ -966,25 +966,25 @@ def _print_json(payload: JsonObject, pretty: bool) -> None:
 
 def _validate_wire_recovery_actions(payload: JsonObject) -> None:
     commands = []  # type: List[str]
-    command_fields = {"command", "attach_command", "resume_command"}
-
     def walk(value: Any) -> None:
         if isinstance(value, dict):
-            commands.extend(item for key, item in value.items()
-                            if key in command_fields and isinstance(item, str))
+            commands.extend(value[key] for key in ("attach_command", "resume_command")
+                            if isinstance(value.get(key), str))
             recovery = value.get("recovery")
             if isinstance(recovery, str):
                 commands.append(recovery)
             elif isinstance(recovery, dict):
                 commands.extend(command for command in recovery.values()
                                 if isinstance(command, str))
-            actions = value.get("next_actions")
-            if isinstance(actions, list):
-                for action in actions:
-                    if isinstance(action, str):
-                        commands.append(action)
-                    elif isinstance(action, dict) and isinstance(action.get("command"), str):
-                        commands.append(action["command"])
+            for action_field in ("next_actions", "resolution_actions"):
+                actions = value.get(action_field)
+                if isinstance(actions, list):
+                    for action in actions:
+                        if isinstance(action, str):
+                            commands.append(action)
+                        elif (isinstance(action, dict)
+                              and isinstance(action.get("command"), str)):
+                            commands.append(action["command"])
             for nested in value.values():
                 walk(nested)
         elif isinstance(value, list):
@@ -1005,6 +1005,9 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
         if any(token and set(token) <= set(";&|`$()") for token in shell_tokens):
             raise ValueError("recovery action must be one direct argv")
         if tokens[0] == "codex-worker":
+            if any(tokens[index:index + 2] == ["daemon", "serve"]
+                   for index in range(1, len(tokens) - 1)):
+                raise ValueError("hidden daemon serve is not a public recovery action")
             try:
                 with open(os.devnull, "w") as discard:
                     with contextlib.redirect_stdout(discard), \

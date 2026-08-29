@@ -216,6 +216,9 @@ class RecoveryActionTests(unittest.TestCase):
         ]}}}
         cli._validate_wire_recovery_actions(valid)
         for command in ("codex-worker daemon serve", "codex-worker daemon serve --bad",
+                        "codex-worker daemon serve --help",
+                        "codex-worker --pretty daemon serve --help",
+                        "codex-worker daemon serve -h --bad",
                         "missing-tool status", "/etc/hosts",
                         "/bin/ls /tmp; /usr/bin/false",
                         "/bin/ls /tmp\n/usr/bin/false",
@@ -247,6 +250,12 @@ class RecoveryActionTests(unittest.TestCase):
         for payload in payloads:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 cli._validate_wire_recovery_actions(payload)
+
+    def test_user_output_and_command_events_are_not_misclassified_as_recovery(self):
+        cli._validate_wire_recovery_actions({
+            "result": {"structured_output": {"command": "echo harmless"}}})
+        cli._validate_wire_recovery_actions({
+            "result": {"items": [{"data": {"command": "echo harmless"}}]}})
 
 
 class PublicHelpLimitsTests(unittest.TestCase):
