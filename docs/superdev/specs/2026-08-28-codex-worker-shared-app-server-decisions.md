@@ -573,3 +573,75 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** the inherited limits family and Task 5 real-Claude acceptance evidence only.
 - **Revisit-when:** Codex removes or retypes `rateLimits`, or the product decides to expose the
   additional limit-ID/reset-credit families publicly.
+
+## D24 — Restore the governing four-way CLI exit contract
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the independent evaluator found the companion surface contradicted the binding Python canon
+
+- **Trigger:** handled operational states such as `timeout_active`, `service_busy`, and
+  `address_in_use` exited 1, which the governing canon reserves for an internal bug.
+- **Decided:** 0 is success, 1 is an uncaught internal bug, 2 is local usage, and 3 is every
+  typed operational refusal returned by the local façade, RPC peer, managed supervisor, or
+  endpoint safety boundary. One structured JSON object remains the refusal output.
+- **Not exit 2:** a syntactically valid request refused by current runtime state is operational,
+  even when the upstream JSON-RPC code resembles invalid params.
+- **Affects:** CLI surface, exhaustive error mapping, subprocess/checkride expectations.
+- **Revisit-when:** never without changing the governing Python operator-experience law first.
+
+## D25 — Raw managed commands depend on strict readiness, not global inventory
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after an unrelated ambiguous active thread blocked an exact session resume
+
+- **Trigger:** `_managed_raw_endpoint` used full public status, so all-thread inventory failure
+  prevented dispatch of an independently selected durable session/thread operation.
+- **Decided:** managed raw session/turn/model commands use the hidden strict
+  `service/readiness` RPC already introduced by D21. It validates exact ready state, version,
+  listener, and process identity without inventory. The selected RPC remains responsible for
+  its own session/thread validity.
+- **Partial-failure law:** once a selected session/thread is known, any typed failure retains
+  those IDs and a literal attach/resume route; unrelated inventory never replaces them with null.
+- **Affects:** managed raw endpoint selection, ambiguity regression, raw reride rows.
+- **Revisit-when:** public status becomes constant-time and provably independent of inventory.
+
+## D26 — Emit only literal, parser-valid recovery actions
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the evaluator found placeholders, prose prefixes, and a hidden serve command
+
+- **Decided:** every command-valued remedy is shell-safe, contains no angle-bracket placeholder,
+  resolves to a real executable/public parser path, and parses without network contact. A stopped
+  managed service points to `codex-worker daemon start`. A stopped known worker points to exact
+  status and attach/resume commands rather than inventing continuation text. Busy maintenance
+  substitutes every known exact worker name. Address collision provides a deterministic explicit
+  alternate-listener start command but never executes fallback automatically.
+- **Not force:** no ordinary refusal action suggests or invokes automated `--force`.
+- **Affects:** façade faults, raw RPC recoveries, service manager refusals, exhaustive action guard.
+- **Revisit-when:** the CLI gains a typed interactive prompt mechanism that can safely collect a
+  missing value without encoding a fake shell command.
+
+## D27 — Put limits and reconstructable count provenance on the public surface
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after dangerous help and naked derived counts failed the governing surface law
+
+- **Decided:** every public leaf `--help` includes a `Limits:` block. Stop/restart explicitly
+  describe machine-wide scope, active refusal, and force impact. `daemon status` wraps worker and
+  active-turn counts with value/source/availability/basis; the worker basis lists exact active and
+  idle names, and active basis lists exact origin/worker/session/thread/turn/flags rows.
+- **Stopped-state law:** durable worker names are reconstructable from registry state; active
+  inventory is explicitly available and empty rather than inferred from absence.
+- **Affects:** parser help, status models/projections, live help/status reride rows.
+- **Revisit-when:** a separate inventory detail command replaces the embedded basis without
+  reducing exact reconstruction.
+
+## D28 — Count attempts and track literal sanitized ride evidence
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the first executor record mixed completed commands, an unmatched attempt, and placeholder cleanup corrections
+
+- **Decided:** attempt count includes every `command_start`; completion distribution includes only
+  terminal command records and separately reports unmatched attempts as NOT RUN. Claims such as
+  `codex_failure` are derived from literal records. Cleanup corrections retain literal sanitized
+  argv/assertion/output/exit/timing/substrate sufficient for reconstruction. The tracked real-Claude
+  record contains sanitized literal command/output/exit rows for all 26 commands, not only a hash
+  pointer to ignored raw text.
+- **Affects:** recorder/harness contracts, real-Claude tracked evidence, affected-row reride.
+- **Revisit-when:** the evidence format moves to a content-addressed artifact store that remains
+  available from a fresh checkout.

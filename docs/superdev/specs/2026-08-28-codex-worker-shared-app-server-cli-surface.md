@@ -17,8 +17,9 @@ codex-worker [--pretty] [--socket ABSOLUTE_PATH] COMMAND ...
   daemon status. It is invalid for common worker commands and managed lifecycle/migration.
   It never selects or creates another public service and never implies an attach address.
 - Without `--socket`, every operational command addresses one machine-local global service.
-- Every client invocation emits exactly one JSON object on stdout. Local usage errors exit 2;
-  typed operational refusals exit 1; success exits 0. `daemon serve` remains stdout-silent.
+- Every client invocation emits exactly one JSON object on stdout. Success exits 0; an
+  uncaught internal bug exits 1; local usage errors exit 2; and every typed operational
+  refusal exits 3 with a literal runnable remedy. `daemon serve` remains stdout-silent.
 - Local argument validation precedes service startup or network contact.
 
 The global service owns exactly one public Codex-TUI gateway listener. Its default is:
@@ -170,14 +171,35 @@ The status result includes:
   "exposure": "loopback",
   "auth": "none",
   "attach_command": "codex --remote ws://127.0.0.1:4500",
-  "worker_count": 2,
-  "active_turn_count": 0,
+  "worker_count": {
+    "value": 2,
+    "source": "codex-worker registry",
+    "availability": "derived",
+    "basis": {"active_names": [], "idle_names": ["build-a", "review-a"]}
+  },
+  "active_turn_count": {
+    "value": 0,
+    "source": "codex app-server inventory",
+    "availability": "derived",
+    "basis": {"items": []}
+  },
   "migration": {"status": "complete", "conflict_count": 0},
   "durable_state": "preserved"
 }
 ```
 
 Numbers in this illustrative schema are **SEED-ILLUSTRATIVE**, not measurements.
+The count envelopes are reconstructable: `worker_count.value` equals the unique names in
+its basis, and `active_turn_count.value` equals the active inventory items. Each active item
+retains worker/session/thread/turn identity, origin, and active flags. Stopped status derives
+its worker basis from durable registry names and reports active inventory as available and
+empty; it never invents live activity.
+
+Every public leaf command's own `--help` ends with a `Limits:` block. The stop/restart blocks
+state that maintenance is machine-wide, active work refuses without `--force`, and force may
+interrupt every listed identity. Raw session/turn help states that the managed service must
+already be strictly ready and is never auto-started by those commands. The hidden foreground
+`daemon serve` entry point is not a public recovery action.
 
 ### Restart and stop — supervised maintenance only
 

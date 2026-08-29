@@ -471,6 +471,28 @@ regressions that still govern the new topology.
 
 ## 10. Drift protocol
 
+### Build-phase operator-contract correction after the first checkride
+
+The first independent ride exposed five surface-law gaps. D24–D28 amend the implementation
+contract without changing the global topology or accepted shared-control mechanisms:
+
+- the public exit map is exactly 0 success / 1 uncaught internal bug / 2 local usage / 3
+  typed operational refusal;
+- managed raw session/turn dispatch validates only the hidden strict readiness response and
+  never enumerates unrelated global thread inventory before the selected RPC;
+- every emitted recovery action is literal, shell-safe, present on the public parser, and
+  free of placeholders or hidden foreground commands;
+- every public leaf help has an explicit `Limits:` block, while service counts carry
+  source/availability/basis and retain enough identities for exact reconstruction;
+- checkride accounting counts every attempted invocation, preserves literal sanitized
+  commands/results/cleanup proof, and labels missing terminal records as NOT RUN rather than
+  completed evidence.
+
+These corrections reopen only the affected refusal/raw/help/status/fixed-default/evidence
+rows. Previously accepted common attach, five-worker isolation, callback/migration,
+unknown-peer preservation, and orphan-audit mechanisms remain valid unless their public
+shape changes.
+
 Build discoveries update §§4–8 through append-only decisions. D3, D4, D6, D7, D8,
 D11 and the anchor requirements are operator-locked: a contradictory measured behavior
 must be pushed back rather than silently softened. Other autonomous design choices may
