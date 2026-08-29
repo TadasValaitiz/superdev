@@ -1366,15 +1366,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(json.loads(completed.stdout)["error"]["data"]["kind"], "turn_not_active")
 
     def test_rpc_internal_error_is_the_only_typed_exit_one(self):
-        def fake_internal(socket_path, method, params, timeout):
-            return {"jsonrpc": "2.0", "id": "cli",
-                    "error": {"code": -32603, "message": "Internal error",
-                              "data": {"kind": "internal_error"}}}
+        for kind in ("internal_error", "broker_error"):
+            def fake_internal(socket_path, method, params, timeout, kind=kind):
+                return {"jsonrpc": "2.0", "id": "cli",
+                        "error": {"code": -32603, "message": "Internal error",
+                                  "data": {"kind": kind}}}
 
-        completed = self.run_cli(
-            ["--socket", self.socket_path, "model", "list"],
-            fake_rpc=fake_internal, include_socket=False)
-        self.assert_json_error(completed, 1, "internal_error")
+            with self.subTest(kind=kind):
+                completed = self.run_cli(
+                    ["--socket", self.socket_path, "model", "list"],
+                    fake_rpc=fake_internal, include_socket=False)
+                self.assert_json_error(completed, 1, kind)
 
     def test_daemon_absent_is_structured_and_exits_three(self):
         completed = self.run_cli(["daemon", "status"], fake_rpc=None)

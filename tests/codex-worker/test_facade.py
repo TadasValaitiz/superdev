@@ -992,6 +992,10 @@ class FacadeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "programming defect"):
             self._facade().start(StartWorkerRequest(
                 "internal-bug", "prompt", self.cwd))
+        with self.assertRaises(RpcFault) as broker_error:
+            self._facade()._effect_fault(
+                RpcFault(-32020, "broker bug", "broker_error"), None, None)
+        self.assertEqual(broker_error.exception.kind, "broker_error")
 
     def test_unknown_name_and_incomplete_legacy_are_closed_actionable_faults(self):
         facade = self._facade()
@@ -1368,6 +1372,10 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         service.failure = RuntimeError("programming defect")
         with self.assertRaisesRegex(RuntimeError, "programming defect"):
             facade.readiness(StatusServiceRequest())
+        service.failure = RpcFault(-32020, "broker bug", "broker_error")
+        with self.assertRaises(RpcFault) as broker_error:
+            facade.readiness(StatusServiceRequest())
+        self.assertEqual(broker_error.exception.kind, "broker_error")
 
 if __name__ == "__main__":
     unittest.main()
