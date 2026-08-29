@@ -2125,6 +2125,29 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.assertFalse(_pid_exists(app_server_pid))
         self.assertFalse(self.private_codex_socket.exists())
 
+    def test_force_restart_skips_blocked_owned_child_inventory_and_replaces(self):
+        old_app_server_pid = self.app_server_pid
+        os.kill(old_app_server_pid, signal.SIGSTOP)
+        try:
+            completed = self._run("daemon", "restart", "--force", timeout=20)
+        finally:
+            if _pid_exists(old_app_server_pid):
+                os.kill(old_app_server_pid, signal.SIGCONT)
+
+        payload = self._json(completed)["result"]
+        maintenance = payload["maintenance"]
+        self.assertEqual((maintenance["status"], maintenance["forced"]),
+                         ("completed", True))
+        self.assertEqual(maintenance["inventory"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertFalse(_pid_exists(old_app_server_pid))
+        self.app_server_pid = payload["service"]["app_server_pid"]
+        self.assertNotEqual(self.app_server_pid, old_app_server_pid)
+        self.assertTrue(_pid_exists(self.app_server_pid))
+        self.assertTrue(self.private_codex_socket.exists())
+
     def test_concurrent_clients_share_one_daemon_without_crossing_results(self):
         self.env["FAKE_CODEX_DELAY"] = "1.0"
         processes = []

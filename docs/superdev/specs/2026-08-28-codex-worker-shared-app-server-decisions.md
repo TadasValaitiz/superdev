@@ -666,8 +666,8 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Trigger:** both the managed force-stop preflight and the drained maintenance coordinator
   synchronously enumerated Codex threads. A stopped or degraded owned child therefore prevented
   the explicit recovery operation that was supposed to terminate it.
-- **Decided:** `daemon stop --force` uses strict internal readiness for its managed preflight and,
-  under the shared maintenance drain, never calls upstream inventory. The forced drain excludes
+- **Decided:** `daemon stop --force` and `daemon restart --force` use strict internal readiness
+  for their managed preflight and, under the shared maintenance drain, never call upstream inventory. The forced drain excludes
   new mutations but may proceed past an already-forwarded request that cannot settle; owned
   teardown closes that request while terminating only the pinned, identity-verified lifecycle.
 - **Honesty law:** when force cannot measure upstream impact, both `inventory` and `workers` report

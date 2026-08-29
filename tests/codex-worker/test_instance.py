@@ -751,6 +751,24 @@ class GlobalServiceManagerTests(unittest.TestCase):
         self.assertEqual((result["status"], result["forced"]),
                          ("completed", True))
 
+    def test_force_restart_uses_readiness_and_degraded_basis_before_replacement(self):
+        self.ready = self.status_payload()
+        result = self.manager.restart(force=True)
+        methods = [call[1] for call in self.calls]
+        self.assertEqual(methods[:2], ["service/readiness", "service/restart"])
+        self.assertGreater(methods.index("service/status"),
+                           methods.index("service/restart"))
+        self.assertEqual(result["maintenance"]["status"], "completed")
+
+        self.calls = []
+        self.ready = self.status_payload()
+        with mock.patch.object(
+                self.manager, "_force_maintenance_basis",
+                return_value=instance_module._StopBasis(None, None)):
+            degraded = self.manager.restart(force=True)
+        self.assertIn("service/restart", [call[1] for call in self.calls])
+        self.assertEqual(degraded["maintenance"]["status"], "completed")
+
     def test_shutdown_poll_treats_typed_stopping_readiness_as_not_ready(self):
         before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
         observations = iter([True, False])

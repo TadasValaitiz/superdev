@@ -617,6 +617,7 @@ def _stopped_service_status(listener: str, version: str, workers: WorkerImpact,
 class _StopBasis:
     pid: Optional[int]
     app_server_pid: Optional[int]
+    listener: Optional[str] = None
 
 
 class ServiceManager:
@@ -746,6 +747,18 @@ class ServiceManager:
                 "codex_protocol_error",
                 details={"reason": type(exc).__name__,
                          "socket_path": str(self.deps.paths.rpc_socket)}) from exc
+
+    def _force_maintenance_basis(self):
+        try:
+            before = self._probe_readiness()
+        except FacadeFault as exc:
+            if exc.code != FacadeFaultCode.CODEX_FAILURE:
+                raise
+            return _StopBasis(None, None)
+        if (before is None and (self.deps.paths.rpc_socket.exists()
+                                or self.deps.paths.rpc_socket.is_symlink())):
+            return _StopBasis(None, None)
+        return before
 
     def status(self) -> ServiceStatusResponse:
         status = self._probe()
@@ -1079,15 +1092,7 @@ class ServiceManager:
         if type(force) is not bool: raise ValueError("force must be bool")
         with acquire_start_lock(self.deps.paths.start_lock):
             if force:
-                try:
-                    before = self._probe_readiness()
-                except FacadeFault as exc:
-                    if exc.code != FacadeFaultCode.CODEX_FAILURE:
-                        raise
-                    before = _StopBasis(None, None)
-                if (before is None and (self.deps.paths.rpc_socket.exists()
-                                        or self.deps.paths.rpc_socket.is_symlink())):
-                    before = _StopBasis(None, None)
+                before = self._force_maintenance_basis()
             else:
                 before = self._probe()
             if before is None:
@@ -1103,12 +1108,13 @@ class ServiceManager:
     def restart(self, listener: Optional[str] = None, force: bool = False) -> dict:
         if type(force) is not bool: raise ValueError("force must be bool")
         with acquire_start_lock(self.deps.paths.start_lock):
-            current = self._probe()
+            current = self._force_maintenance_basis() if force else self._probe()
             configured = self._read_config()
             requested = validate_public_listener(
-                listener or (current.listener if current is not None else
-                             configured.listener if configured is not None
-                             else DEFAULT_PUBLIC_LISTENER))
+                listener or (current.listener if current is not None
+                             and current.listener is not None else
+                             configured.listener if configured is not None else
+                             DEFAULT_PUBLIC_LISTENER))
             impact = MaintenanceResult.completed(
                 "restart", ActiveInventory(), force, requested,
                 self._durable_workers())
