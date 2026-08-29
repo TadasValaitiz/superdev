@@ -1,21 +1,33 @@
 """Session-scoped daemon identity and lifecycle management."""
 import hashlib
+import errno
 import json
 import os
 import shlex
+import signal
+import socket
 import stat
+import subprocess
 import tempfile
 import time
+import uuid
 import fcntl
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
+from urllib.parse import urlsplit
 
-from .commands import (DaemonStatusResponse, DaemonStopResponse, FacadeFault,
-                       FacadeFaultCode, InstanceSource, InstanceView)
-from .models import RpcFault
+from .commands import (CountEvidence, DaemonStatusResponse, DaemonStopResponse, FacadeFault,
+                       FacadeFaultCode, InstanceSource, InstanceView,
+                       MetricAvailability, RestartServiceResponse, ServiceReadinessResponse,
+                       ServiceStatusResponse)
+from .models import (ActiveInventory, MaintenanceResult, RpcFault, WorkerImpact)
+from .path_security import unsafe_ancestor
 from .rpc import _socket_accepts_connections
+from .service_domain import (DEFAULT_PUBLIC_LISTENER, MigrationState,
+                             MigrationStatusView, ServiceConfig, ServicePaths,
+                             derive_service_paths, validate_public_listener)
 
 
 def validate_instance_id(value: str) -> str:
@@ -108,39 +120,7 @@ def _safe_directory(path: Path) -> bool:
             and stat.S_IMODE(data.st_mode) == 0o700)
 
 
-def _unsafe_ancestor(path: Path) -> Optional[Path]:
-    """Accept owner-only ancestors and sticky system temp ancestors, never links."""
-    absolute = Path(os.path.abspath(str(path)))
-    current = Path(absolute.anchor)
-    controlled = False
-    shared_sticky = False
-    for component in absolute.parts[1:]:
-        current = current / component
-        try:
-            data = os.lstat(current)
-        except OSError:
-            return current
-        if stat.S_ISLNK(data.st_mode):
-            if current.parent != Path(absolute.anchor) or data.st_uid != 0:
-                return current
-            try:
-                data = os.stat(current)
-            except OSError:
-                return current
-        mode = stat.S_IMODE(data.st_mode)
-        sticky = bool(mode & stat.S_ISVTX)
-        shared = sticky and bool(mode & 0o022)
-        if (not stat.S_ISDIR(data.st_mode)
-                or mode & 0o022 and not sticky):
-            return current
-        if data.st_uid == os.getuid():
-            controlled = True
-        elif shared:
-            shared_sticky = True
-            controlled = False
-        elif data.st_uid != 0 or controlled or shared_sticky:
-            return current
-    return None
+_unsafe_ancestor = unsafe_ancestor  # Compatibility re-export for existing internal consumers.
 
 
 def _safe_ancestor(path: Path) -> bool:
@@ -382,7 +362,6 @@ class InstanceManager:
                      cause: Optional[dict] = None, retryable: bool = False) -> FacadeFault:
         paths = self.deps.paths
         path = paths.socket_path if offending_path is None else Path(offending_path)
-        selected = shlex.quote(self.identity.value)
         return FacadeFault(
             FacadeFaultCode.DAEMON_START_FAILED,
             "Codex worker daemon could not be started safely",
@@ -396,11 +375,9 @@ class InstanceManager:
                 "log_path": str(paths.log_path),
                 "durable_state": "preserved",
             },
-            known_ids={"instance": self.identity.value, "name": None,
-                       "session_id": None, "thread_id": None, "turn_id": None},
+            known_ids={"name": None, "session_id": None,
+                       "thread_id": None, "turn_id": None},
             next_actions=[
-                {"command": "codex-worker --instance %s daemon status" % selected,
-                 "reason": "Inspect the selected managed instance"},
                 {"command": "/bin/ls -ld %s" % shlex.quote(str(path)),
                  "reason": "Inspect the runtime path without changing it"},
                 {"command": "/usr/bin/tail -n 100 %s" % shlex.quote(str(paths.log_path)),
@@ -496,21 +473,23 @@ class InstanceManager:
         deadline = self.deps.monotonic() + 2.0
         while any(_pid_alive(pid) for pid in (before.get("daemon_pid"), before.get("codex_pid"))):
             if self.deps.monotonic() >= deadline:
-                selected = shlex.quote(self.identity.value)
+                remaining_pid = next(pid for pid in (
+                    before.get("daemon_pid"), before.get("codex_pid")) if _pid_alive(pid))
                 raise FacadeFault(FacadeFaultCode.DAEMON_STOP_FAILED, "Codex worker daemon did not stop",
                                   "daemon_stop_failed", True, details={"reason": "stop_timeout",
                                   "deadline_seconds": 2.0, "daemon_pid": before.get("daemon_pid"),
                                   "codex_pid": before.get("codex_pid"), "durable_state": "preserved",
                                   "socket_path": str(self.deps.paths.socket_path)},
-                                  known_ids={"instance": self.identity.value, "name": None,
-                                             "session_id": None, "thread_id": None,
+                                  known_ids={"name": None, "session_id": None,
+                                             "thread_id": None,
                                              "turn_id": None},
                                   next_actions=[{
-                                      "command": "codex-worker --instance %s daemon status" % selected,
-                                      "reason": "Inspect the remaining daemon state",
+                                      "command": "/bin/ps -p %d" % remaining_pid,
+                                      "reason": "Inspect the exact remaining owned process",
                                   }, {
-                                      "command": "codex-worker --instance %s daemon stop" % selected,
-                                      "reason": "Retry graceful shutdown",
+                                      "command": "/usr/bin/tail -n 100 %s" % shlex.quote(
+                                          str(self.deps.paths.log_path)),
+                                      "reason": "Inspect the exact daemon log before retrying",
                                   }])
             self.deps.wait(0.01)
         if observed_socket is not None:
@@ -530,3 +509,643 @@ def _pid_alive(pid: Any) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _terminate_spawned_generation(process: Any) -> None:
+    """Terminate only the exact Popen generation created by this manager."""
+    if not isinstance(process, subprocess.Popen) or process.poll() is not None:
+        return
+    pid = process.pid
+    try:
+        if os.getpgid(pid) == pid:
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            process.terminate()
+        try:
+            process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGKILL)
+            else:
+                process.kill()
+            process.wait(timeout=2.0)
+    except ProcessLookupError:
+        return
+
+
+@dataclass(frozen=True)
+class ServiceDeps:
+    """Injected process boundary for the one global managed service."""
+    paths: ServicePaths
+    launcher: str
+    codex_bin: str
+    spawn: Callable[[Sequence[str], str], Any]
+    rpc_call: Callable[[str, str, dict, Optional[float]], dict]
+    monotonic: Callable[[], float]
+    wait: Callable[[float], None] = field(default=time.sleep)
+    which: Callable[[str], Optional[str]] = field(default=lambda executable: executable)
+    expected_version: Optional[str] = None
+    listener_available: Optional[Callable[[str], bool]] = None
+    pid_alive: Callable[[Any], bool] = field(default=_pid_alive)
+    terminate_spawn: Callable[[Any], None] = field(
+        default=_terminate_spawned_generation)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.paths, ServicePaths):
+            raise TypeError("paths must be ServicePaths")
+        if self.listener_available is None:
+            object.__setattr__(self, "listener_available", _listener_available)
+
+
+def _listener_available(listener: str) -> bool:
+    """Probe bindability without connecting to or interpreting an unknown peer."""
+    parsed = urlsplit(listener)
+    rows = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
+    probes = []
+    seen = set()
+    try:
+        for family, socktype, protocol, _, address in rows:
+            key = (family, socktype, protocol, address)
+            if key in seen:
+                continue
+            seen.add(key)
+            probe = socket.socket(family, socktype, protocol)
+            probes.append(probe)
+            try:
+                probe.bind(address)
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    return False
+                # The gateway remains the authority for non-collision bind errors.
+                return True
+        return True
+    finally:
+        for probe in probes:
+            probe.close()
+
+
+def _empty_migration() -> dict:
+    return MigrationStatusView(MigrationState.INCOMPLETE, False, 0, 0, 0, [], []).to_dict()
+
+
+def _service_exposure(listener: str) -> str:
+    from urllib.parse import urlsplit
+    import ipaddress
+    host = urlsplit(listener).hostname or ""
+    if host.lower() == "localhost":
+        return "loopback"
+    try:
+        return "loopback" if ipaddress.ip_address(host).is_loopback else "non_loopback"
+    except ValueError:
+        return "non_loopback"
+
+
+def _stopped_service_status(listener: str, version: str, workers: WorkerImpact,
+                            migration: dict) -> ServiceStatusResponse:
+    inventory = ActiveInventory()
+    return ServiceStatusResponse(
+        "stopped", version, None, None, listener, _service_exposure(listener), "none",
+        "codex --remote %s" % shlex.quote(listener),
+        CountEvidence(workers.to_dict()["total_count"], "codex-worker registry",
+                      MetricAvailability.DERIVED, workers.to_dict()),
+        CountEvidence(0, "codex app-server inventory", MetricAvailability.DERIVED,
+                      inventory.to_dict()),
+        migration, "preserved")
+
+
+@dataclass(frozen=True)
+class _StopBasis:
+    pid: Optional[int]
+    app_server_pid: Optional[int]
+    listener: Optional[str] = None
+
+
+class ServiceManager:
+    """Concurrency-safe client supervisor for the sole machine-local service."""
+    def __init__(self, deps: ServiceDeps):
+        if not isinstance(deps, ServiceDeps):
+            raise TypeError("deps must be ServiceDeps")
+        self.deps = deps
+
+    @property
+    def expected_version(self) -> str:
+        if not self.deps.expected_version:
+            raise ValueError("expected service version must be configured")
+        return self.deps.expected_version
+
+    def _read_config(self) -> Optional[ServiceConfig]:
+        path = self.deps.paths.config_path
+        try:
+            metadata = os.lstat(path)
+        except FileNotFoundError:
+            return None
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or unsafe_ancestor(path.parent) is not None):
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Global service configuration is unsafe", "daemon_start_failed",
+                details={"reason": "unsafe_service_config", "path": str(path),
+                         "durable_state": "preserved"})
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return ServiceConfig.from_dict(value)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Global service configuration is invalid", "daemon_start_failed",
+                details={"reason": "invalid_service_config", "path": str(path),
+                         "durable_state": "preserved"}) from exc
+
+    def _write_config_once(self, config: ServiceConfig) -> None:
+        if self.deps.paths.config_path.exists() or self.deps.paths.config_path.is_symlink():
+            existing = self._read_config()
+            if existing != config:
+                raise FacadeFault(
+                    FacadeFaultCode.SERVICE_CONFIG_CONFLICT,
+                    "Global service listener is already configured",
+                    "service_config_conflict",
+                    details={"configured_listener": existing.listener if existing else None,
+                             "requested_listener": config.listener,
+                             "durable_state": "preserved"},
+                    next_actions=[{"command": "codex-worker daemon status",
+                                   "reason": "Inspect the fixed global listener"}])
+            return
+        _mkdir_owner_only(self.deps.paths.durable_dir)
+        fd, temporary = tempfile.mkstemp(
+            prefix=".service-config-", dir=str(self.deps.paths.durable_dir))
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(config.to_dict(), handle, separators=(",", ":"), sort_keys=True)
+                handle.write("\n"); handle.flush(); os.fsync(handle.fileno())
+            os.replace(temporary, self.deps.paths.config_path)
+            directory_fd = os.open(str(self.deps.paths.durable_dir), os.O_RDONLY)
+            try: os.fsync(directory_fd)
+            finally: os.close(directory_fd)
+        except BaseException:
+            try: os.unlink(temporary)
+            except FileNotFoundError: pass
+            raise
+
+    @staticmethod
+    def _result(response: dict) -> dict:
+        if not isinstance(response, dict):
+            raise ValueError("service returned a non-object response")
+        if "error" in response:
+            error = response["error"]
+            try:
+                raise FacadeFault.from_dict(error)
+            except FacadeFault:
+                raise
+            except ValueError as exc:
+                raise ValueError("service returned a malformed fault") from exc
+        result = response.get("result", response)
+        if not isinstance(result, dict):
+            raise ValueError("service returned a non-object result")
+        return result
+
+    def _probe(self) -> Optional[ServiceStatusResponse]:
+        try:
+            response = self.deps.rpc_call(
+                str(self.deps.paths.rpc_socket), "service/status", {}, 30.0)
+        except (OSError, RpcFault) as exc:
+            if isinstance(exc, RpcFault) and exc.kind not in (
+                    "daemon_unavailable", "daemon_stopped"):
+                raise
+            return None
+        try:
+            return ServiceStatusResponse.from_dict(self._result(response))
+        except FacadeFault:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.CODEX_PROTOCOL_ERROR,
+                "Global service returned malformed status", "codex_protocol_error",
+                details={"reason": type(exc).__name__,
+                         "socket_path": str(self.deps.paths.rpc_socket)}) from exc
+
+    def _probe_readiness(self) -> Optional[ServiceReadinessResponse]:
+        try:
+            response = self.deps.rpc_call(
+                str(self.deps.paths.rpc_socket), "service/readiness", {}, 0.2)
+        except (OSError, RpcFault) as exc:
+            if isinstance(exc, RpcFault) and exc.kind not in (
+                    "daemon_unavailable", "daemon_stopped"):
+                raise
+            return None
+        try:
+            return ServiceReadinessResponse.from_dict(self._result(response))
+        except FacadeFault as exc:
+            if exc.kind in ("daemon_unavailable", "daemon_stopped"):
+                return None
+            raise
+        except (TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.CODEX_PROTOCOL_ERROR,
+                "Global service returned malformed readiness",
+                "codex_protocol_error",
+                details={"reason": type(exc).__name__,
+                         "socket_path": str(self.deps.paths.rpc_socket)}) from exc
+
+    def _force_maintenance_basis(self):
+        try:
+            before = self._probe_readiness()
+        except FacadeFault as exc:
+            if exc.code != FacadeFaultCode.CODEX_FAILURE:
+                raise
+            return _StopBasis(None, None)
+        if (before is None and (self.deps.paths.rpc_socket.exists()
+                                or self.deps.paths.rpc_socket.is_symlink())):
+            return _StopBasis(None, None)
+        return before
+
+    def status(self) -> ServiceStatusResponse:
+        status = self._probe()
+        if status is not None:
+            return status
+        config = self._read_config()
+        listener = config.listener if config is not None else DEFAULT_PUBLIC_LISTENER
+        workers = self._durable_workers()
+        migration = self._durable_migration()
+        return _stopped_service_status(
+            listener, config.worker_version if config is not None else self.expected_version,
+            workers, migration)
+
+    def readiness(self) -> Optional[ServiceReadinessResponse]:
+        """Probe strict managed liveness without enumerating worker inventory."""
+        return self._probe_readiness()
+
+    def _durable_migration(self) -> dict:
+        path = self.deps.paths.migration_path
+        if not path.exists() and not path.is_symlink():
+            return _empty_migration()
+        try:
+            from .migration import (LegacyMigrationDeps, LegacyMigrationError,
+                                    LegacyMigrator)
+            migrator = LegacyMigrator(LegacyMigrationDeps(
+                self.deps.paths, self.deps.paths.durable_dir.parent / "instances"))
+            ledger = migrator._read_ledger(optional=False)
+            if ledger is None:
+                raise ValueError("migration ledger unexpectedly absent")
+            return ledger[0].to_dict()
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.CODEX_PROTOCOL_ERROR,
+                "Durable migration status is invalid", "codex_protocol_error",
+                details={"reason": "invalid_migration_ledger",
+                         "path": str(path), "durable_state": "preserved"}) from exc
+
+    def _conflict(self, configured: str, requested: str) -> FacadeFault:
+        return FacadeFault(
+            FacadeFaultCode.SERVICE_CONFIG_CONFLICT,
+            "Requested listener differs from the live global service",
+            "service_config_conflict",
+            details={"configured_listener": configured, "requested_listener": requested,
+                     "durable_state": "preserved"},
+            next_actions=[{"command": "codex-worker daemon status",
+                           "reason": "Inspect the fixed global listener"},
+                          {"command": "codex-worker daemon restart --app-server-listen %s" % shlex.quote(requested),
+                           "reason": "Change the listener only through supervised maintenance"}])
+
+    def ensure_running(self, listener: Optional[str] = None) -> ServiceStatusResponse:
+        requested = validate_public_listener(listener) if listener is not None else None
+        try:
+            with acquire_start_lock(self.deps.paths.start_lock):
+                return self._ensure_running_locked(requested)
+        except UnsafePathError as exc:
+            raise FacadeFault(FacadeFaultCode.DAEMON_START_FAILED,
+                              "Global service path is unsafe", "daemon_start_failed",
+                              details={"reason": exc.reason, "path": str(exc.path),
+                                       "durable_state": "preserved"}) from exc
+
+    def _ensure_running_locked(
+            self, requested: Optional[str], replacement: bool = False
+    ) -> ServiceStatusResponse:
+        ready = self._probe_readiness()
+        if ready is not None:
+            if ready.status != "ready":
+                raise FacadeFault(
+                    FacadeFaultCode.DAEMON_START_FAILED,
+                    "Global service is not exactly ready", "daemon_start_failed",
+                    details={"reason": "service_not_ready", "status": ready.status,
+                             "durable_state": "preserved"})
+            effective = requested or ready.listener
+            if ready.listener != effective:
+                raise self._conflict(ready.listener, effective)
+            if ready.service_version == self.expected_version and not replacement:
+                return ready
+            before = ready
+            impact = self._parse_maintenance(self._result(self.deps.rpc_call(
+                str(self.deps.paths.rpc_socket), "service/restart",
+                {"listener": ready.listener, "force": False}, 30.0)), "restart")
+            if impact.status == "refused":
+                raise self._busy(impact)
+            self._await_stopped(before)
+        previous = self._read_config()
+        if replacement:
+            effective = requested or (previous.listener if previous is not None
+                                      else DEFAULT_PUBLIC_LISTENER)
+            config = ServiceConfig(effective, self.expected_version, str(uuid.uuid4()))
+        elif previous is None:
+            config = ServiceConfig(requested or DEFAULT_PUBLIC_LISTENER,
+                                   self.expected_version, str(uuid.uuid4()))
+        elif requested is not None and previous.listener != requested:
+            raise self._conflict(previous.listener, requested)
+        elif previous.worker_version != self.expected_version:
+            config = ServiceConfig(previous.listener, self.expected_version,
+                                   str(uuid.uuid4()))
+        else:
+            config = previous
+        return self._launch_locked(config, previous)
+
+    def _address_in_use(self, listener: str) -> FacadeFault:
+        parsed = urlsplit(listener)
+        port = parsed.port
+        alternate_port = port + 1 if port is not None and port < 65535 else 4501
+        host = ("[%s]" % parsed.hostname
+                if parsed.hostname and ":" in parsed.hostname else parsed.hostname)
+        alternate = "ws://%s:%d" % (host, alternate_port)
+        return FacadeFault(
+            FacadeFaultCode.ADDRESS_IN_USE,
+            "Configured app-server listener is already in use", "address_in_use",
+            details={"listener": listener, "durable_state": "preserved"},
+            next_actions=[{
+                "command": "codex-worker daemon start --app-server-listen %s" %
+                           shlex.quote(alternate),
+                "reason": "Retry explicitly on the deterministic alternate listener",
+            }])
+
+    def _launch_locked(self, config: ServiceConfig,
+                       previous: Optional[ServiceConfig]) -> ServiceStatusResponse:
+        if self.deps.which(self.deps.codex_bin) is None:
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED, "Codex executable was not found",
+                "daemon_start_failed", details={"reason": "codex_not_found",
+                                                 "durable_state": "preserved"})
+        try:
+            available = self.deps.listener_available(config.listener)
+        except OSError as exc:
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Configured listener could not be resolved or probed",
+                "daemon_start_failed", details={"reason": "listener_probe_failed",
+                                                 "listener": config.listener,
+                                                 "cause": type(exc).__name__,
+                                                 "durable_state": "preserved"}) from exc
+        if not available:
+            raise self._address_in_use(config.listener)
+        receipt = self.deps.paths.rpc_socket.parent / (
+            "start-%s.json" % config.generation_id)
+        if receipt.exists() or receipt.is_symlink():
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Global service startup receipt path is occupied", "daemon_start_failed",
+                details={"reason": "unsafe_startup_receipt", "path": str(receipt),
+                         "durable_state": "preserved"})
+        try:
+            process = self.deps.spawn(
+                self._serve_argv(config, receipt), str(self.deps.paths.log_path))
+        except OSError as exc:
+            raise FacadeFault(
+                FacadeFaultCode.DAEMON_START_FAILED,
+                "Global service process could not be spawned", "daemon_start_failed",
+                details={"reason": "spawn_failed", "cause": type(exc).__name__,
+                         "log_path": str(self.deps.paths.log_path),
+                         "durable_state": "preserved"}) from exc
+        deadline = self.deps.monotonic() + 2.0
+        while True:
+            try:
+                status = self._probe_readiness()
+            except BaseException:
+                self.deps.terminate_spawn(process)
+                raise
+            if status is not None:
+                if status.listener != config.listener:
+                    self.deps.terminate_spawn(process)
+                    raise self._conflict(status.listener, config.listener)
+                if status.service_version != self.expected_version:
+                    self.deps.terminate_spawn(process)
+                    raise FacadeFault(
+                        FacadeFaultCode.TOOL_VERSION_MISMATCH,
+                        "Global service version did not match the installed command",
+                        "tool_version_mismatch",
+                        details={"expected_version": self.expected_version,
+                                 "actual_version": status.service_version})
+                current = self._read_config()
+                try:
+                    if current != config:
+                        if previous is None: self._write_config_once(config)
+                        elif current == previous: self._replace_config(config)
+                        else: raise self._conflict(current.listener, config.listener)
+                except BaseException:
+                    self.deps.terminate_spawn(process)
+                    raise
+                if status.status != "ready":
+                    raise FacadeFault(
+                        FacadeFaultCode.DAEMON_START_FAILED,
+                        "Global service is not exactly ready", "daemon_start_failed",
+                        details={"reason": "service_not_ready", "status": status.status,
+                                 "durable_state": "preserved"})
+                return status
+            exited = (process is not None and hasattr(process, "poll")
+                      and process.poll() is not None)
+            timed_out = self.deps.monotonic() >= deadline
+            if exited or timed_out:
+                if timed_out and not exited:
+                    self.deps.terminate_spawn(process)
+                if self._startup_collision(receipt, config.listener):
+                    raise self._address_in_use(config.listener)
+                # The gateway's actual bind is authoritative.  Re-probing only after
+                # that attempt preserves collision typing across the preflight gap.
+                try:
+                    available_after = self.deps.listener_available(config.listener)
+                except OSError as exc:
+                    raise FacadeFault(
+                        FacadeFaultCode.DAEMON_START_FAILED,
+                        "Configured listener could not be reprobed",
+                        "daemon_start_failed",
+                        details={"reason": "listener_probe_failed",
+                                 "listener": config.listener,
+                                 "cause": type(exc).__name__,
+                                 "durable_state": "preserved"}) from exc
+                if not available_after:
+                    raise self._address_in_use(config.listener)
+                reason = "child_exited" if exited else "readiness_timeout"
+                raise FacadeFault(
+                    FacadeFaultCode.DAEMON_START_FAILED,
+                    "Global service process exited before readiness" if exited
+                    else "Global service did not become ready",
+                    "daemon_start_failed", retryable=not exited,
+                    details={"reason": reason,
+                             "exit_code": process.poll() if exited else None,
+                             "durable_state": "preserved"})
+            self.deps.wait(0.01)
+
+    def _startup_collision(self, path: Path, listener: str) -> bool:
+        if not path.exists() and not path.is_symlink():
+            return False
+        verified = None
+        try:
+            metadata = os.lstat(str(path))
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600):
+                return False
+            verified = metadata
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return value == {"kind": "address_in_use", "listener": listener}
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return False
+        finally:
+            try:
+                current = os.lstat(str(path))
+                if (verified is not None
+                        and (current.st_dev, current.st_ino) == (
+                            verified.st_dev, verified.st_ino)):
+                    os.unlink(str(path))
+            except FileNotFoundError:
+                pass
+
+    def _replace_config(self, config: ServiceConfig) -> None:
+        path = self.deps.paths.config_path
+        temporary = path.with_name(".%s.%s" % (path.name, uuid.uuid4().hex))
+        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(config.to_dict(), handle, separators=(",", ":"), sort_keys=True)
+                handle.write("\n"); handle.flush(); os.fsync(handle.fileno())
+            os.replace(str(temporary), path)
+            directory_fd = os.open(str(path.parent), os.O_RDONLY)
+            try: os.fsync(directory_fd)
+            finally: os.close(directory_fd)
+        except BaseException:
+            try: os.unlink(temporary)
+            except FileNotFoundError: pass
+            raise
+
+    def _serve_argv(self, config: ServiceConfig, receipt: Path) -> Sequence[str]:
+        paths = self.deps.paths
+        return [self.deps.launcher, "--socket", str(paths.rpc_socket), "daemon", "serve",
+                "--state", str(paths.registry_path), "--codex-bin", self.deps.codex_bin,
+                "--app-server-listen", config.listener,
+                "--generation", config.generation_id,
+                "--startup-receipt", str(receipt)]
+
+    def _await_stopped(self, before) -> None:
+        deadline = self.deps.monotonic() + 2.0
+        while True:
+            endpoint_exists = (self.deps.paths.rpc_socket.exists()
+                               or self.deps.paths.rpc_socket.is_symlink())
+            live_pids = [pid for pid in (before.pid, before.app_server_pid)
+                         if pid is not None and self.deps.pid_alive(pid)]
+            if (self._probe_readiness() is None
+                    and not endpoint_exists and not live_pids):
+                return
+            if self.deps.monotonic() >= deadline:
+                raise FacadeFault(
+                    FacadeFaultCode.DAEMON_STOP_FAILED,
+                    "Global service did not stop after guarded maintenance",
+                    "daemon_stop_failed", retryable=True,
+                    details={"reason": "stop_timeout", "durable_state": "preserved",
+                             "rpc_endpoint_present": endpoint_exists,
+                             "live_pids": live_pids},
+                    next_actions=[
+                        {"command": "codex-worker daemon status",
+                         "reason": "Inspect the exact residual global service state"},
+                        {"command": "codex-worker daemon stop",
+                         "reason": "Retry the idempotent guarded stop"},
+                    ])
+            self.deps.wait(0.01)
+
+    def _parse_maintenance(self, value: dict, action: str) -> MaintenanceResult:
+        try:
+            result = MaintenanceResult.from_dict(value)
+            if result.action != action:
+                raise ValueError("maintenance action did not match request")
+            return result
+        except (TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.CODEX_PROTOCOL_ERROR,
+                "Global service returned malformed maintenance impact",
+                "codex_protocol_error", details={"reason": type(exc).__name__}) from exc
+
+    @staticmethod
+    def _busy(result: MaintenanceResult) -> FacadeFault:
+        if result.impact_unavailable_reason is not None:
+            return FacadeFault(
+                FacadeFaultCode.SERVICE_BUSY,
+                "Global service impact is unavailable", "service_busy",
+                details={"impact": {
+                    "availability": "unavailable",
+                    "reason": result.impact_unavailable_reason,
+                }},
+                next_actions=[{"command": "codex-worker daemon status",
+                               "reason": "Inspect the global service before retrying maintenance"}])
+        return FacadeFault(
+            FacadeFaultCode.SERVICE_BUSY, "Global service has active work", "service_busy",
+            details={"active": [item.to_dict() for item in result.inventory.items],
+                     "workers": result.workers.to_dict()},
+            next_actions=[{"command": "codex-worker daemon status",
+                           "reason": "Inspect active global work"}])
+
+    def stop(self, force: bool = False) -> dict:
+        if type(force) is not bool: raise ValueError("force must be bool")
+        with acquire_start_lock(self.deps.paths.start_lock):
+            if force:
+                before = self._force_maintenance_basis()
+            else:
+                before = self._probe()
+            if before is None:
+                return MaintenanceResult.completed(
+                    "stop", ActiveInventory(), force, workers=self._durable_workers()).to_dict()
+            result = self._parse_maintenance(self._result(self.deps.rpc_call(
+                str(self.deps.paths.rpc_socket), "service/stop", {"force": force}, 30.0)),
+                "stop")
+            if result.status == "refused": raise self._busy(result)
+            self._await_stopped(before)
+            return result.to_dict()
+
+    def restart(self, listener: Optional[str] = None, force: bool = False) -> dict:
+        if type(force) is not bool: raise ValueError("force must be bool")
+        with acquire_start_lock(self.deps.paths.start_lock):
+            current = self._force_maintenance_basis() if force else self._probe()
+            configured = self._read_config()
+            requested = validate_public_listener(
+                listener or (current.listener if current is not None
+                             and current.listener is not None else
+                             configured.listener if configured is not None else
+                             DEFAULT_PUBLIC_LISTENER))
+            impact = MaintenanceResult.completed(
+                "restart", ActiveInventory(), force, requested,
+                self._durable_workers())
+            if current is not None:
+                impact = self._parse_maintenance(self._result(self.deps.rpc_call(
+                    str(self.deps.paths.rpc_socket), "service/restart",
+                    {"listener": requested, "force": force}, 30.0)), "restart")
+                if impact.status == "refused": raise self._busy(impact)
+                self._await_stopped(current)
+            self._ensure_running_locked(requested, replacement=True)
+            status = self._probe()
+            if status is None:
+                raise FacadeFault(
+                    FacadeFaultCode.DAEMON_START_FAILED,
+                    "Global service stopped before public status projection",
+                    "daemon_start_failed", details={"reason": "status_unavailable",
+                                                     "durable_state": "preserved"})
+            return RestartServiceResponse(impact.to_dict(), status).to_dict()
+
+    def _durable_workers(self) -> WorkerImpact:
+        path = self.deps.paths.registry_path
+        if not path.exists() and not path.is_symlink():
+            return WorkerImpact()
+        try:
+            from .registry import RegistryError, SessionRegistry
+            records = SessionRegistry.read_existing(path).list()
+            return WorkerImpact([], sorted(record.name for record in records
+                                           if record.name is not None))
+        except (OSError, TypeError, ValueError) as exc:
+            raise FacadeFault(
+                FacadeFaultCode.REGISTRY_ERROR,
+                "Durable worker registry is invalid", "registry_error",
+                details={"reason": "invalid_registry", "path": str(path),
+                         "durable_state": "preserved"}) from exc

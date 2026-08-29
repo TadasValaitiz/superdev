@@ -1,0 +1,88 @@
+{
+  "attach": {
+    "attach_command": "codex --remote ws://127.0.0.1:51164",
+    "listener": "ws://127.0.0.1:51164",
+    "resume_command": "codex --remote ws://127.0.0.1:51164 resume 01a04ae9-efa2-79a1-9842-2d2849209787",
+    "thread_id": "01a04ae9-efa2-79a1-9842-2d2849209787"
+  },
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "external_side_effect": "/Users/tadas/.claude/.claude.json observed after run without pre-run ownership proof; preserved for operator disposition",
+    "historical_auth_isolation": "external HOME used; superseded by isolated runtime copy",
+    "literal_record": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-cleanup.json",
+    "literal_record_sha256": "13305201c77ec3402902dee03fb5c3ec923ddf1ea8cd9373de9762e3bf111c37",
+    "processes_remaining": 0,
+    "runtime_deleted": true,
+    "service_status": "stopped",
+    "socket_listeners_remaining": 0
+  },
+  "command_coverage": {
+    "goal_set": 1,
+    "goal_show": 1,
+    "history": 1,
+    "interrupt": 1,
+    "limits": 1,
+    "message": 1,
+    "messages": 1,
+    "model_list": 1,
+    "run": 1,
+    "session_list": 1,
+    "session_resume": 1,
+    "session_show": 1,
+    "session_start": 1,
+    "start": 1,
+    "status": 1,
+    "steer": 1,
+    "turn_events": 1,
+    "turn_interrupt": 1,
+    "turn_start": 3,
+    "turn_status": 1,
+    "turn_steer": 1,
+    "turn_wait": 3
+  },
+  "command_accounting": {
+    "attempted": 26,
+    "codex_failure_count": 0,
+    "completed": 26,
+    "not_run": 0,
+    "unmatched_attempts": 0
+  },
+  "constraints": {
+    "direct_codex_invocation": false,
+    "instance_selector": false,
+    "maintenance_in_common_journey": false,
+    "mcp_invocation": false,
+    "path_only_codex_worker": true,
+    "raw_socket_in_common_journey": false
+  },
+  "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/unrelated-repo",
+  "raw_diagnostics": {
+    "daemon_status_sha256": "a345d9a2423a57569eb33bf001ace85603d8dc58954083fa18962b72b4e977e6",
+    "model_list_sha256": "80544084b50325692a358b17b9de1a7f1c6cce3c1d1c0476f5fa92c5f386f49c",
+    "session_list_sha256": "441e103a2ecd8d15ddd17815ac6939508d3fb508c9b05629df7dd3978107daa5"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller",
+  "raw_transcript": {
+    "line_count": 178,
+    "path": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/claude.stream.jsonl",
+    "sha256": "d46a3d6fccb7d2330b29b35daaf9f5d5e657f4689a7399121d6f272f9fc2df79"
+  },
+  "tracked_literal_transcript": {
+    "line_count": 26,
+    "path": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-commands.jsonl",
+    "sanitization": "Secret-pattern scan only; command argv and JSON outputs otherwise preserved literally",
+    "sha256": "e50cf2e337f45f1237747b84cf2d54e7b1cba3126473eb5b0c1a92f9b4b0a7f0"
+  },
+  "scenario": "real-claude-path-caller",
+  "session_id": "0d3a2187-8c24-45b0-a92f-9576e0aa82b9",
+  "status": "MEASURED complete",
+  "substrate": {
+    "claude": "2.1.250 (Claude Code)",
+    "codex": "codex-cli 0.150.1",
+    "python": "Python 3.9.6",
+    "worker": "codex-worker 8.0.0"
+  },
+  "terminal_status": "completed",
+  "turn_id": "01a04ae9-efec-7fd0-955b-c6cc2033677b",
+  "worker_name": "claude-common-9ddf989089"
+}

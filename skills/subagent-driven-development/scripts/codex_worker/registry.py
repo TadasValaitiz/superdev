@@ -7,10 +7,12 @@ import tempfile
 import threading
 import uuid
 import re
+import shlex
 from pathlib import Path
 from typing import List, Optional, Sequence
 
 from .models import IdentifierSelector, SessionRecord
+from .service_domain import MigrationStatusView
 
 _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
@@ -21,6 +23,22 @@ class RegistryError(ValueError):
 
 class RegistryConflict(RegistryError):
     pass
+
+
+class LegacyNameConflict(RegistryConflict):
+    """A globally ambiguous legacy name with explicit, non-destructive recovery."""
+    kind = "legacy_name_conflict"
+
+    def __init__(self, name: str, candidates: List[dict]):
+        self.name = name
+        self.candidates = [dict(candidate) for candidate in candidates]
+        self.next_actions = [
+            {"command": "codex-worker migration resolve --name %s --thread %s" %
+             (shlex.quote(name), shlex.quote(candidate["thread_id"])),
+             "reason": "Select this preserved legacy thread for the global name"}
+            for candidate in self.candidates
+        ]
+        super().__init__("legacy worker name is conflicted: %s" % name)
 
 
 def _now() -> str:
@@ -72,10 +90,48 @@ def _record(data, schema_version=2):
 class SessionRegistry:
     SCHEMA_VERSION = 2
 
-    def __init__(self, path):
+    def __init__(self, path, migration_path=None):
         self.path = Path(path)
+        self.migration_path = (Path(migration_path) if migration_path is not None
+                               else self.path.parent / "migration.json")
         self._lock = threading.RLock()
         self._records = self._load()
+
+    @classmethod
+    def read_existing(cls, path):
+        """Load an owner-only registry without chmod, creation, or any other write."""
+        value = cls.__new__(cls)
+        value.path = Path(path)
+        value.migration_path = value.path.parent / "migration.json"
+        value._lock = threading.RLock()
+        metadata = os.lstat(value.path)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise RegistryError("registry must be an owner-owned mode-0600 regular file")
+        raw = value.path.read_bytes()
+        if not raw:
+            raise RegistryError("existing registry must not be empty")
+        value._records = value._decode(raw)
+        return value
+
+    @classmethod
+    def publish_snapshot(cls, path, records: Sequence[SessionRecord],
+                         migration_path=None):
+        """Atomically publish without creating an empty first-write authority."""
+        value = cls.__new__(cls)
+        value.path = Path(path)
+        value.migration_path = (Path(migration_path) if migration_path is not None
+                                else value.path.parent / "migration.json")
+        value._lock = threading.RLock()
+        value._records = []
+        if value.path.exists() or value.path.is_symlink():
+            metadata = os.lstat(value.path)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600):
+                raise RegistryError(
+                    "registry must be an owner-owned mode-0600 regular file")
+        value.replace_all(records)
+        return value
 
     def _load(self) -> List[SessionRecord]:
         if not self.path.exists():
@@ -93,6 +149,12 @@ class SessionRegistry:
             if not raw:
                 self._save_locked([])
                 return []
+        except (OSError, ValueError, TypeError) as exc:
+            raise RegistryError("invalid registry JSON at %s; expected schema versions 1 or 2" % self.path) from exc
+        return self._decode(raw)
+
+    def _decode(self, raw: bytes) -> List[SessionRecord]:
+        try:
             payload = json.loads(raw.decode("utf-8"))
         except (OSError, ValueError, TypeError) as exc:
             raise RegistryError("invalid registry JSON at %s; expected schema versions 1 or 2" % self.path) from exc
@@ -149,6 +211,22 @@ class SessionRegistry:
     def list(self) -> List[SessionRecord]:
         with self._lock:
             return list(self._records)
+
+    def replace_all(self, records: Sequence[SessionRecord]) -> None:
+        """Atomically publish one fully validated authoritative snapshot."""
+        validated = []
+        for record in records:
+            if not isinstance(record, SessionRecord):
+                raise RegistryError("registry snapshot entries must be SessionRecord values")
+            validated.append(_record(record.to_dict(), self.SCHEMA_VERSION))
+        names = [record.name for record in validated if record.name is not None]
+        if (len({record.session_id for record in validated}) != len(validated)
+                or len({record.thread_id for record in validated}) != len(validated)
+                or len(set(names)) != len(names)):
+            raise RegistryConflict("duplicate session, thread, or worker name identifier")
+        with self._lock:
+            self._save_locked(validated)
+            self._records = list(validated)
 
     def try_resolve(self, selector: IdentifierSelector) -> Optional[SessionRecord]:
         with self._lock:
@@ -223,6 +301,9 @@ class SessionRegistry:
     def resolve_name(self, name: str) -> SessionRecord:
         if not isinstance(name, str) or not name:
             raise RegistryError("name must be a non-empty string")
+        conflict = self._migration_conflict(name)
+        if conflict is not None:
+            raise LegacyNameConflict(name, conflict)
         with self._lock:
             matches = [record for record in self._records if record.name == name]
             if len(matches) > 1:
@@ -230,3 +311,30 @@ class SessionRegistry:
             if not matches:
                 raise RegistryError("unknown worker name")
             return matches[0]
+
+    def _migration_conflict(self, name: str) -> Optional[List[dict]]:
+        path = self.migration_path
+        if not path.exists():
+            return None
+        try:
+            metadata = os.lstat(path)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600):
+                raise RegistryError("migration ledger must be owner-owned mode-0600")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if (not isinstance(payload, dict)
+                    or set(payload) != {"version", "status", "resolutions"}
+                    or payload["version"] != 1
+                    or not isinstance(payload["resolutions"], list)):
+                raise ValueError("invalid migration ledger")
+            status = MigrationStatusView.from_dict(payload["status"])
+        except (OSError, ValueError, TypeError) as exc:
+            raise RegistryError("invalid migration ledger") from exc
+        for conflict in status.conflicts:
+            if conflict.name == name:
+                return [{"source_path": candidate.source_path,
+                         "source_digest": candidate.source_digest,
+                         "session_id": candidate.session_id,
+                         "thread_id": candidate.thread_id}
+                        for candidate in conflict.candidates]
+        return None

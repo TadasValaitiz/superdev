@@ -30,8 +30,8 @@ session** rather than starting new ones. For a broad arc, prefer one Codex worke
 the whole arc with `run --name` continuations over any sequence of fresh dispatches.
 Main-session design stays native Claude.
 
-When Codex is selected, run this preflight once per session before the first Codex-worker
-dispatch. Set `SUPERDEV_PLUGIN_ROOT` from `CLAUDE_PLUGIN_ROOT` when it is present;
+When Codex is selected, require one successful trusted UV preflight per session before
+the first Codex-worker dispatch. Set `SUPERDEV_PLUGIN_ROOT` from `CLAUDE_PLUGIN_ROOT` when it is present;
 otherwise derive the canonical plugin root containing the exact loaded `SKILL.md` path.
 
 ```sh
@@ -40,8 +40,10 @@ otherwise derive the canonical plugin root containing the exact loaded `SKILL.md
 ```
 
 The installer validates the loaded root, package and manifest versions, UV ownership,
-and PATH precedence before it returns success. Follow its PATH-repair guidance and rerun
-it after fixing an error. UV owns one global command: a mismatch repair updates it for
+and PATH precedence before it returns success. A failed attempt does not satisfy the
+preflight: correct the reported problem and retry. After success, do not rerun it during
+that session unless a later typed version-skew refusal explicitly requires coordinated
+repair. UV owns one global command: a mismatch repair updates it for
 every room, so coordinate any rooms using other cached plugin versions first. Operational
 commands fail typed if `CLAUDE_PLUGIN_ROOT` differs from the installed tool; rerun this
 trusted preflight for the loaded room after coordinating version skew. Never invoke the
@@ -49,10 +51,26 @@ source launcher or use an absolute source path
 as an operational fallback. Native Claude-only work does not run this preflight.
 
 Read [Codex worker broker](codex-worker.md),
-give every worker a collision-resistant readable name (role plus random or numbered
-suffix), and use `start` for its first message then short `run` follow-ups. Preserve
-the normal task brief/report/review-package contracts: a worker never reviews its own
-diff, and a resumed worker keeps its creation cwd.
+give every worker a globally unique, collision-resistant readable name (role plus a
+random suffix such as `review-a91c`), require an explicit absolute `--cwd` on `start`,
+then use `run` for short name-based follow-ups with no listener/transport arguments.
+Callback-routing Claude metadata such as `CLAUDE_CODE_SESSION_ID` is callback-only and
+never selects infrastructure or filters global name lookup. `CLAUDE_PLUGIN_ROOT`
+identifies only the loaded package for trusted preflight; it never selects runtime
+infrastructure.
+
+After every start, run, or status handoff, report the returned
+`result.worker.session_id`, `result.worker.thread_id`, and
+`result.worker.attach.resume_command` together with the exact worker RESUME command.
+Keep the two routes visibly distinct: report the returned attach command verbatim for a
+human TUI, and report controller continuation separately, for example
+`codex-worker run --name review-a91c --prompt <follow-up>`.
+Normal completion leaves the one global service running. Stop/restart are dangerous
+machine-wide maintenance requiring explicit human supervision and agreement; they are
+never cleanup, and force is never automated.
+
+Preserve the normal task brief/report/review-package contracts: a worker never reviews
+its own diff, and a resumed worker keeps its creation cwd.
 
 **Narration:** between tool calls, narrate at most one short line — the
 ledger and the tool results carry the record.
@@ -91,9 +109,12 @@ disjoint file sets and serial commits. See [parallel-execution.md](parallel-exec
 
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
-- Fresh subagent per task (no context pollution)
-- Review after each task (spec compliance + code quality), broad review at the end
+- One carrying implementer per broad arc (context survives across its tasks)
+- Review at plan checkpoints, then a broad review at the end
 - Faster iteration (no human-in-loop between tasks)
+
+For explicitly Sonnet-class mechanical work, the legacy bite-size mode may instead use
+a fresh implementer and review per task.
 
 ## The Process
 
@@ -101,36 +122,36 @@ disjoint file sets and serial commits. See [parallel-execution.md](parallel-exec
 digraph process {
     rankdir=TB;
 
-    subgraph cluster_per_task {
-        label="Per Task";
-        "Dispatch implementer subagent (./implementer-prompt.md)" [shape=box];
+    subgraph cluster_per_arc {
+        label="Per Arc";
+        "Dispatch carrying implementer (./implementer-prompt.md)" [shape=box];
         "Implementer subagent asks questions?" [shape=diamond];
         "Answer questions, provide context" [shape=box];
-        "Implementer subagent implements, tests, commits, self-reviews" [shape=box];
-        "Write diff file, dispatch task reviewer subagent (./task-reviewer-prompt.md)" [shape=box];
-        "Task reviewer reports spec ✅ and quality approved?" [shape=diamond];
-        "Dispatch fix subagent for Critical/Important findings" [shape=box];
-        "Mark task complete in todo list and progress ledger" [shape=box];
+        "Carrying implementer executes arc, tests, commits, self-reviews" [shape=box];
+        "At checkpoint, write review package and dispatch reviewer" [shape=box];
+        "Checkpoint reviewer reports spec ✅ and quality approved?" [shape=diamond];
+        "Resume implementer or dispatch bounded follow-up fixes" [shape=box];
+        "Mark checkpoint complete in todo list and progress ledger" [shape=box];
     }
 
     "Read plan, note context and global constraints, create todos" [shape=box];
-    "More tasks remain?" [shape=diamond];
+    "More arcs remain?" [shape=diamond];
     "Dispatch final code reviewer subagent (../requesting-code-review/code-reviewer.md)" [shape=box];
     "Use superdev:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Read plan, note context and global constraints, create todos" -> "Dispatch implementer subagent (./implementer-prompt.md)";
-    "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
+    "Read plan, note context and global constraints, create todos" -> "Dispatch carrying implementer (./implementer-prompt.md)";
+    "Dispatch carrying implementer (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
     "Implementer subagent asks questions?" -> "Answer questions, provide context" [label="yes"];
-    "Answer questions, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)";
-    "Implementer subagent asks questions?" -> "Implementer subagent implements, tests, commits, self-reviews" [label="no"];
-    "Implementer subagent implements, tests, commits, self-reviews" -> "Write diff file, dispatch task reviewer subagent (./task-reviewer-prompt.md)";
-    "Write diff file, dispatch task reviewer subagent (./task-reviewer-prompt.md)" -> "Task reviewer reports spec ✅ and quality approved?";
-    "Task reviewer reports spec ✅ and quality approved?" -> "Dispatch fix subagent for Critical/Important findings" [label="no"];
-    "Dispatch fix subagent for Critical/Important findings" -> "Write diff file, dispatch task reviewer subagent (./task-reviewer-prompt.md)" [label="re-review"];
-    "Task reviewer reports spec ✅ and quality approved?" -> "Mark task complete in todo list and progress ledger" [label="yes"];
-    "Mark task complete in todo list and progress ledger" -> "More tasks remain?";
-    "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
-    "More tasks remain?" -> "Dispatch final code reviewer subagent (../requesting-code-review/code-reviewer.md)" [label="no"];
+    "Answer questions, provide context" -> "Dispatch carrying implementer (./implementer-prompt.md)";
+    "Implementer subagent asks questions?" -> "Carrying implementer executes arc, tests, commits, self-reviews" [label="no"];
+    "Carrying implementer executes arc, tests, commits, self-reviews" -> "At checkpoint, write review package and dispatch reviewer";
+    "At checkpoint, write review package and dispatch reviewer" -> "Checkpoint reviewer reports spec ✅ and quality approved?";
+    "Checkpoint reviewer reports spec ✅ and quality approved?" -> "Resume implementer or dispatch bounded follow-up fixes" [label="no"];
+    "Resume implementer or dispatch bounded follow-up fixes" -> "At checkpoint, write review package and dispatch reviewer" [label="re-review"];
+    "Checkpoint reviewer reports spec ✅ and quality approved?" -> "Mark checkpoint complete in todo list and progress ledger" [label="yes"];
+    "Mark checkpoint complete in todo list and progress ledger" -> "More arcs remain?";
+    "More arcs remain?" -> "Dispatch carrying implementer (./implementer-prompt.md)" [label="yes"];
+    "More arcs remain?" -> "Dispatch final code reviewer subagent (../requesting-code-review/code-reviewer.md)" [label="no"];
     "Dispatch final code reviewer subagent (../requesting-code-review/code-reviewer.md)" -> "Use superdev:finishing-a-development-branch";
 }
 ```
@@ -156,10 +177,10 @@ explicitly; never rely on inherited session defaults.
 
 | Tier | Use for | Native Claude Code |
 |---|---|---|
-| `medium` | Normal implementation, routine integration/debugging, and ordinary per-task review | `sonnet` |
+| `medium` | Normal implementation, routine integration/debugging, and ordinary checkpoint review | `sonnet` |
 | `very smart` | Architecture, unusually ambiguous/high-risk work, and every design or final gate | `opus` |
 
-`medium` is the default for planned task work. Escalate an implementation or per-task
+`medium` is the default for planned task work. Escalate an implementation or checkpoint
 review to `very smart` when ambiguity, cross-cutting risk, or failed attempts show that
 more judgment is needed. Do not scale design/gate work down: spec and plan reviewers,
 final whole-branch review, and finishing deviation/acceptance audit always use `very
@@ -178,7 +199,11 @@ its long-run + resume-first strength (D36) is the deciding factor, not an opt-in
 
 Implementer subagents report one of four statuses. Handle each appropriately:
 
-**DONE:** Generate the review package (`scripts/review-package BASE HEAD`, from this skill's directory — it prints the unique file path it wrote; BASE is the commit you recorded before dispatching the implementer — never `HEAD~1`, which silently drops all but the last commit of a multi-commit task), then dispatch the task reviewer with the printed path.
+**DONE:** Record the arc progress and resume the same implementer for remaining work. At
+the plan checkpoint, generate the review package (`scripts/review-package BASE HEAD`,
+from this skill's directory — it prints the unique file path it wrote; BASE is the
+commit recorded at the previous checkpoint, never `HEAD~1`, which silently drops a
+multi-commit arc), then dispatch the checkpoint reviewer with the printed path.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
@@ -219,7 +244,7 @@ review — send it back to the implementer and re-review.
 
 ## Constructing Reviewer Prompts
 
-Per-task reviews are task-scoped gates. The broad review happens once, at the
+Checkpoint reviews are checkpoint-scoped gates. The broad review happens once, at the
 final whole-branch review. When you fill a reviewer template:
 
 - Do not add open-ended directives like "check all uses" or "run race tests
@@ -339,9 +364,9 @@ You: I'm using Subagent-Driven Development to execute this plan.
 [Read plan file once: docs/superdev/plans/feature-plan.md]
 [Create todos for all tasks]
 
-Task 1: Hook installation script
+Arc 1: Hook lifecycle
 
-[Run task-brief for Task 1; dispatch implementer with brief + report paths + context]
+[Run task-brief for the arc; dispatch its carrying implementer with brief + report paths + context]
 
 Implementer: "Before I begin - should the hook be installed at user or system level?"
 
@@ -354,15 +379,17 @@ Implementer: "Got it. Implementing now..."
   - Self-review: Found I missed --force flag, added it
   - Committed
 
-[Run review-package, dispatch task reviewer with the printed path]
-Task reviewer: Spec ✅ - all requirements met, nothing extra.
+[Continue the same implementer through the arc's remaining tasks]
+
+[At Checkpoint C1, run review-package and dispatch a checkpoint reviewer]
+Checkpoint reviewer: Spec ✅ - all requirements met, nothing extra.
   Strengths: Good test coverage, clean. Issues: None. Task quality: Approved.
 
-[Mark Task 1 complete]
+[Mark Checkpoint C1 complete]
 
-Task 2: Recovery modes
+Arc 2: Recovery modes
 
-[Run task-brief for Task 2; dispatch implementer with brief + report paths + context]
+[Run task-brief for Arc 2; dispatch one carrying implementer]
 
 Implementer: [No questions, proceeds]
 Implementer:
@@ -371,19 +398,19 @@ Implementer:
   - Self-review: All good
   - Committed
 
-[Run review-package, dispatch task reviewer with the printed path]
-Task reviewer: Spec ❌:
+[At the arc checkpoint, run review-package and dispatch the reviewer]
+Checkpoint reviewer: Spec ❌:
   - Missing: Progress reporting (spec says "report every 100 items")
   - Extra: Added --json flag (not requested)
   Issues (Important): Magic number (100)
 
-[Dispatch fix subagent with all findings]
-Fixer: Removed --json flag, added progress reporting, extracted PROGRESS_INTERVAL constant
+[Resume the carrying implementer with all findings]
+Implementer: Removed --json flag, added progress reporting, extracted PROGRESS_INTERVAL constant
 
-[Task reviewer reviews again]
-Task reviewer: Spec ✅. Task quality: Approved.
+[Checkpoint reviewer reviews again]
+Checkpoint reviewer: Spec ✅. Task quality: Approved.
 
-[Mark Task 2 complete]
+[Mark Checkpoint C2 complete]
 
 ...
 
@@ -398,7 +425,7 @@ Done!
 
 **vs. Manual execution:**
 - Subagents follow TDD naturally
-- Fresh context per task (no confusion)
+- Carrying context per arc (less re-derivation)
 - Parallel-safe (subagents don't interfere)
 - Subagent can ask questions (before AND during work)
 
@@ -421,9 +448,9 @@ Done!
 - Code quality ensures implementation is well-built
 
 **Cost:**
-- More subagent invocations (implementer + reviewer per task)
-- Controller does more prep work (extracting all tasks upfront)
-- Review loops add iterations
+- One carrying implementer invocation per arc plus checkpoint reviewers
+- Controller prepares broad arc briefs and checkpoint review packages
+- Review loops add targeted iterations at checkpoints
 - But catches issues early (cheaper than debugging later)
 
 ## Red Flags

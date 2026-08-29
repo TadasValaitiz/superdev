@@ -18,8 +18,19 @@ class ProjectionTests(unittest.TestCase):
         from codex_worker.callback_domain import CallbackEvent
         self.assertEqual(CallbackEvent.__module__, "codex_worker.callback_domain")
 
+    def test_attach_projection_quotes_public_listener_and_exact_thread_id(self):
+        from codex_worker.projection import build_attach_view
+        attach = build_attach_view("ws://localhost:4500", "thread with space")
+        self.assertEqual(attach.listener, "ws://localhost:4500")
+        self.assertEqual(attach.thread_id, "thread with space")
+        self.assertEqual(attach.attach_command, "codex --remote ws://localhost:4500")
+        self.assertEqual(
+            attach.resume_command,
+            "codex --remote ws://localhost:4500 resume 'thread with space'",
+        )
+
     def setUp(self):
-        self.worker = WorkerView("default", "worker", "00000000-0000-0000-0000-000000000001",
+        self.worker = WorkerView("worker", "00000000-0000-0000-0000-000000000001",
                                  "thread", str(ROOT), Tier.MEDIUM, "model", "medium", AccessMode.FULL)
     def test_terminal_fallback_and_live_messages_preserve_nullable_phase(self):
         items = [

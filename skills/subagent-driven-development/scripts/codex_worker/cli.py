@@ -1,5 +1,7 @@
 """Command-line entrypoint for the local Codex worker daemon/client."""
 import argparse
+import contextlib
+import errno
 import json
 import math
 import os
@@ -10,27 +12,30 @@ import sys
 import tempfile
 import subprocess
 import time
+import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, List, Optional
 
-from .app_server import CodexAppServer
 from .broker import WorkerBroker
 from .models import JsonObject, RpcFault, rpc_response
 from .registry import SessionRegistry
-from .rpc import FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe, daemon_unavailable_fault, rpc_call
+from .rpc import (FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe,
+                  daemon_unavailable_fault, rpc_call, validate_raw_params)
 from .runtime import RuntimeStore
 from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowRequest,
                        InterruptWorkerRequest, LimitsRequest, RunWorkerRequest,
                        MessageWorkerRequest, StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
-                       WorkerMessagesRequest, WorkerStatusRequest)
-from .instance import (InstanceDeps, InstanceManager, derive_instance_paths,
-                       resolve_instance, validate_instance_id)
+                       WorkerMessagesRequest, WorkerStatusRequest,
+                       ResolveLegacyConflictRequest)
+from .instance import (ServiceDeps, ServiceManager)
+from .service_domain import (DEFAULT_PUBLIC_LISTENER, derive_service_paths,
+                             validate_public_listener)
 from .version import distribution_version
 
 
 DOCUMENTED_CLIENT_METHODS = {
     "daemon/status",
-    "daemon/shutdown",
     "model/list",
     "session/start",
     "session/resume",
@@ -73,7 +78,7 @@ def default_state_path() -> str:
     else:
         root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
         root = root / "superdev" / "codex-worker"
-    return str(root / "sessions.json")
+    return str(root / "service" / "registry.json")
 
 
 def _positive_int(value: str) -> int:
@@ -117,9 +122,9 @@ def _absolute_directory(value: str) -> str:
     return value
 
 
-def _instance_id(value: str) -> str:
+def _public_listener(value: str) -> str:
     try:
-        return validate_instance_id(value)
+        return validate_public_listener(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
@@ -141,9 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         version="codex-worker %s" % distribution_version(),
     )
     parser.add_argument("--socket", type=_absolute_path,
-                        help="Unix socket path (default: SUPERDEV_CODEX_WORKER_SOCKET or user temp path)")
-    parser.add_argument("--instance", type=_instance_id,
-                        help="selected managed worker instance")
+                        help="expert raw-only Unix RPC endpoint; bypasses managed service lifecycle")
     parser.add_argument("--pretty", action="store_true",
                         help="Pretty-print JSON responses for client commands")
 
@@ -155,9 +158,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     daemon = families.add_parser("daemon", help="broker lifecycle")
     daemon_sub = daemon.add_subparsers(
-        dest="action", required=True, parser_class=CodexWorkerArgumentParser
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser,
+        metavar="{start,status,stop,restart}",
     )
-    serve = daemon_sub.add_parser("serve", help="run the worker daemon in the foreground")
+    serve = daemon_sub.add_parser("serve")
     serve.set_defaults(method=None)
     serve.add_argument("--state", type=_absolute_path, default=default_state_path(),
                        help="session registry path (default: SUPERDEV_CODEX_WORKER_STATE or user state dir)")
@@ -165,11 +169,44 @@ def build_parser() -> argparse.ArgumentParser:
                        help="installed Codex CLI executable path")
     serve.add_argument("--event-limit", type=_positive_int, default=1000,
                        help="per-session in-memory event retention limit")
-    daemon_sub.add_parser("start", help="start the selected managed daemon").set_defaults(
-        method="daemon/start", managed_daemon=True)
-    daemon_sub.add_parser("status", help="read daemon health").set_defaults(method="daemon/status")
-    daemon_sub.add_parser("stop", help="stop the selected managed daemon").set_defaults(method="daemon/stop", managed_daemon=True)
-    daemon_sub.add_parser("shutdown", help="gracefully stop the daemon").set_defaults(method="daemon/shutdown")
+    serve.add_argument("--app-server-listen", type=_public_listener,
+                       default=DEFAULT_PUBLIC_LISTENER)
+    serve.add_argument("--generation", help=argparse.SUPPRESS)
+    serve.add_argument("--startup-receipt", type=_absolute_path, help=argparse.SUPPRESS)
+    start_service = daemon_sub.add_parser("start", help="ensure the global service")
+    start_service.set_defaults(method="service/start", managed_daemon=True)
+    start_service.add_argument("--app-server-listen", type=_public_listener)
+    daemon_sub.add_parser("status", help="inspect the global service without starting").set_defaults(method="service/status")
+    stop_service = daemon_sub.add_parser(
+        "stop", help="dangerous supervised global stop",
+        description="Stop the one global service while preserving durable state; active work refuses unless --force explicitly accepts global impact.")
+    stop_service.set_defaults(method="service/stop", managed_daemon=True)
+    stop_service.add_argument(
+        "--force", action="store_true",
+        help=("interrupt every measured active name/session/thread/turn; accepts an "
+              "unknown global blast radius if degraded inventory is unavailable"))
+    restart_service = daemon_sub.add_parser(
+        "restart", help="dangerous supervised global restart",
+        description="Restart the one global service while preserving durable state; active work refuses unless --force explicitly accepts global impact.")
+    restart_service.set_defaults(method="service/restart", managed_daemon=True)
+    restart_service.add_argument("--app-server-listen", type=_public_listener)
+    restart_service.add_argument(
+        "--force", action="store_true",
+        help=("interrupt every measured active name/session/thread/turn; accepts an "
+              "unknown global blast radius if degraded inventory is unavailable"))
+
+    migration = families.add_parser("migration", help="inspect or resolve legacy imports")
+    migration_sub = migration.add_subparsers(
+        dest="action", required=True, parser_class=CodexWorkerArgumentParser)
+    migration_sub.add_parser(
+        "status", help="inspect preserved import and conflict state").set_defaults(
+            method="migration/status")
+    resolve = migration_sub.add_parser(
+        "resolve", help="select one preserved legacy candidate explicitly")
+    resolve.set_defaults(method="migration/resolve")
+    resolve.add_argument("--name", required=True)
+    resolve.add_argument("--thread", dest="thread_id", required=True)
+    resolve.add_argument("--as-name")
 
     model = families.add_parser("model", help="live Codex model discovery")
     model_sub = model.add_subparsers(
@@ -237,14 +274,44 @@ def build_parser() -> argparse.ArgumentParser:
     turn_interrupt.set_defaults(method="turn/interrupt")
     _add_selector_group(turn_interrupt)
 
+    _add_public_limits(parser)
     return parser
+
+
+def _add_public_limits(parser: argparse.ArgumentParser) -> None:
+    """Attach an explicit operational boundary to every public help surface."""
+    generic = ("Uses the one machine-wide service and global worker names. It may replace an "
+               "incompatible idle service, but never forces active work or performs cleanup stop.")
+    danger = ("Machine-wide and human-supervised. Active work refuses unless --force is "
+              "explicitly supplied. Healthy force reports every measured active turn; "
+              "degraded force accepts an unknown global blast radius when inventory is unavailable.")
+    raw = ("Without the expert global --socket bypass, requires the existing strictly ready "
+           "service and never auto-starts it. --socket targets only that exact Unix endpoint.")
+
+    def visit(current: argparse.ArgumentParser, path: List[str]) -> None:
+        if path == ["daemon", "serve"]:
+            return
+        current.formatter_class = argparse.RawDescriptionHelpFormatter
+        if path in (["daemon", "stop"], ["daemon", "restart"]):
+            boundary = danger
+        elif path and path[0] in ("model", "session", "turn"):
+            boundary = raw
+        else:
+            boundary = generic
+        current.epilog = "Limits:\n  %s" % boundary
+        for action in current._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for name, child in action.choices.items():
+                    visit(child, path + [name])
+
+    visit(parser, [])
 
 
 def _add_common_commands(families) -> None:
     start = families.add_parser("start", help="create a named worker and send its first message")
     start.set_defaults(method="worker/start", common=True)
     _add_name_prompt(start)
-    start.add_argument("--cwd", default=os.getcwd())
+    start.add_argument("--cwd", required=True, type=_absolute_directory)
     policy = start.add_mutually_exclusive_group()
     policy.add_argument("--tier", choices=("medium", "very-smart"))
     policy.add_argument("--model")
@@ -253,6 +320,7 @@ def _add_common_commands(families) -> None:
     start.add_argument("--goal")
     start.add_argument("--token-budget", type=_positive_int)
     start.add_argument("--no-callback", action="store_true")
+    start.add_argument("--app-server-listen", type=_public_listener)
     _add_turn_options(start)
     run = families.add_parser("run", help="send a follow-up to a named worker")
     run.set_defaults(method="worker/run", common=True)
@@ -329,8 +397,21 @@ def _argv_wants_pretty(argv: List[str]) -> bool:
     return "--pretty" in argv
 
 
+def _removed_instance_reason(argv: List[str]) -> Optional[str]:
+    if "--instance" in argv or any(token.startswith("--instance=") for token in argv):
+        return ("--instance was removed because codex-worker now has one global service; "
+                "use global --name values and run 'codex-worker migration status' for legacy data")
+    return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    removed_reason = _removed_instance_reason(raw_argv)
+    if removed_reason is not None:
+        response = rpc_response("cli", fault=RpcFault(
+            -32602, "Invalid params", "invalid_params", details={"reason": removed_reason}))
+        _print_json(response, _argv_wants_pretty(raw_argv))
+        return 2
     parser = build_parser()
     try:
         args = parser.parse_args(raw_argv)
@@ -346,8 +427,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return int(exc.code)
 
     if args.family == "daemon" and args.action == "serve":
-        if args.pretty or args.instance:
-            print("codex-worker: --pretty and --instance are not valid with daemon serve", file=sys.stderr)
+        if args.pretty:
+            print("codex-worker: --pretty is not valid with daemon serve", file=sys.stderr)
             return 2
         try:
             _require_loaded_plugin_version(args)
@@ -355,40 +436,44 @@ def main(argv: Optional[List[str]] = None) -> int:
         except FacadeFault as fault:
             response = rpc_response("cli", fault=FacadeRpcFault(fault))
             _print_json(response, False)
-            return 1
+            return 3
 
     try:
-        params = None
-        if args.family == "daemon" and args.action == "start":
+        params = _params_for(args)
+        managed_family = args.family in ("migration",) or (
+            args.family == "daemon" and args.action in ("start", "status", "stop", "restart"))
+        if getattr(args, "common", False):
+            _validate_common_request(args.method, params)
             if args.socket:
-                raise ValueError("--socket is not valid with daemon start")
-        elif args.family == "daemon" and args.action == "stop":
-            if args.socket:
-                raise ValueError("--socket is not valid with daemon stop")
-        else:
-            if args.family == "daemon" and args.action == "shutdown" and args.instance:
-                raise ValueError("--instance is not valid with daemon shutdown")
-            params = _params_for(args)
-            if getattr(args, "common", False):
-                _validate_common_request(args.method, params)
-                if args.socket:
-                    raise ValueError("--socket is not valid for common worker commands")
-            elif args.socket and args.instance:
-                raise ValueError("--socket and --instance are mutually exclusive")
+                raise ValueError("--socket is not valid for common worker commands")
+        elif not managed_family:
+            validate_raw_params(args.method, params)
+        elif managed_family and args.socket and not (
+                args.family == "daemon" and args.action == "status"):
+            raise ValueError("--socket is not valid with managed lifecycle or migration commands")
 
         _require_loaded_plugin_version(args)
         if args.family == "daemon" and args.action == "start":
-            manager = _instance_manager(args.instance)
+            manager = _service_manager()
+            manager.ensure_running(args.app_server_listen)
             response = {"jsonrpc": "2.0", "id": "cli",
-                        "result": manager.ensure_running().to_dict()}
+                        "result": manager.status().to_dict()}
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "status" and not args.socket:
-            response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).status().to_dict()}
+            response = {"jsonrpc": "2.0", "id": "cli",
+                        "result": _service_manager().status().to_dict()}
             _print_json(response, args.pretty)
             return 0
         if args.family == "daemon" and args.action == "stop":
-            response = {"jsonrpc": "2.0", "id": "cli", "result": _instance_manager(args.instance).stop().to_dict()}
+            response = {"jsonrpc": "2.0", "id": "cli",
+                        "result": _service_manager().stop(args.force)}
+            _print_json(response, args.pretty)
+            return 0
+        if args.family == "daemon" and args.action == "restart":
+            response = {"jsonrpc": "2.0", "id": "cli",
+                        "result": _service_manager().restart(
+                            args.app_server_listen, args.force)}
             _print_json(response, args.pretty)
             return 0
         method = args.method
@@ -397,23 +482,27 @@ def main(argv: Optional[List[str]] = None) -> int:
             capture = capture_from_env(os.environ)
             params["callback_capture"] = capture.to_dict() if capture is not None else None
         if getattr(args, "common", False):
-            socket_path = _common_endpoint(args.instance, autostart=method in ("worker/start", "worker/run"))
+            socket_path = _common_endpoint(
+                args.app_server_listen if method == "worker/start" else None, True)
+        elif args.family == "migration":
+            socket_path = _common_endpoint(None, True)
         else:
-            socket_path = (_managed_raw_endpoint(args.instance)
-                           if args.instance else args.socket or default_socket_path())
+            socket_path = args.socket or _managed_raw_endpoint()
+            if args.family == "daemon" and args.action == "status" and args.socket:
+                method = "daemon/status"
         response = rpc_call(socket_path, method, params, timeout=_client_timeout(method, params))
     except FacadeFault as fault:
         response = rpc_response("cli", fault=FacadeRpcFault(fault))
         _print_json(response, args.pretty)
-        return 1
+        return 3
     except RpcFault as fault:
         response = rpc_response("cli", fault=fault)
         _print_json(response, args.pretty)
-        return 1
+        return _response_error_exit(response)
     except OSError:
         response = rpc_response("cli", fault=daemon_unavailable_fault(args.socket or default_socket_path()))
         _print_json(response, args.pretty)
-        return 1
+        return 3
     except ValueError as exc:
         response = rpc_response("cli", fault=RpcFault(
             -32602, "Invalid params", "invalid_params", details={"reason": str(exc)}
@@ -423,27 +512,80 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _print_json(response, args.pretty)
     if "error" in response:
-        return 1
+        return _response_error_exit(response)
     return 0
 
 
+def _response_error_exit(response: JsonObject) -> int:
+    error = response.get("error")
+    data = error.get("data") if isinstance(error, dict) else None
+    kind = data.get("kind") if isinstance(data, dict) else None
+    return 1 if kind in ("internal_error", "broker_error") else 3
+
+
 def _serve(args: argparse.Namespace) -> int:
-    codex = None
+    service = None
     server = None
     callback_dispatcher = None
     try:
+        paths = _service_paths()
+        state_path = Path(args.state)
+        if state_path != paths.registry_path or (args.socket and Path(args.socket) != paths.rpc_socket):
+            durable = state_path.parent
+            paths = replace(
+                paths, durable_dir=durable,
+                rpc_socket=Path(args.socket) if args.socket else paths.rpc_socket,
+                private_codex_socket=paths.private_codex_socket.parent / (
+                    "c-%s.sock" % uuid.uuid4().hex[:8]),
+                start_lock=(Path(args.socket).with_suffix(".start.lock")
+                            if args.socket else paths.start_lock),
+                registry_path=state_path,
+                config_path=durable / "service.json",
+                migration_path=durable / "migration.json",
+                log_path=durable / "daemon.log",
+                callback_path=durable / "callbacks.json",
+                callback_artifact_dir=durable / "callback-artifacts")
+        config = _serve_config(paths, args.app_server_listen, args.generation)
+        from .migration import (LegacyMigrationDeps, LegacyMigrator,
+                                LiveMigrationCoordinator)
+        migrator = LegacyMigrator(LegacyMigrationDeps(
+            paths, paths.durable_dir.parent / "instances"))
+        migrator.scan_and_apply()
         runtime = RuntimeStore(args.event_limit)
-        registry = SessionRegistry(args.state)
-        codex = CodexAppServer(
-            os.getcwd(),
-            [args.codex_bin, "app-server"],
-            runtime.on_notification,
-        )
-        socket_path = args.socket or default_socket_path()
-        broker = WorkerBroker(registry, codex, runtime, socket_path, args.state)
-        facade, callback_dispatcher = _managed_components(
-            broker, runtime, registry, Path(args.state))
-        server = RpcServer(socket_path, broker, facade)
+        registry = SessionRegistry(paths.registry_path, migration_path=paths.migration_path)
+        from .service import GlobalWorkerService
+        service = GlobalWorkerService(
+            paths, config, runtime.on_notification, codex_argv=(args.codex_bin,))
+        service.start()
+        # The public gateway and private child now both exist; this is the only
+        # commit point at which a listener generation becomes durable.
+        config_manager = ServiceManager(ServiceDeps(
+            paths, _daemon_launcher(), args.codex_bin, _spawn_daemon, rpc_call,
+            time.monotonic, which=shutil.which,
+            expected_version=distribution_version()))
+        existing_config = config_manager._read_config()
+        if existing_config is None:
+            config_manager._write_config_once(config)
+        elif existing_config != config:
+            config_manager._replace_config(config)
+        lifecycle = service._lifecycle_for_composition()
+        codex = service._connection
+        if codex is None:
+            raise RuntimeError("global service connection was not composed")
+        broker = WorkerBroker(
+            registry, codex, runtime, str(paths.rpc_socket), str(paths.registry_path),
+            worker_version=config.worker_version, gate=lifecycle.gate,
+            listener=config.listener)
+        facade, callback_dispatcher = _global_worker_facade(
+            broker, runtime, registry, paths, config.listener)
+        from .broker import MaintenanceCoordinator
+        from .facade import ServiceFacade, ServiceFacadeDeps
+        maintenance = MaintenanceCoordinator(broker, lifecycle)
+        migration = LiveMigrationCoordinator(
+            migrator, broker, facade.deps.callback_store)
+        service_facade = ServiceFacade(ServiceFacadeDeps(
+            service, broker, maintenance, migration, config))
+        server = RpcServer(str(paths.rpc_socket), broker, facade, service_facade)
         if callback_dispatcher is not None:
             callback_dispatcher.start()
         previous_int = signal.getsignal(signal.SIGINT)
@@ -455,13 +597,16 @@ def _serve(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
         try:
-            print("codex-worker daemon listening on %s" % socket_path, file=sys.stderr)
             server.serve_forever()
         finally:
             signal.signal(signal.SIGINT, previous_int)
             signal.signal(signal.SIGTERM, previous_term)
         return 0
     except (SocketInUse, SocketPathUnsafe, RpcFault, OSError, ValueError) as exc:
+        if (args.startup_receipt and isinstance(exc, OSError)
+                and exc.errno == errno.EADDRINUSE):
+            _write_startup_receipt(
+                Path(args.startup_receipt), args.app_server_listen)
         print("codex-worker daemon failed: %s" % exc, file=sys.stderr)
         return 1
     finally:
@@ -469,9 +614,9 @@ def _serve(args: argparse.Namespace) -> int:
             callback_dispatcher.shutdown()
         if server is not None:
             server.server_close()
-        if codex is not None:
+        if service is not None:
             try:
-                codex.shutdown()
+                service._terminate_resources(suppress_errors=True)
             except Exception:
                 pass
 
@@ -499,8 +644,17 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
     if method == "worker/goal/set":
         return {"name": args.name, "objective": args.goal, "status": args.status, "token_budget": args.token_budget}
     if method == "account/limits": return {}
-    if method in ("daemon/status", "daemon/shutdown", "model/list", "session/list"):
+    if method in ("daemon/status", "service/status", "service/start", "model/list",
+                  "session/list", "migration/status"):
         return {}
+    if method == "service/stop": return {"force": args.force}
+    if method == "service/restart":
+        return {"listener": args.app_server_listen, "force": args.force}
+    if method == "migration/resolve":
+        value = {"name": args.name, "thread_id": args.thread_id,
+                 "as_name": args.as_name}
+        ResolveLegacyConflictRequest.from_dict(value)
+        return value
     if method == "session/start":
         return {
             "cwd": str(Path(args.cwd).resolve()),
@@ -622,49 +776,42 @@ def _spawn_daemon(argv, log_path):
         handle.close()
 
 
-def _common_endpoint(explicit_instance, autostart):
-    manager = _instance_manager(explicit_instance)
-    status = manager.ensure_running() if autostart else manager.status()
+def _common_endpoint(listener=None, autostart=True):
+    """Ensure the singleton for every common command after local validation."""
+    del autostart  # compatibility parameter for older internal callers
+    manager = _service_manager()
+    status = manager.ensure_running(listener)
     if status.status != "ready":
-        selected = shlex.quote(manager.identity.value)
         raise FacadeFault(
-            FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
-            known_ids={"instance": manager.identity.value, "name": None,
-                       "session_id": None, "thread_id": None, "turn_id": None},
-            next_actions=[{
-                "command": "codex-worker --instance %s daemon start" % selected,
-                "reason": "Start the selected managed daemon without starting a turn",
-            }],
-        )
-    return str(manager.deps.paths.socket_path)
+            FacadeFaultCode.DAEMON_STOPPED, "Global worker service is stopped",
+            "daemon_stopped", next_actions=[{
+                "command": "codex-worker daemon start",
+                "reason": "Start the global service without starting a turn"}])
+    return str(manager.deps.paths.rpc_socket)
 
 
-def _managed_raw_endpoint(explicit_instance):
-    """Probe a managed raw target without changing its no-autostart lifecycle."""
-    manager = _instance_manager(explicit_instance)
-    status = manager.status()
-    socket_path = str(manager.deps.paths.socket_path)
-    if getattr(status, "status", None) == "stopped":
+def _managed_raw_endpoint(unused=None):
+    """Require exact-ready singleton state without starting or replacing it."""
+    del unused
+    manager = _service_manager()
+    status = manager.readiness()
+    socket_path = str(manager.deps.paths.rpc_socket)
+    if status is None:
         raise daemon_unavailable_fault(socket_path)
-    candidate_error = getattr(status, "last_error", None)
-    last_error = candidate_error if isinstance(candidate_error, dict) else {}
-    if last_error.get("reason") == "worker_version_mismatch":
-        selected = shlex.quote(manager.identity.value)
+    if status.service_version != distribution_version():
         raise FacadeFault(
             FacadeFaultCode.TOOL_VERSION_MISMATCH,
-            "Managed codex-worker daemon does not match the installed command",
+            "Global codex-worker service does not match the installed command",
             "tool_version_mismatch",
             details={
-                "reason": "managed_daemon_version_differs",
-                "expected_version": last_error.get("expected_version"),
-                "actual_version": last_error.get("actual_version"),
+                "reason": "managed_service_version_differs",
+                "expected_version": distribution_version(),
+                "actual_version": status.service_version,
                 "socket_path": socket_path,
             },
-            known_ids={"instance": manager.identity.value, "name": None,
-                       "session_id": None, "thread_id": None, "turn_id": None},
             next_actions=[{
-                "command": "codex-worker --instance %s daemon start" % selected,
-                "reason": "Deliberately replace only this incompatible managed runtime",
+                "command": "codex-worker daemon status",
+                "reason": "Inspect the incompatible global service without replacing it",
             }],
         )
     if getattr(status, "status", None) != "ready":
@@ -679,14 +826,21 @@ def _daemon_launcher():
     return str(Path(sys.executable).with_name("codex-worker"))
 
 
-def _instance_manager(explicit_instance):
-    identity = resolve_instance(explicit_instance, os.environ)
-    paths = derive_instance_paths(identity, sys.platform, _managed_state_home(), Path(tempfile.gettempdir()), os.getuid())
-    return InstanceManager(InstanceDeps(
-        paths, _daemon_launcher(), "codex", _spawn_daemon, rpc_call, time.monotonic,
-        which=shutil.which,
-        expected_version=distribution_version(),
-    ), identity)
+def _service_paths():
+    return derive_service_paths(
+        sys.platform, _managed_state_home(), Path(tempfile.gettempdir()), os.getuid())
+
+
+def _service_manager():
+    return ServiceManager(ServiceDeps(
+        _service_paths(), _daemon_launcher(), "codex", _spawn_daemon, rpc_call,
+        time.monotonic, which=shutil.which, expected_version=distribution_version()))
+
+
+def _instance_manager(explicit_instance=None):
+    """Private test/embedder shim; public instance routing is rejected before parsing."""
+    del explicit_instance
+    return _service_manager()
 
 
 def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
@@ -712,6 +866,15 @@ def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
     if loaded_version == installed_version:
         return
     installer = root / "skills" / "subagent-driven-development" / "scripts" / "install-codex-worker"
+    next_actions = [{
+        "command": "codex-worker --version",
+        "reason": "Inspect the installed command version without runtime contact",
+    }]
+    if installer.is_file():
+        next_actions.append({
+            "command": shlex.quote(str(installer)),
+            "reason": "After coordinating other rooms, repair from this loaded plugin root",
+        })
     raise FacadeFault(
         FacadeFaultCode.TOOL_VERSION_MISMATCH,
         "Installed codex-worker does not match the loaded Superdev plugin",
@@ -726,35 +889,69 @@ def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
                 "plugin versions before rerunning this room's trusted installer."
             ),
         },
-        known_ids={"instance": None, "name": None, "session_id": None,
+        known_ids={"name": None, "session_id": None,
                    "thread_id": None, "turn_id": None},
-        next_actions=[
-            {"command": "codex-worker --version",
-             "reason": "Inspect the installed command version without runtime contact"},
-            {"command": shlex.quote(str(installer)),
-             "reason": "After coordinating other rooms, repair from this loaded plugin root"},
-        ],
+        next_actions=next_actions,
     )
 
 
-def _managed_components(broker, runtime, registry, state_path):
+def _serve_config(paths, listener, generation=None):
+    from .service_domain import ServiceConfig
+    manager = ServiceManager(ServiceDeps(
+        paths, _daemon_launcher(), "codex", _spawn_daemon, rpc_call,
+        time.monotonic, which=shutil.which, expected_version=distribution_version()))
+    existing = manager._read_config()
+    requested = validate_public_listener(listener)
+    if existing is not None:
+        if existing.listener != requested:
+            raise manager._conflict(existing.listener, requested)
+        if (existing.worker_version == distribution_version()
+                and (generation is None or existing.generation_id == generation)):
+            return existing
+    return ServiceConfig(requested, distribution_version(),
+                         generation or str(uuid.uuid4()))
+
+
+def _write_startup_receipt(path: Path, listener: str) -> None:
+    """Publish one bounded child-bind failure without log or peer content."""
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump({"kind": "address_in_use", "listener": listener}, handle,
+                      separators=(",", ":"), sort_keys=True)
+            handle.write("\n"); handle.flush(); os.fsync(handle.fileno())
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(str(path))
+        raise
+
+
+def _global_worker_facade(broker, runtime, registry, paths, listener):
     from .facade import FacadeDeps, WorkerFacade
-    from .instance import load_managed_identity
     from .callback_dispatcher import TerminalCallbackDispatcher
     from .callback_store import CallbackStore
     from .claude_transport import ClaudeTransport
     from . import projection
-    identity = load_managed_identity(state_path)
-    if identity is None: return None, None
-    paths = derive_instance_paths(identity, sys.platform, _managed_state_home(),
-                                  Path(tempfile.gettempdir()), os.getuid())
     store = CallbackStore(paths.callback_path, paths.callback_artifact_dir)
     transport = ClaudeTransport()
     dispatcher = TerminalCallbackDispatcher(store, transport, runtime, projection,
                                             time.monotonic, transport.deps.now)
-    facade = WorkerFacade(FacadeDeps(identity, registry, broker, runtime, projection,
-                                     time.monotonic, store, dispatcher, transport))
+    facade = WorkerFacade(FacadeDeps(
+        registry, broker, runtime, projection, time.monotonic,
+        store, dispatcher, transport, listener=listener))
     return facade, dispatcher
+
+
+def _managed_components(broker, runtime, registry, state_path):
+    """Compatibility shim over global callback/facade composition."""
+    paths = _service_paths()
+    if Path(state_path) != paths.registry_path:
+        durable = Path(state_path).parent
+        paths = replace(paths, durable_dir=durable, registry_path=Path(state_path),
+                        callback_path=durable / "callbacks.json",
+                        callback_artifact_dir=durable / "callback-artifacts")
+    return _global_worker_facade(
+        broker, runtime, registry, paths, DEFAULT_PUBLIC_LISTENER)
 
 
 def _managed_facade(broker, runtime, registry, state_path):
@@ -763,7 +960,97 @@ def _managed_facade(broker, runtime, registry, state_path):
 
 
 def _print_json(payload: JsonObject, pretty: bool) -> None:
+    _validate_wire_recovery_actions(payload)
     if pretty:
         print(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False))
     else:
         print(json.dumps(payload, separators=(",", ":"), allow_nan=False))
+
+
+def _validate_wire_recovery_actions(payload: JsonObject) -> None:
+    commands = []  # type: List[str]
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            commands.extend(value[key] for key in ("attach_command", "resume_command")
+                            if isinstance(value.get(key), str))
+            recovery = value.get("recovery")
+            if isinstance(recovery, str):
+                commands.append(recovery)
+            elif isinstance(recovery, dict):
+                commands.extend(command for command in recovery.values()
+                                if isinstance(command, str))
+            for action_field in ("next_actions", "resolution_actions"):
+                actions = value.get(action_field)
+                if isinstance(actions, list):
+                    for action in actions:
+                        if isinstance(action, str):
+                            commands.append(action)
+                        elif (isinstance(action, dict)
+                              and isinstance(action.get("command"), str)):
+                            commands.append(action["command"])
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+
+    walk(payload)
+    parser = build_parser()
+    for command in commands:
+        if "\n" in command or "\r" in command:
+            raise ValueError("recovery action must be one direct argv")
+        tokens = shlex.split(command)
+        if not tokens:
+            raise ValueError("recovery action is not literal")
+        if _has_unquoted_shell_syntax(command):
+            raise ValueError("recovery action must be one direct argv")
+        if tokens[0] == "codex-worker":
+            if any(tokens[index:index + 2] == ["daemon", "serve"]
+                   for index in range(1, len(tokens) - 1)):
+                raise ValueError("hidden daemon serve is not a public recovery action")
+            try:
+                with open(os.devnull, "w") as discard:
+                    with contextlib.redirect_stdout(discard), \
+                            contextlib.redirect_stderr(discard):
+                        parsed = parser.parse_args(tokens[1:])
+                if (getattr(parsed, "family", None) == "daemon"
+                        and getattr(parsed, "action", None) == "serve"):
+                    raise ValueError("hidden daemon serve is not a public recovery action")
+            except SystemExit as exc:
+                if exc.code != 0:
+                    raise ValueError("recovery action does not parse: %s" % command)
+            except CliUsageError as exc:
+                raise ValueError("recovery action does not parse: %s" % command) from exc
+        elif tokens[0] == "codex":
+            if len(tokens) not in (3, 5) or tokens[1] != "--remote" or (
+                    len(tokens) == 5 and tokens[3] != "resume"):
+                raise ValueError("Codex recovery action does not match the public attach grammar")
+            validate_public_listener(tokens[2])
+        elif (not Path(tokens[0]).is_absolute() or not Path(tokens[0]).is_file()
+              or not os.access(tokens[0], os.X_OK)):
+            raise ValueError("recovery action executable does not exist: %s" % tokens[0])
+
+
+def _has_unquoted_shell_syntax(command: str) -> bool:
+    quote = None
+    escaped = False
+    for character in command:
+        if character in "\r\n":
+            return True
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+            continue
+        if quote is not None:
+            if character == quote:
+                quote = None
+            elif quote == '"' and character in "$`":
+                return True
+            continue
+        if character in "'\"":
+            quote = character
+        elif character in ";&|`$()#*?[]{}<>":
+            return True
+    return escaped or quote is not None

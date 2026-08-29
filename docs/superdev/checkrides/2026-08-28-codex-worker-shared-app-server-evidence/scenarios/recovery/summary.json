@@ -1,0 +1,375 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery",
+    "expected_pid": 13874,
+    "observed_pid": 13874,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-recovery/fixture-owner.json": "b281d3f50383df5bbebb403d73727750eeea61779fedeb7351706bd0b2415997",
+    "fixture-recovery/home/Library/Application Support/chrome-devtools-mcp/telemetry_state.json": "9bad71b0c9bdacc73a05458ac3b2dc51f16cfa6fe10070ff67991b5f20e68b01",
+    "fixture-recovery/home/Library/Application Support/superdev/codex-worker/service/callbacks.json": "b65c65a4d7ee24f9df98c24db0a312c661889bf19233427d696fcf63148a88e5",
+    "fixture-recovery/home/Library/Application Support/superdev/codex-worker/service/daemon.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fixture-recovery/home/Library/Application Support/superdev/codex-worker/service/migration.json": "3a5f5e3f41b37a4ec8e39a4546107f701ba9458a2b0d54a9428e67e3e4cc08f2",
+    "fixture-recovery/home/Library/Application Support/superdev/codex-worker/service/registry.json": "15a6bb81d367885db5c7d15e063fc15362df8e5235c9f62d46779bb262c0a581",
+    "fixture-recovery/home/Library/Application Support/superdev/codex-worker/service/service.json": "b79c86676db11c65fe6db2751bc1796e67f420481e2af0bb5a3aaa572d49a9b9",
+    "transcript.jsonl": "b2d035f58e8d430c37c26efca2d5c072113c692186de2d67de6322af59921832"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery",
+  "record_count": 22,
+  "result": {
+    "caller exit": true,
+    "coherent": true,
+    "controlled turn": {
+      "id": "cli",
+      "jsonrpc": "2.0",
+      "result": {
+        "messages": [],
+        "metrics": {
+          "command_count": {
+            "availability": "derived",
+            "source": "codex-worker",
+            "value": 0
+          },
+          "command_duration_ms": {
+            "availability": "unavailable",
+            "source": "codex",
+            "value": null
+          },
+          "item_counts": {
+            "availability": "derived",
+            "source": "codex-worker",
+            "value": {
+              "userMessage": 1
+            }
+          },
+          "token_usage": {
+            "availability": "unavailable",
+            "source": "codex",
+            "value": null
+          },
+          "wall_duration_seconds": {
+            "availability": "measured",
+            "source": "codex-worker",
+            "value": 0.16691266600000176
+          }
+        },
+        "recovery": {
+          "interrupt": "codex-worker interrupt --name recovery-cf17f6da",
+          "messages": "codex-worker messages --name recovery-cf17f6da",
+          "raw_resume": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "status": "codex-worker status --name recovery-cf17f6da"
+        },
+        "structured_output": null,
+        "turn": {
+          "error": null,
+          "status": "interrupted",
+          "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539"
+        },
+        "worker": {
+          "access": "full",
+          "attach": {
+            "attach_command": "codex --remote ws://127.0.0.1:52480",
+            "listener": "ws://127.0.0.1:52480",
+            "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+            "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+          },
+          "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+          "effort": "medium",
+          "model": "gpt-5.6-terra",
+          "name": "recovery-cf17f6da",
+          "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+          "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "tier": "medium"
+        }
+      }
+    },
+    "history": {
+      "older_available": false,
+      "requested_tail": 2,
+      "returned": 2,
+      "turns": [
+        {
+          "completed_at": 1787963786,
+          "error": null,
+          "messages": [
+            {
+              "item_id": "item-3",
+              "phase": "final_answer",
+              "selection": "explicit_final",
+              "text": "RECOVERY-LATE",
+              "type": "agent_message"
+            }
+          ],
+          "started_at": 1787963769,
+          "status": "completed",
+          "turn_id": "01a04af2-029c-7360-a6fe-f672850b9936"
+        },
+        {
+          "completed_at": 1787963786,
+          "error": null,
+          "messages": [],
+          "started_at": 1787963786,
+          "status": "interrupted",
+          "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539"
+        }
+      ],
+      "worker": {
+        "access": "full",
+        "attach": {
+          "attach_command": "codex --remote ws://127.0.0.1:52480",
+          "listener": "ws://127.0.0.1:52480",
+          "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+        },
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+        "effort": "medium",
+        "model": "gpt-5.6-terra",
+        "name": "recovery-cf17f6da",
+        "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+        "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+        "tier": "medium"
+      }
+    },
+    "interrupt": {
+      "id": "cli",
+      "jsonrpc": "2.0",
+      "result": {
+        "accepted": true,
+        "action": "interrupt",
+        "status": "interrupted",
+        "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539",
+        "worker": {
+          "access": "full",
+          "attach": {
+            "attach_command": "codex --remote ws://127.0.0.1:52480",
+            "listener": "ws://127.0.0.1:52480",
+            "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+            "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+          },
+          "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+          "effort": "medium",
+          "model": "gpt-5.6-terra",
+          "name": "recovery-cf17f6da",
+          "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+          "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "tier": "medium"
+        }
+      }
+    },
+    "service persists": true,
+    "session resume": {
+      "attach": {
+        "attach_command": "codex --remote ws://127.0.0.1:52480",
+        "listener": "ws://127.0.0.1:52480",
+        "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+        "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+      },
+      "attached": true,
+      "session": {
+        "access": "full",
+        "created_at": "2026-08-29T00:36:09.497638Z",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+        "effort": "medium",
+        "model": "gpt-5.6-terra",
+        "name": "recovery-cf17f6da",
+        "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+        "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+        "tier": "medium",
+        "updated_at": "2026-08-29T00:36:09.497638Z"
+      }
+    },
+    "status": {
+      "active_turn_id": null,
+      "attached": true,
+      "callback": {
+        "last_terminal_attempt": {
+          "attempt_count": 1,
+          "attempted_at": "2026-08-29T00:36:26.663283Z",
+          "event_id": "terminal-1712f3f1b96638784c9bf19dc2993b1644676b46d44aa9958018724c943adfb7",
+          "reason": null,
+          "state": "written",
+          "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539"
+        },
+        "pending_terminal_count": 0,
+        "state": "enabled"
+      },
+      "daemon_status": "ready",
+      "latest_turn": {
+        "error": null,
+        "status": "interrupted",
+        "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539"
+      },
+      "worker": {
+        "access": "full",
+        "attach": {
+          "attach_command": "codex --remote ws://127.0.0.1:52480",
+          "listener": "ws://127.0.0.1:52480",
+          "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+        },
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+        "effort": "medium",
+        "model": "gpt-5.6-terra",
+        "name": "recovery-cf17f6da",
+        "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+        "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+        "tier": "medium"
+      }
+    },
+    "steer": {
+      "id": "cli",
+      "jsonrpc": "2.0",
+      "result": {
+        "accepted": true,
+        "action": "steer",
+        "status": "in_progress",
+        "turn_id": "01a04af2-44fa-7a00-ab0a-7480d4194539",
+        "worker": {
+          "access": "full",
+          "attach": {
+            "attach_command": "codex --remote ws://127.0.0.1:52480",
+            "listener": "ws://127.0.0.1:52480",
+            "resume_command": "codex --remote ws://127.0.0.1:52480 resume 01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+            "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+          },
+          "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+          "effort": "medium",
+          "model": "gpt-5.6-terra",
+          "name": "recovery-cf17f6da",
+          "session_id": "c6662dd5-415b-411d-b1c0-b5c12b0a86a9",
+          "thread_id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "tier": "medium"
+        }
+      }
+    },
+    "thread resume": {
+      "authoritative_events": [
+        {
+          "emittedAtMs": 1787963774895,
+          "method": "remoteControl/status/changed",
+          "params": {
+            "environmentId": null,
+            "installationId": "66f9dc33-0d77-403b-951c-e591ca866660",
+            "serverName": "Tadas-MacBook.local",
+            "status": "disabled"
+          }
+        },
+        {
+          "emittedAtMs": 1787963774898,
+          "method": "thread/goal/cleared",
+          "params": {
+            "threadId": "01a04af2-025f-7b50-a1b2-6abbce5cabf8"
+          }
+        },
+        {
+          "method": "transport/error",
+          "params": {
+            "details": {
+              "message": "connection closed"
+            },
+            "kind": "transport_error"
+          }
+        }
+      ],
+      "resumed": {
+        "activePermissionProfile": null,
+        "approvalPolicy": "never",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+        "initialTurnsPage": null,
+        "instructionSources": [
+          "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/AGENTS.md"
+        ],
+        "itemsBackwardsCursor": null,
+        "model": "gpt-5.6-terra",
+        "modelProvider": "openai",
+        "multiAgentMode": "explicitRequestOnly",
+        "reasoningEffort": "medium",
+        "runtimeWorkspaceRoots": [
+          "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace"
+        ],
+        "sandbox": {
+          "type": "dangerFullAccess"
+        },
+        "serviceTier": "default",
+        "thread": {
+          "agentNickname": null,
+          "agentRole": null,
+          "canAcceptDirectInput": true,
+          "cliVersion": "0.150.1",
+          "createdAt": 1787963769,
+          "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003606.060721Z-13831-recovery/fixture-recovery/workspace",
+          "ephemeral": false,
+          "extra": null,
+          "forkedFromId": null,
+          "gitInfo": {
+            "branch": "feature/codex-worker-shared-app-server",
+            "originUrl": "git@github.com:TadasValaitiz/superdev.git",
+            "sha": "029f9a7cdbb4024c40dacced64b0490a17c99ab8"
+          },
+          "historyMode": "legacy",
+          "id": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "modelProvider": "openai",
+          "name": null,
+          "parentThreadId": null,
+          "path": "/Users/tadas/.codex/sessions/2026/08/29/rollout-2026-08-29T03-36-09-01a04af2-025f-7b50-a1b2-6abbce5cabf8.jsonl",
+          "preview": "Wait quietly for 2 seconds, then reply RECOVERY-LATE.\n\nYou may broadcast a non-blocking update to Claude and continue working:\ncodex-worker message --name recovery-cf17f6da --message \"<prose>\"\nUse --message-file for long text. Optional one-send override: --cc-agent-name <name>.\nThis command does not wait for a reply; Claude may later use steer or run.",
+          "projectId": null,
+          "recencyAt": 1787963769,
+          "section": null,
+          "sectionEnteredAt": null,
+          "sessionId": "01a04af2-025f-7b50-a1b2-6abbce5cabf8",
+          "source": "vscode",
+          "status": {
+            "activeFlags": [],
+            "type": "active"
+          },
+          "threadSource": null,
+          "turns": [
+            {
+              "completedAt": null,
+              "durationMs": null,
+              "error": null,
+              "id": "01a04af2-029c-7360-a6fe-f672850b9936",
+              "items": [
+                {
+                  "clientId": null,
+                  "content": [
+                    {
+                      "text": "Wait quietly for 2 seconds, then reply RECOVERY-LATE.\n\nYou may broadcast a non-blocking update to Claude and continue working:\ncodex-worker message --name recovery-cf17f6da --message \"<prose>\"\nUse --message-file for long text. Optional one-send override: --cc-agent-name <name>.\nThis command does not wait for a reply; Claude may later use steer or run.",
+                      "text_elements": [],
+                      "type": "text"
+                    }
+                  ],
+                  "id": "item-1",
+                  "type": "userMessage"
+                }
+              ],
+              "itemsView": "full",
+              "startedAt": 1787963769,
+              "status": "inProgress"
+            }
+          ],
+          "updatedAt": 1787963769
+        },
+        "turnsBackwardsCursor": null
+      }
+    },
+    "timeout then exact terminal": true
+  },
+  "scenario": "recovery",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/recovery/transcript.jsonl"
+}

@@ -1,0 +1,59 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003424.793841Z-8754-exactly-five/fixture-exactly-five",
+    "expected_pid": 8773,
+    "observed_pid": 8773,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-exactly-five/fixture-owner.json": "5701fdbd54c538c67a6e77734e4a5887280dc5a05fbcd5c1fbbb321b34600dec",
+    "fixture-exactly-five/home/Library/Application Support/chrome-devtools-mcp/telemetry_state.json": "e8f953b35a825c11d5bb2e375325aa5293f5ac520ad0f9791951d9df61277b30",
+    "fixture-exactly-five/home/Library/Application Support/superdev/codex-worker/service/callbacks.json": "47c6e7c446f3a47d18fb12df350f2fc3ed07dff1129768e96c362418594c34a6",
+    "fixture-exactly-five/home/Library/Application Support/superdev/codex-worker/service/daemon.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fixture-exactly-five/home/Library/Application Support/superdev/codex-worker/service/migration.json": "3a5f5e3f41b37a4ec8e39a4546107f701ba9458a2b0d54a9428e67e3e4cc08f2",
+    "fixture-exactly-five/home/Library/Application Support/superdev/codex-worker/service/registry.json": "e72756cc45e006d8f9064473439b2cefc5878b8e9780a062b1efbff6a06d52f2",
+    "fixture-exactly-five/home/Library/Application Support/superdev/codex-worker/service/service.json": "0b91d1029bb321488a73b83d90e64a39c0a83b59f5f3c8026176741e6cc45ab5",
+    "fixture-exactly-five/workspace-0/marker.txt": "e3290785725935c621ad1316d7cdb1bc4eacbc0982173ab38ff2afc767d0cf0a",
+    "fixture-exactly-five/workspace-1/marker.txt": "45e7acbd8129386a1deacd6fe1b53daca2cbf3dde5c05d978ee8cc447d43c196",
+    "fixture-exactly-five/workspace-2/marker.txt": "20385acd3aed63b76385863a4a02bb3c9bbf5163ac50000a920f483ae03d9730",
+    "fixture-exactly-five/workspace-3/marker.txt": "317955dfbbf400637ab7d82036ef8f69a5b528819a83fe078b650b64014056d4",
+    "fixture-exactly-five/workspace-4/marker.txt": "7c959663de1a6875f48a147fb7563be30faa5f03856088260ae9bd337acc8918",
+    "transcript.jsonl": "514121aa22915c9651988427b1da78463ec8afd5606704663f72b447b09a03bf"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003424.793841Z-8754-exactly-five",
+  "record_count": 31,
+  "result": {
+    "CLAUDE_CODE_SESSION_ID": [
+      "claude-five-1-d803f4-7a37ea4f",
+      "claude-five-2-e19a61-c2092495",
+      "claude-five-3-a302bf-06e9be20",
+      "claude-five-4-ab9850-f73bb0a1",
+      "claude-five-5-8ffbd7-89cc87ad"
+    ],
+    "crossed_callbacks": false,
+    "crossed_events": false,
+    "crossed_files": false,
+    "five simultaneous": 5,
+    "names": [
+      "five-1-d803f4",
+      "five-2-e19a61",
+      "five-3-a302bf",
+      "five-4-ab9850",
+      "five-5-8ffbd7"
+    ]
+  },
+  "scenario": "exactly-five",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/exactly-five/transcript.jsonl"
+}

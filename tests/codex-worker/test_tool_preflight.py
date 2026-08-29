@@ -366,9 +366,8 @@ class ToolPreflightTests(unittest.TestCase):
         )
         launcher.chmod(0o755)
         env = self.env([installed_bin, "/usr/bin", "/bin"])
-        env["CODEX_WORKER_INSTANCE"] = "missing-external-codex"
         completed = subprocess.run(
-            [str(launcher), "--instance", "missing-external-codex", "daemon", "start"],
+            [str(launcher), "daemon", "start"],
             cwd=self.root,
             env=env,
             text=True,
@@ -422,7 +421,7 @@ class ToolPreflightTests(unittest.TestCase):
         env = self.env([installed_bin, codex_bin, "/usr/bin", "/bin"])
         env["SPAWN_RECORD"] = str(spawn_record)
         completed = subprocess.run(
-            [str(launcher), "--instance", "symlinked-venv", "daemon", "start"],
+            [str(launcher), "daemon", "start"],
             cwd=self.root,
             env=env,
             text=True,

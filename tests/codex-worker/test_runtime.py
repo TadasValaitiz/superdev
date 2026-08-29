@@ -124,6 +124,115 @@ class RuntimeTerminalObserverTests(unittest.TestCase):
         copied.items[0].data["nested"]["value"] = "changed"
         self.assertEqual(original.items[0].data["nested"]["value"], "original")
 
+    def test_websocket_close_notification_detaches_without_endpoint_or_request_data(self):
+        self.runtime.on_notification({
+            "method": "transport/error",
+            "params": {"kind": "transport_error", "details": {
+                "message": "Codex WebSocket receive failed", "error": "ConnectionClosed",
+            }},
+        })
+        status = self.runtime.status(self.record.session_id)
+        self.assertFalse(status.attached)
+        page = self.runtime.events(self.record.session_id, 0, 10)
+        self.assertEqual(page.events[-1].event, "transport_error")
+        self.assertNotIn("endpoint", repr(page.to_dict()))
+
+    def test_tui_followup_and_delayed_predecessor_completion_preserve_successor(self):
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "tui-predecessor", "status": "inProgress"},
+        }})
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "tui-successor", "status": "inProgress"},
+        }})
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "tui-predecessor", "status": "interrupted"},
+        }})
+        status = self.runtime.status(self.record.session_id)
+        self.assertEqual(status.active_turn_id, "tui-successor")
+        self.assertEqual(status.latest_turn.turn_id, "tui-predecessor")
+
+    def test_delayed_started_does_not_resurrect_terminal_turn(self):
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "terminal-first", "status": "completed"},
+        }})
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "terminal-first", "status": "inProgress"},
+        }})
+        status = self.runtime.status(self.record.session_id)
+        self.assertIsNone(status.active_turn_id)
+        self.assertEqual(status.latest_turn.turn_id, "terminal-first")
+
+    def test_explicit_new_active_lifecycle_can_complete_even_if_fake_reuses_turn_id(self):
+        notification = {"method": "turn/completed", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "reused", "status": "completed"},
+        }}
+        for _ in range(2):
+            self.runtime.reserve_start(self.record.session_id)
+            self.runtime.reconcile_start(self.record.session_id, "reused")
+            self.runtime.on_notification(notification)
+        status = self.runtime.status(self.record.session_id)
+        self.assertIsNone(status.active_turn_id)
+        self.assertEqual(status.latest_turn.turn_id, "reused")
+
+    def test_authoritative_read_reconciles_without_synthesizing_agent_messages(self):
+        observed = []
+        self.runtime.add_terminal_observer(
+            lambda session_id, snapshot: observed.append((session_id, snapshot.turn_id)))
+        active = {
+            "id": self.record.thread_id,
+            "status": {"type": "active", "activeFlags": []},
+            "turns": [{"id": "tui-active", "status": "inProgress", "items": []}],
+        }
+        status = self.runtime.reconcile_thread(active)
+        self.assertEqual(status.active_turn_id, "tui-active")
+        self.assertEqual(self.runtime.agent_messages(self.record.session_id, 10)[0], [])
+
+        terminal = {
+            "id": self.record.thread_id,
+            "status": {"type": "idle"},
+            "turns": [{"id": "tui-active", "status": "completed", "items": []}],
+        }
+        self.runtime.reconcile_thread(terminal)
+        self.runtime.reconcile_thread(terminal)
+        self.assertEqual(observed, [(self.record.session_id, "tui-active")])
+        self.assertEqual(self.runtime.agent_messages(self.record.session_id, 10)[0], [])
+
+    def test_pending_start_read_of_old_history_does_not_poison_response_identity(self):
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "old", "status": "completed"},
+        }})
+        self.runtime.reserve_start(self.record.session_id)
+        self.runtime.reconcile_thread({
+            "id": self.record.thread_id,
+            "status": {"type": "idle"},
+            "turns": [{"id": "old", "status": "completed", "items": []}],
+        })
+        self.runtime.reconcile_start(self.record.session_id, "new")
+        self.assertEqual(
+            self.runtime.status(self.record.session_id).active_turn_id, "new")
+
+    def test_unseen_delayed_predecessor_terminal_cannot_rebind_observed_successor(self):
+        self.runtime.reserve_start(self.record.session_id)
+        self.runtime.on_notification({"method": "turn/started", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "successor", "status": "inProgress"},
+        }})
+        self.runtime.on_notification({"method": "turn/completed", "params": {
+            "threadId": self.record.thread_id,
+            "turn": {"id": "delayed-predecessor", "status": "completed"},
+        }})
+        self.runtime.reconcile_start(self.record.session_id, "successor")
+        status = self.runtime.status(self.record.session_id)
+        self.assertEqual(status.active_turn_id, "successor")
+        self.assertEqual(status.latest_turn.turn_id, "delayed-predecessor")
+
 
 if __name__ == "__main__":
     unittest.main()

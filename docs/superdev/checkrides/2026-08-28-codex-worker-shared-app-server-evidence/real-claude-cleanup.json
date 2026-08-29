@@ -1,0 +1,64 @@
+{
+  "cleanup_commands": [
+    {
+      "argv": ["codex-worker", "daemon", "status"],
+      "exit": 0,
+      "elapsed_seconds": {"availability": "unavailable", "reason": "historical shell harness did not retain command timing"},
+      "environment_names": ["CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_STATE_HOME"],
+      "raw_record": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/cleanup-status-before.json",
+      "raw_sha256": "af8d87275f7206abc9ca2b99c6abc24b8beeb7c2fbccad01c162211c4ec1544c",
+      "result": {"app_server_pid": 93077, "auth": "none", "durable_state": "preserved", "exposure": "loopback", "listener": "ws://127.0.0.1:51164", "pid": 93067, "service_version": "8.0.0", "status": "ready"},
+      "stderr": "",
+      "substrate": "MEASURED real isolated UV/tool subprocess"
+    },
+    {
+      "argv": ["codex-worker", "daemon", "stop"],
+      "exit": 0,
+      "elapsed_seconds": {"availability": "unavailable", "reason": "historical shell harness did not retain command timing"},
+      "environment_names": ["CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_STATE_HOME"],
+      "raw_record": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/cleanup-stop.json",
+      "raw_sha256": "4554af9a5579348885c6442c3054c65a9b66e3504c78cb73e8c171653a436336",
+      "result": {"action": "stop", "durable_state": "preserved", "forced": false, "inventory": {"items": []}, "listener": null, "status": "completed", "workers": {"active_count": 0, "active_names": [], "idle_count": 2, "idle_names": ["claude-common-9ddf989089", "claude-raw-687fb96aa2"], "total_count": 2}},
+      "stderr": "",
+      "substrate": "MEASURED real isolated UV/tool subprocess"
+    },
+    {
+      "argv": ["codex-worker", "daemon", "status"],
+      "exit": 0,
+      "elapsed_seconds": {"availability": "unavailable", "reason": "historical shell harness did not retain command timing"},
+      "environment_names": ["CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_STATE_HOME"],
+      "raw_record": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/cleanup-status-after.json",
+      "raw_sha256": "dbc9ed359146537d93651e799f5a904575f9ac7c117946a300ebfdb00481d6ab",
+      "result": {"app_server_pid": null, "auth": "none", "durable_state": "preserved", "exposure": "loopback", "listener": "ws://127.0.0.1:51164", "pid": null, "service_version": "8.0.0", "status": "stopped"},
+      "stderr": "",
+      "substrate": "MEASURED real isolated UV/tool subprocess"
+    }
+  ],
+  "owner_verification": {
+    "argv": ["python3", "-", "fixture-owner.json", "runtime/fixture-owner.json", "[REDACTED]", "RUN_DIR", "RUNTIME", "cleanup-status-after.json"],
+    "assertion": "both owner records matched one in-memory token and exact paths; stopped status had null pid; isolated socket was absent",
+    "elapsed_seconds": {"availability": "unavailable", "reason": "historical shell harness did not retain assertion timing"},
+    "environment_names": [],
+    "exit": 0,
+    "exit_basis": "DERIVED: runtime deletion branch required owner_rc=0",
+    "output": {"path_verified": true, "pid_absent": true, "socket_absent": true, "token_verified": true},
+    "run_owner_expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T002710Z-92322-claude-caller",
+    "run_owner_pid": 92339,
+    "run_owner_raw_record": ".superdev/codex-worker-live/20260829T002710Z-92322-claude-caller/fixture-owner.json",
+    "run_owner_raw_sha256": "2acb3fe103728f136df117f1924c09ece089664321ddf1178d9387762a3c299d",
+    "runtime_owner_record": "NOT AVAILABLE after verified runtime deletion",
+    "token": "[REDACTED]",
+    "stderr": "",
+    "substrate": "MEASURED Python 3.9 owner assertion",
+    "verification_basis": "MEASURED cleanup script compared both owner records to the same in-memory token before deleting the isolated runtime"
+  },
+  "residuals": {
+    "processes_remaining": 0,
+    "runtime_deleted": true,
+    "runtime_path": "NOT AVAILABLE because the successful isolated runtime was deleted before this tracked erratum",
+    "service_status": "stopped",
+    "socket_listeners_remaining": 0
+  },
+  "scenario": "real-claude-path-caller",
+  "status": "MEASURED cleanup with explicitly unavailable deleted-runtime path"
+}

@@ -35,7 +35,9 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         self.assertLess(text.index("codex-worker --version"), text.index("Read [Codex worker broker]"))
         normalized = " ".join(text.split()).lower()
         for fragment in (
-            "once per session",
+            "one successful trusted uv preflight per session",
+            "failed attempt does not satisfy the preflight",
+            "after success, do not rerun",
             "when codex is selected",
             "claude_plugin_root",
             "exact loaded `skill.md` path",
@@ -114,18 +116,16 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
     def test_operator_sequence_keeps_start_then_run_order(self):
         text = self._reference()
         self.assertLess(
-            text.index("codex-worker start --name implement-a31 --prompt-file task.md"),
-            text.index('codex-worker run --name implement-a31 --prompt "Run the focused gate and report."'),
+            text.index("codex-worker start --name implement-a31f --cwd /absolute/project --prompt-file task.md"),
+            text.index('codex-worker run --name implement-a31f --prompt "Run the focused gate and report."'),
         )
 
     def test_operator_review_fan_out_assigns_each_start_its_own_worktree(self):
         text = self._reference()
-        for worktree in ("REVIEW_C_WORKTREE", "REVIEW_D_WORKTREE", "VERIFY_E_WORKTREE"):
+        for worktree in ("$REVIEW_C_WORKTREE", "$REVIEW_D_WORKTREE", "$VERIFY_E_WORKTREE"):
             with self.subTest(worktree=worktree):
-                self.assertIn(f'(cd "${worktree}" && codex-worker start', text)
-        for worktree in ("IMPLEMENT_A_WORKTREE", "IMPLEMENT_B_WORKTREE"):
-            with self.subTest(worktree=worktree):
-                self.assertNotIn(f'(cd "${worktree}" && codex-worker start', text)
+                self.assertIn(f'--cwd "{worktree}"', text)
+        self.assertNotIn("(cd ", text)
 
     def test_response_semantics_distinguish_timeout_from_cancellation(self):
         text = self._reference().lower()
@@ -168,8 +168,8 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
     def test_operator_reference_links_appendix_and_covers_common_surface(self):
         text = OPERATOR.read_text(encoding="utf-8").lower()
         for fragment in (
-            "codex-worker start --name implement-a31 --prompt-file task.md",
-            "codex-worker run --name implement-a31 --prompt \"run the focused gate and report.\"",
+            "codex-worker start --name implement-a31f --cwd /absolute/project --prompt-file task.md",
+            "codex-worker run --name implement-a31f --prompt \"run the focused gate and report.\"",
             "collision-resistant",
             "full access",
             "read-only",
@@ -179,7 +179,6 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             "messages",
             "steer",
             "interrupt",
-            "daemon stop",
             "technical appendix",
         ):
             with self.subTest(fragment=fragment):
@@ -194,8 +193,6 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             "limits",
             "stop",
             "timeout",
-            "--instance",
-            "codex_worker_instance",
             "claude_code_session_id",
             "full access",
             "read-only",
@@ -205,6 +202,53 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
         self.assertIn("no setting inherits effort from\n`claude_effort`", text)
+
+    def test_global_worker_workflow_is_explicit_and_reports_attach_handoff(self):
+        text = self._reference()
+        normalized = " ".join(text.split()).lower()
+        for fragment in (
+            "globally unique",
+            "random suffix",
+            "--cwd /absolute/project",
+            "result.worker.session_id",
+            "result.worker.thread_id",
+            "result.worker.attach.resume_command",
+            "exact controller resume command",
+            "human attach (verbatim returned value)",
+            "controller continuation",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, normalized)
+        self.assertRegex(normalized, r"review-[a-f0-9]{4,}")
+
+    def test_claude_environment_is_callback_only_and_never_selects_infrastructure(self):
+        text = self._reference().lower()
+        self.assertIn("callback-only", text)
+        self.assertIn("does not select", text)
+        self.assertIn("global service", text)
+        self.assertIn("global lookup", text)
+        self.assertIn("claude_plugin_root", text)
+        self.assertIn("loaded package for trusted preflight", text)
+        self.assertNotIn("claude session identity naturally selects", text)
+
+    def test_skill_has_no_instance_examples_or_routine_shared_service_stop(self):
+        skill = SDD.read_text(encoding="utf-8").lower()
+        reference = REFERENCE.read_text(encoding="utf-8").lower()
+        model = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
+        combined = "\n".join((skill, reference, model))
+        self.assertNotIn("--instance", combined)
+        self.assertNotIn("codex_worker_instance", combined)
+        ordinary, marker, maintenance = reference.partition("## supervised machine-wide maintenance")
+        self.assertEqual(marker, "## supervised machine-wide maintenance")
+        self.assertNotIn("daemon stop", ordinary)
+        self.assertNotIn("daemon restart", ordinary)
+        self.assertIn("daemon stop", maintenance)
+        self.assertIn("daemon restart", maintenance)
+        self.assertIn("machine-wide", maintenance)
+        self.assertIn("explicit human supervision", maintenance)
+        self.assertIn("never cleanup", maintenance)
+        self.assertNotIn("--force", ordinary)
+        self.assertIn("never automated", maintenance)
 
     def test_model_policy_keeps_two_tiers_and_medium_default_effort(self):
         text = MODEL_POLICY.read_text(encoding="utf-8").lower()
@@ -230,7 +274,7 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
-    def test_callback_guidance_keeps_instance_qualified_nonblocking_semantics(self):
+    def test_callback_guidance_keeps_global_nonblocking_semantics(self):
         reference = self._reference()
         skill = " ".join(SDD.read_text(encoding="utf-8").split())
         _, marker, remainder = reference.partition("## Callback guidance")
@@ -238,7 +282,7 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
         callback, _, _ = remainder.partition("## Coordinate active work")
         callback_normalized = " ".join(callback.split())
         for fragment in (
-            "codex-worker --instance <instance> message --name <name>",
+            "codex-worker message --name <name>",
             "--message-file",
             "automatic terminal callback",
             "no-poll",
@@ -248,7 +292,7 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
             "written",
             "delivered",
             "collision-resistant readable worker name",
-            "random or numbered suffix avoids same-session clashes",
+            "random suffix avoids global clashes",
             "never pass or expose callback credentials",
         ):
             with self.subTest(fragment=fragment):

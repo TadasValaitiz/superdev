@@ -1,15 +1,23 @@
 """High-level durable session and turn contract for the Codex worker daemon."""
 import os
+import shlex
+import time
+import math
+import queue
+import threading
 import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Protocol, Tuple
 
 from .app_server import CodexCallError
 from .models import (
+    ActiveInventory,
+    ActiveThreadItem,
     IdentifierSelector,
     JsonObject,
+    MaintenanceResult,
     RpcFault,
     SessionRecord,
     session_result,
@@ -26,6 +34,12 @@ from .runtime import (
     UnknownSession,
     WaitTimeout,
 )
+from .service_domain import DEFAULT_PUBLIC_LISTENER, AttachView, validate_public_listener
+from .service import OwnedTeardownError
+from .websocket_gateway import DrainLease, ServiceMaintenanceGate
+
+
+FORCE_INVENTORY_TIMEOUT_SECONDS = 2.0
 
 
 class ModelSelectionError(RpcFault):
@@ -63,6 +77,18 @@ class TurnStartSpec:
     effort: Optional[str]
     access: AccessMode = AccessMode.FULL
     output_schema: Optional[JsonObject] = None
+
+
+class MaintenanceLifecycle(Protocol):
+    @property
+    def gate(self) -> ServiceMaintenanceGate:
+        ...
+
+    def terminate_owned(self, lease: DrainLease) -> None:
+        ...
+
+    def stopping(self) -> bool:
+        ...
 
 
 class NativeCodexProxy:
@@ -121,7 +147,7 @@ class NativeCodexProxy:
         return {"turns": result["data"], "nextCursor": result["nextCursor"]}
     def rate_limits_read(self) -> JsonObject:
         result = self._call("account/rateLimits/read", {})
-        if set(result) != {"rateLimits"} or not isinstance(result["rateLimits"], dict):
+        if "rateLimits" not in result or not isinstance(result["rateLimits"], dict):
             self._protocol("account/rateLimits/read", "malformed rate limits")
         return result
 
@@ -141,7 +167,9 @@ class WorkerBroker:
 
     def __init__(self, registry: SessionRegistry, codex: Any, runtime: RuntimeStore,
                  socket_path: str, state_path: str, daemon_pid: Optional[int] = None,
-                 worker_version: Optional[str] = None):
+                 worker_version: Optional[str] = None,
+                 gate: Optional[ServiceMaintenanceGate] = None,
+                 listener: str = DEFAULT_PUBLIC_LISTENER):
         self.registry = registry
         self.codex = codex
         self.runtime = runtime
@@ -149,6 +177,10 @@ class WorkerBroker:
         self.state_path = state_path
         self.daemon_pid = os.getpid() if daemon_pid is None else daemon_pid
         self.worker_version = distribution_version() if worker_version is None else worker_version
+        if gate is not None and not isinstance(gate, ServiceMaintenanceGate):
+            raise TypeError("gate must be ServiceMaintenanceGate")
+        self._gate = gate or ServiceMaintenanceGate()
+        self._listener = validate_public_listener(listener)
 
     def daemon_status(self) -> JsonObject:
         proc = getattr(self.codex, "proc", None)
@@ -156,13 +188,16 @@ class WorkerBroker:
         ready = True
         if callable(poll):
             ready = poll() is None
+        records = self.registry.list()
         return {
             "ready": ready,
             "daemon_pid": self.daemon_pid,
             "codex_pid": getattr(proc, "pid", None),
             "socket_path": self.socket_path,
             "state_path": self.state_path,
-            "session_count": len(self.registry.list()),
+            "session_count": len(records),
+            "worker_names": sorted(record.name for record in records
+                                   if record.name is not None),
             "worker_version": self.worker_version,
         }
 
@@ -175,6 +210,10 @@ class WorkerBroker:
         return {"type": "dangerFullAccess"} if access == AccessMode.FULL else {"type": "readOnly", "networkAccess": False}
 
     def start_session(self, spec: SessionStartSpec) -> JsonObject:
+        with self._gate.mutation("thread/start"):
+            return self._start_session_authoritatively(spec)
+
+    def _start_session_authoritatively(self, spec: SessionStartSpec) -> JsonObject:
         canonical_cwd = self._canonical_cwd(spec.cwd, "declared cwd")
         self._validate_model_effort(spec.model, None)
         if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
@@ -191,7 +230,10 @@ class WorkerBroker:
             thread_id, returned_cwd = self._resume_identity(response)
             if returned_cwd != canonical_cwd:
                 raise _fault(-32014, "Codex returned a different working directory", "session_cwd_mismatch",
-                             details={"expected_cwd": canonical_cwd, "returned_cwd": returned_cwd})
+                             details=self._known_identity_details(
+                                 session_id, thread_id, None,
+                                 {"expected_cwd": canonical_cwd,
+                                  "returned_cwd": returned_cwd}))
             if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
                 record = self.registry.create_worker(
                     thread_id, canonical_cwd, spec.name, spec.tier, spec.model,
@@ -206,9 +248,15 @@ class WorkerBroker:
         except (RegistryError, OSError) as exc:
             raise self._post_upstream_registry_fault("session_start", session_id, thread_id, None, exc) from exc
         self.runtime.attach(record)
-        return session_result(record, attached=True)
+        result = session_result(record, attached=True)
+        result["attach"] = self.attach_view(record.thread_id).to_dict()
+        return result
 
     def resume_session(self, spec: SessionResumeSpec) -> JsonObject:
+        with self._gate.mutation("thread/resume"):
+            return self._resume_session_authoritatively(spec)
+
+    def _resume_session_authoritatively(self, spec: SessionResumeSpec) -> JsonObject:
         try:
             response = self.codex.resume_thread(spec.thread_id, approval_policy="never",
                                                 sandbox=self._thread_sandbox(spec.access))
@@ -222,12 +270,17 @@ class WorkerBroker:
             raise self._codex_fault(exc) from exc
 
     def start_turn(self, spec: TurnStartSpec) -> JsonObject:
+        with self._gate.mutation("turn/start"):
+            return self._start_turn_authoritatively(spec)
+
+    def _start_turn_authoritatively(self, spec: TurnStartSpec) -> JsonObject:
         record = self._resolve(IdentifierSelector(session_id=spec.session_id), require_attached=True)
         if not isinstance(spec.prompt, str) or not spec.prompt:
             raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
         validation_model = spec.model if spec.model is not None or spec.effort is None else record.model
         effective_model = self._validate_model_effort(validation_model, spec.effort)
         upstream_model = effective_model if spec.effort is not None else spec.model
+        turn_id = None  # type: Optional[str]
         try:
             self.runtime.reserve_start(record.session_id)
             try:
@@ -239,7 +292,7 @@ class WorkerBroker:
                 self.runtime.cancel_start(record.session_id)
                 raise
         except (CodexCallError, CodexProtocolError, TurnActive, SessionDetached, UnknownSession) as exc:
-            raise self._from_lower(exc, record) from exc
+            raise self._from_lower(exc, record, turn_id) from exc
         policy = AnnotationPolicy.PRESERVE_WORKER_POLICY if record.common_policy_complete else AnnotationPolicy.LEGACY_MUTABLE
         if policy == AnnotationPolicy.LEGACY_MUTABLE:
             annotation_model = effective_model if spec.effort is not None else spec.model or record.model
@@ -248,7 +301,9 @@ class WorkerBroker:
                 self.registry.update_annotations(record.session_id, model=annotation_model, effort=annotation_effort)
             except (RegistryError, OSError) as exc:
                 raise self._post_upstream_registry_fault("turn_start_annotations", record.session_id, record.thread_id, turn_id, exc) from exc
-        return {"session_id": record.session_id, "thread_id": record.thread_id, "turn_id": turn_id, "status": "in_progress"}
+        return {"session_id": record.session_id, "thread_id": record.thread_id,
+                "turn_id": turn_id, "status": "in_progress",
+                "attach": self.attach_view(record.thread_id).to_dict()}
 
     def model_list(self) -> JsonObject:
         return {"models": self._models()}
@@ -259,6 +314,11 @@ class WorkerBroker:
 
     def session_resume(self, selector: IdentifierSelector,
                        name: Optional[str] = None) -> JsonObject:
+        with self._gate.mutation("thread/resume"):
+            return self._session_resume_authoritatively(selector, name)
+
+    def _session_resume_authoritatively(self, selector: IdentifierSelector,
+                                        name: Optional[str] = None) -> JsonObject:
         try:
             existing = self.registry.try_resolve(selector)
         except RegistryError as exc:
@@ -267,7 +327,7 @@ class WorkerBroker:
             if name is not None:
                 raise _fault(-32602, "--name is only valid for raw thread recovery", "invalid_params")
             try:
-                response = self.resume_session(SessionResumeSpec(
+                response = self._resume_session_authoritatively(SessionResumeSpec(
                     existing.thread_id,
                     AccessMode(existing.access) if existing.access else AccessMode.FULL,
                 ))
@@ -283,17 +343,20 @@ class WorkerBroker:
                         details={"expected_cwd": existing.cwd, "returned_cwd": returned_cwd},
                     )
                 self.runtime.attach(existing)
-                return session_result(existing, attached=True)
-            except RpcFault:
-                raise
+                result = session_result(existing, attached=True)
+                result["attach"] = self.attach_view(existing.thread_id).to_dict()
+                return result
+            except RpcFault as exc:
+                raise self._with_record_identity(exc, existing) from exc
             except (CodexCallError, CodexProtocolError) as exc:
-                raise self._from_lower(exc) from exc
+                raise self._from_lower(exc, existing) from exc
 
         if selector.thread_id is None:
             raise self._unknown_session(selector)
         session_id = str(uuid.uuid4())
         try:
-            response = self.resume_session(SessionResumeSpec(selector.thread_id, AccessMode.FULL))
+            response = self._resume_session_authoritatively(SessionResumeSpec(
+                selector.thread_id, AccessMode.FULL))
             thread_id, recovered_cwd = self._resume_identity(response)
             if thread_id != selector.thread_id:
                 raise _fault(
@@ -306,8 +369,12 @@ class WorkerBroker:
                 self._string_annotation(response, "reasoningEffort"),
                 session_id=session_id,
             )
-        except RpcFault:
-            raise
+        except RpcFault as exc:
+            raise _fault(
+                exc.code, exc.message, exc.kind, exc.recovery,
+                self._known_identity_details(
+                    session_id, selector.thread_id, None, exc.details),
+            ) from exc
         except (CodexCallError, CodexProtocolError) as exc:
             raise self._from_lower(exc) from exc
         except (RegistryError, OSError) as exc:
@@ -315,7 +382,9 @@ class WorkerBroker:
                 "session_resume", session_id, selector.thread_id, None, exc,
             ) from exc
         self.runtime.attach(record)
-        return session_result(record, attached=True)
+        result = session_result(record, attached=True)
+        result["attach"] = self.attach_view(record.thread_id).to_dict()
+        return result
 
     def session_list(self) -> JsonObject:
         sessions = []  # type: List[JsonObject]
@@ -330,6 +399,7 @@ class WorkerBroker:
                 "attached": status.attached,
                 "active_turn_id": status.active_turn_id,
                 "latest_turn_status": status.latest_turn.status if status.latest_turn else None,
+                "attach": self.attach_view(record.thread_id).to_dict(),
             })
         return {"sessions": sessions}
 
@@ -341,6 +411,7 @@ class WorkerBroker:
             "attached": status.attached,
             "active_turn_id": status.active_turn_id,
             "latest_turn": status.latest_turn.to_dict() if status.latest_turn else None,
+            "attach": self.attach_view(record.thread_id).to_dict(),
         }
 
     def turn_start(self, selector: IdentifierSelector, prompt: str,
@@ -352,29 +423,63 @@ class WorkerBroker:
     def turn_status(self, selector: IdentifierSelector) -> JsonObject:
         record = self._resolve(selector, require_attached=False)
         status = self._status_or_detached(record)
+        if status.attached:
+            self._reconcile_from_upstream(record)
+            status = self._status_or_detached(record)
         return {
             "session_id": record.session_id, "thread_id": record.thread_id,
             "attached": status.attached, "active_turn_id": status.active_turn_id,
             "latest_turn": status.latest_turn.to_dict() if status.latest_turn else None,
+            "attach": self.attach_view(record.thread_id).to_dict(),
+        }
+
+    def turn_history(self, selector: IdentifierSelector,
+                     cursor: Optional[str] = None,
+                     limit: Optional[int] = None) -> JsonObject:
+        """Return an authoritative history page after reconciling attached runtime."""
+        record = self._resolve(selector, require_attached=False)
+        if self._status_or_detached(record).attached:
+            self._reconcile_from_upstream(record)
+        try:
+            page = NativeCodexProxy(self.codex).turns_list(
+                record.thread_id, cursor, limit)
+        except CodexCallError as exc:
+            raise self._from_lower(exc, record) from exc
+        return {
+            "session_id": record.session_id,
+            "thread_id": record.thread_id,
+            "turns": page["turns"],
+            "nextCursor": page["nextCursor"],
+            "attach": self.attach_view(record.thread_id).to_dict(),
         }
 
     def turn_wait(self, selector: IdentifierSelector, timeout: float) -> JsonObject:
         record = self._resolve(selector, require_attached=True)
         try:
             turn = self.runtime.wait(record.session_id, timeout)
-            return {"session_id": record.session_id, "thread_id": record.thread_id, "turn": turn.to_dict()}
+            return {"session_id": record.session_id, "thread_id": record.thread_id,
+                    "turn": turn.to_dict(),
+                    "attach": self.attach_view(record.thread_id).to_dict()}
         except (WaitTimeout, NoTurn, SessionDetached, UnknownSession, ValueError) as exc:
             raise self._from_lower(exc, record) from exc
 
     def turn_events(self, selector: IdentifierSelector, after: int, limit: int) -> JsonObject:
         record = self._resolve(selector, require_attached=False)
         try:
-            return self.runtime.events(record.session_id, after, limit).to_dict()
+            result = self.runtime.events(record.session_id, after, limit).to_dict()
+            result["attach"] = self.attach_view(record.thread_id).to_dict()
+            return result
         except (UnknownSession, ValueError) as exc:
             raise self._from_lower(exc, record) from exc
 
     def turn_steer(self, selector: IdentifierSelector, prompt: str,
                    expected_turn_id: Optional[str] = None) -> JsonObject:
+        with self._gate.mutation("turn/steer"):
+            return self._turn_steer_authoritatively(
+                selector, prompt, expected_turn_id)
+
+    def _turn_steer_authoritatively(self, selector: IdentifierSelector, prompt: str,
+                                    expected_turn_id: Optional[str] = None) -> JsonObject:
         if not isinstance(prompt, str) or not prompt:
             raise _fault(-32602, "prompt must be a non-empty string", "invalid_params")
         record = self._resolve(selector, require_attached=True)
@@ -386,13 +491,22 @@ class WorkerBroker:
         if returned_id != turn_id:
             raise _fault(
                 -32015, "Codex steer returned a different turn", "codex_protocol_error",
-                details={"expected_turn_id": turn_id, "returned_turn_id": returned_id},
+                details=self._known_identity_details(
+                    record.session_id, record.thread_id, turn_id,
+                    {"expected_turn_id": turn_id,
+                     "returned_turn_id": returned_id}),
             )
         return {"session_id": record.session_id, "thread_id": record.thread_id,
-                "turn_id": turn_id, "accepted": True}
+                "turn_id": turn_id, "accepted": True,
+                "attach": self.attach_view(record.thread_id).to_dict()}
 
     def turn_interrupt(self, selector: IdentifierSelector,
                        expected_turn_id: Optional[str] = None) -> JsonObject:
+        with self._gate.mutation("turn/interrupt"):
+            return self._turn_interrupt_authoritatively(selector, expected_turn_id)
+
+    def _turn_interrupt_authoritatively(self, selector: IdentifierSelector,
+                                        expected_turn_id: Optional[str] = None) -> JsonObject:
         record = self._resolve(selector, require_attached=True)
         turn_id = self._active_turn_or_fault(record, expected_turn_id)
         try:
@@ -400,14 +514,169 @@ class WorkerBroker:
         except CodexCallError as exc:
             self._raise_control_race_or_codex(record, turn_id, exc)
         return {"session_id": record.session_id, "thread_id": record.thread_id,
-                "turn_id": turn_id, "accepted": True}
+                "turn_id": turn_id, "accepted": True,
+                "attach": self.attach_view(record.thread_id).to_dict()}
 
     def shutdown(self) -> JsonObject:
+        with self._gate.mutation("shutdown"):
+            try:
+                self.codex.shutdown()
+            except CodexCallError as exc:
+                raise self._codex_fault(exc) from exc
+            return {"accepted": True}
+
+    def goal_set(self, thread_id: str, objective: Optional[str] = None,
+                 status: Optional[str] = None,
+                 token_budget: Optional[int] = None) -> JsonObject:
+        with self._gate.mutation("thread/goal/set"):
+            return NativeCodexProxy(self.codex).goal_set(
+                thread_id, objective, status, token_budget)
+
+    def goal_get(self, thread_id: str) -> JsonObject:
+        return NativeCodexProxy(self.codex).goal_get(thread_id)
+
+    def attach_view(self, thread_id: str) -> AttachView:
+        from .projection import build_attach_view
+        return build_attach_view(self._listener, thread_id)
+
+    def _reconcile_from_upstream(self, record: SessionRecord) -> None:
         try:
-            self.codex.shutdown()
+            result = self.codex.call("thread/read", {
+                "threadId": record.thread_id,
+                "includeTurns": True,
+            })
+            if (not isinstance(result, dict) or set(result) != {"thread"}
+                    or not isinstance(result["thread"], dict)
+                    or result["thread"].get("id") != record.thread_id):
+                raise CodexCallError(
+                    "protocol_error", "thread/read",
+                    {"message": "malformed authoritative thread response"})
+            self.runtime.reconcile_thread(result["thread"])
+        except CodexCallError as exc:
+            raise self._from_lower(exc, record) from exc
+        except CodexProtocolError as exc:
+            raise self._from_lower(exc, record) from exc
+
+    def list_active_threads(self, timeout: float = 120.0) -> ActiveInventory:
+        """Page the all-source app-server inventory; any ambiguity fails closed."""
+        if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
+                or not math.isfinite(timeout) or timeout <= 0):
+            raise ValueError("inventory timeout must be positive")
+        deadline = time.monotonic() + timeout
+        try:
+            records = self.registry.list()
+        except RegistryError as exc:
+            raise _fault(-32011, "could not read session registry", "registry_error",
+                         details={"reason": str(exc)}) from exc
+        by_thread = {record.thread_id: record for record in records}
+        active = {}  # type: JsonObject
+        cursor = None  # type: Optional[str]
+        seen_cursors = set()
+        try:
+            while True:
+                params = {"sourceKinds": []}  # type: JsonObject
+                if cursor is not None:
+                    params["cursor"] = cursor
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CodexCallError("timeout", "thread/list")
+                result = self.codex.call("thread/list", params, timeout=remaining)
+                self._validate_inventory_page(result)
+                for thread in result["data"]:
+                    status = thread["status"]
+                    thread_id = thread["id"]
+                    if status["type"] == "active":
+                        active.setdefault(thread_id, list(status["activeFlags"]))
+                next_cursor = result.get("nextCursor")
+                if next_cursor is None:
+                    break
+                if next_cursor in seen_cursors or next_cursor == cursor:
+                    raise CodexCallError(
+                        "protocol_error", "thread/list",
+                        {"message": "thread inventory cursor did not progress"})
+                seen_cursors.add(next_cursor)
+                cursor = next_cursor
         except CodexCallError as exc:
             raise self._codex_fault(exc) from exc
-        return {"accepted": True}
+        items = []
+        for thread_id, active_flags in active.items():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._codex_fault(
+                    CodexCallError("timeout", "thread/read"))
+            turn_id = self._inventory_turn_id(thread_id, remaining)
+            record = by_thread.get(thread_id)
+            if record is None:
+                items.append(ActiveThreadItem(
+                    thread_id, "unmapped_tui", None, None, turn_id, active_flags))
+            else:
+                items.append(ActiveThreadItem(
+                    thread_id, "worker", record.name, record.session_id,
+                    turn_id, active_flags))
+        return ActiveInventory(items)
+
+    def _inventory_turn_id(self, thread_id: str, timeout: float) -> str:
+        try:
+            result = self.codex.call("thread/read", {
+                "threadId": thread_id, "includeTurns": True}, timeout=timeout)
+            thread = result.get("thread") if isinstance(result, dict) else None
+            turns = thread.get("turns") if isinstance(thread, dict) else None
+            active = ([turn for turn in turns
+                       if isinstance(turn, dict) and turn.get("status") == "inProgress"]
+                      if isinstance(turns, list) else [])
+            if (thread is None or thread.get("id") != thread_id
+                    or not isinstance(thread.get("status"), dict)
+                    or thread["status"].get("type") != "active"
+                    or len(active) != 1
+                    or not isinstance(active[0].get("id"), str)
+                    or not active[0]["id"]):
+                raise CodexCallError(
+                    "protocol_error", "thread/read",
+                    {"message": "active inventory turn identity is ambiguous"})
+            return active[0]["id"]
+        except CodexCallError as exc:
+            raise self._codex_fault(exc) from exc
+
+    @staticmethod
+    def _validate_inventory_page(result: object) -> None:
+        expected = {"data", "nextCursor", "backwardsCursor"}
+        if (not isinstance(result, dict) or set(result) != expected
+                or not isinstance(result["data"], list)
+                or result.get("nextCursor") is not None
+                and (not isinstance(result.get("nextCursor"), str)
+                     or not result.get("nextCursor"))
+                or result.get("backwardsCursor") is not None
+                and not isinstance(result.get("backwardsCursor"), str)):
+            raise CodexCallError(
+                "protocol_error", "thread/list",
+                {"message": "malformed thread inventory page"})
+        for thread in result["data"]:
+            if (not isinstance(thread, dict)
+                    or not isinstance(thread.get("id"), str)
+                    or not thread["id"]
+                    or not isinstance(thread.get("status"), dict)):
+                raise CodexCallError(
+                    "protocol_error", "thread/list",
+                    {"message": "malformed thread inventory item"})
+            status = thread["status"]
+            status_type = status.get("type")
+            if status_type == "active":
+                if (set(status) != {"type", "activeFlags"}
+                        or not isinstance(status.get("activeFlags"), list)
+                        or any(not isinstance(flag, str) or not flag
+                               for flag in status["activeFlags"])):
+                    raise CodexCallError(
+                        "protocol_error", "thread/list",
+                        {"message": "malformed active thread status"})
+            elif status_type in ("idle", "notLoaded", "systemError"):
+                if set(status) != {"type"}:
+                    raise CodexCallError(
+                        "protocol_error", "thread/list",
+                        {"message": "malformed inactive thread status"})
+            else:
+                raise CodexCallError(
+                    "protocol_error", "thread/list",
+                    {"message": "unknown thread status"})
 
     def _models(self) -> List[JsonObject]:
         try:
@@ -537,8 +806,10 @@ class WorkerBroker:
             if not status.attached:
                 raise _fault(
                     -32003, "session is detached", "session_detached",
-                    recovery="run session resume --session %s" % record.session_id,
-                    details={"session_id": record.session_id, "thread_id": record.thread_id},
+                    recovery="codex-worker session resume --session %s" % shlex.quote(
+                        record.session_id),
+                    details=self._known_identity_details(
+                        record.session_id, record.thread_id, None),
                 )
         return record
 
@@ -546,15 +817,13 @@ class WorkerBroker:
         if selector.thread_id is not None:
             return _fault(
                 -32001, "unknown raw thread; recover it with session resume --thread %s" % selector.thread_id,
-                "unknown_session", recovery="run session resume --thread %s" % selector.thread_id,
+                "unknown_session", recovery="codex-worker session resume --thread %s" % shlex.quote(
+                    selector.thread_id),
                 details={"thread_id": selector.thread_id},
             )
         return _fault(
             -32001, "unknown session", "unknown_session",
-            recovery=(
-                "run session list to choose a known session, or recover a raw Codex thread with "
-                "session resume --thread <thread-id> --name <name>"
-            ),
+            recovery="codex-worker session list",
             details={"session_id": selector.session_id},
         )
 
@@ -573,7 +842,10 @@ class WorkerBroker:
         if not status.attached:
             raise _fault(
                 -32003, "session is detached", "session_detached",
-                recovery="run session resume --session %s" % record.session_id,
+                recovery="codex-worker session resume --session %s" % shlex.quote(
+                    record.session_id),
+                details=self._known_identity_details(
+                    record.session_id, record.thread_id, expected_turn_id),
             )
         if (status.active_turn_id is None
                 or expected_turn_id is not None and status.active_turn_id != expected_turn_id):
@@ -589,7 +861,8 @@ class WorkerBroker:
         status = self._status_or_detached(record)
         if self._is_upstream_turn_not_active(exc):
             raise self._turn_not_active(record, status.latest_turn, expected_turn_id) from exc
-        raise self._codex_fault(exc) from exc
+        raise self._with_record_identity(self._codex_fault(exc), record,
+                                         expected_turn_id) from exc
 
     @staticmethod
     def _is_upstream_turn_not_active(exc: CodexCallError) -> bool:
@@ -604,8 +877,7 @@ class WorkerBroker:
             and exc.details.get("message") == expected_messages.get(exc.method)
         )
 
-    @staticmethod
-    def _turn_not_active(record: SessionRecord, latest_turn: Any,
+    def _turn_not_active(self, record: SessionRecord, latest_turn: Any,
                          turn_id: Optional[str] = None) -> RpcFault:
         return _fault(
             -32005, "turn is not active", "turn_not_active",
@@ -614,28 +886,27 @@ class WorkerBroker:
                 "thread_id": record.thread_id,
                 "turn_id": turn_id,
                 "latest_turn": latest_turn.to_dict() if latest_turn else None,
+                "attach": self.attach_view(record.thread_id).to_dict(),
             },
         )
 
-    @staticmethod
-    def _post_upstream_registry_fault(operation: str, session_id: str, thread_id: str,
-                                      turn_id: Optional[str], exc: BaseException) -> RpcFault:
+    def _post_upstream_registry_fault(self, operation: str, session_id: str,
+                                      thread_id: str, turn_id: Optional[str],
+                                      exc: BaseException) -> RpcFault:
         details = {
             "operation": operation,
             "durable_state": "not_persisted",
             "session_id": session_id,
             "thread_id": thread_id,
             "reason": str(exc),
+            "attach": self.attach_view(thread_id).to_dict(),
         }  # type: JsonObject
         if turn_id is None:
-            recovery = "run session resume --thread %s" % thread_id
+            recovery = "codex-worker session resume --thread %s" % shlex.quote(thread_id)
             message = "Codex thread exists but its session identity was not persisted"
         else:
             details["turn_id"] = turn_id
-            recovery = (
-                "inspect the upstream-started turn with turn status --session %s, "
-                "then turn events --session %s" % (session_id, session_id)
-            )
+            recovery = "codex-worker turn status --session %s" % shlex.quote(session_id)
             message = "Codex turn started but its session annotations were not persisted"
         return _fault(-32011, message, "registry_error", recovery=recovery, details=details)
 
@@ -651,29 +922,60 @@ class WorkerBroker:
             details={"method": exc.method, "kind": exc.kind, "details": exc.details},
         )
 
-    def _from_lower(self, exc: BaseException, record: Optional[SessionRecord] = None) -> RpcFault:
+    def _known_identity_details(self, session_id: str, thread_id: str,
+                                turn_id: Optional[str],
+                                details: Optional[JsonObject] = None) -> JsonObject:
+        result = dict(details or {})
+        result.update({
+            "session_id": session_id,
+            "thread_id": thread_id,
+            "attach": self.attach_view(thread_id).to_dict(),
+        })
+        if turn_id is not None:
+            result["turn_id"] = turn_id
+        return result
+
+    def _with_record_identity(self, fault: RpcFault, record: SessionRecord,
+                              turn_id: Optional[str] = None) -> RpcFault:
+        return _fault(
+            fault.code, fault.message, fault.kind, fault.recovery,
+            self._known_identity_details(
+                record.session_id, record.thread_id, turn_id, fault.details),
+        )
+
+    def _from_lower(self, exc: BaseException,
+                    record: Optional[SessionRecord] = None,
+                    turn_id: Optional[str] = None) -> RpcFault:
         if isinstance(exc, CodexCallError):
-            return self._codex_fault(exc)
+            fault = self._codex_fault(exc)
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, CodexProtocolError):
-            return _fault(-32015, "Codex protocol state is inconsistent", "codex_protocol_error",
-                          details={"reason": str(exc)})
+            fault = _fault(-32015, "Codex protocol state is inconsistent",
+                           "codex_protocol_error", details={"reason": str(exc)})
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, TurnActive):
-            return _fault(-32004, "session already has an active turn", "turn_active",
-                          details={"session_id": record.session_id if record else None})
+            fault = _fault(-32004, "session already has an active turn", "turn_active")
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, SessionDetached):
-            return _fault(-32003, "session is detached", "session_detached",
-                          recovery="run session resume --session %s" % (record.session_id if record else "<id>"))
+            recovery = ("codex-worker session resume --session %s" % shlex.quote(record.session_id)
+                        if record else None)
+            fault = _fault(
+                -32003, "session is detached", "session_detached", recovery=recovery)
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, WaitTimeout):
             session_id = record.session_id if record else exc.session_id
             next_actions = [
-                "turn status --session %s" % session_id,
-                "turn wait --session %s --timeout <seconds>" % session_id,
-                "turn steer --session %s --prompt <text>" % session_id,
-                "turn interrupt --session %s" % session_id,
+                "codex-worker turn status --session %s" % shlex.quote(session_id),
+                "codex-worker turn wait --session %s --timeout 30" % shlex.quote(session_id),
+                "codex-worker turn interrupt --session %s" % shlex.quote(session_id),
             ]
-            return _fault(
+            fault = _fault(
                 -32006, "timed out waiting for turn; work remains active", "wait_timeout",
-                recovery="work remains active; run turn status/wait/steer/interrupt for session %s" % session_id,
+                recovery="codex-worker turn status --session %s" % shlex.quote(session_id),
                 details={
                     "session_id": exc.session_id,
                     "turn_id": exc.turn_id,
@@ -681,9 +983,126 @@ class WorkerBroker:
                     "next_actions": next_actions,
                 },
             )
+            return (fault if record is None else self._with_record_identity(
+                fault, record, exc.turn_id))
         if isinstance(exc, NoTurn):
-            return _fault(-32007, "session has no terminal turn", "no_turn",
-                          details={"session_id": record.session_id if record else None})
+            fault = _fault(-32007, "session has no terminal turn", "no_turn")
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, (UnknownSession, ValueError)):
-            return _fault(-32602, str(exc), "invalid_params")
-        return _fault(-32020, "broker operation failed", "broker_error", details={"reason": str(exc)})
+            fault = _fault(-32602, str(exc), "invalid_params")
+            return (fault if record is None
+                    else self._with_record_identity(fault, record, turn_id))
+        fault = _fault(-32020, "broker operation failed", "broker_error",
+                       details={"reason": str(exc)})
+        return (fault if record is None
+                else self._with_record_identity(fault, record, turn_id))
+
+
+class MaintenanceTerminationError(RuntimeError):
+    def __init__(self, cause: str):
+        self.cause = cause
+        super().__init__("owned service teardown is incomplete")
+
+
+class MaintenanceCoordinator:
+    """The only composition path from a drained gate to owned termination."""
+
+    def __init__(self, broker: WorkerBroker, lifecycle: MaintenanceLifecycle):
+        if not isinstance(broker, WorkerBroker):
+            raise TypeError("broker must be WorkerBroker")
+        gate = lifecycle.gate
+        if not isinstance(gate, ServiceMaintenanceGate):
+            raise TypeError("lifecycle gate must be ServiceMaintenanceGate")
+        if broker._gate is not gate:
+            raise ValueError("broker and lifecycle must share the exact maintenance gate")
+        if not callable(getattr(lifecycle, "terminate_owned", None)):
+            raise TypeError("lifecycle must terminate owned resources")
+        if not callable(getattr(lifecycle, "stopping", None)):
+            raise TypeError("lifecycle must report intentional stopping state")
+        self._broker = broker
+        self._lifecycle = lifecycle
+        self._gate = gate
+
+    def stop(self, force: bool) -> MaintenanceResult:
+        return self._maintain("stop", None, force)
+
+    def restart(self, listener: str, force: bool) -> MaintenanceResult:
+        validated = validate_public_listener(listener)
+        return self._maintain("restart", validated, force)
+
+    def _maintain(self, action: str, listener: Optional[str],
+                  force: bool) -> MaintenanceResult:
+        if type(force) is not bool:
+            raise ValueError("force must be bool")
+        with self._gate.drain(force=force) as lease:
+            if force and self._gate.active_mutations:
+                self._terminate_owned(lease)
+                return MaintenanceResult.unavailable(
+                    action, "completed", True, listener,
+                    "upstream_inventory_unavailable")
+            if self._lifecycle.stopping():
+                from .models import WorkerImpact
+                names = sorted(record.name for record in self._broker.registry.list()
+                               if record.name is not None)
+                self._terminate_owned(lease)
+                return MaintenanceResult.completed(
+                    action, ActiveInventory(), force, listener,
+                    WorkerImpact([], names))
+            try:
+                inventory = (self._bounded_force_inventory() if force else
+                             self._broker.list_active_threads(timeout=120.0))
+            except RpcFault:
+                if force:
+                    self._terminate_owned(lease)
+                    return MaintenanceResult.unavailable(
+                        action, "completed", True, listener,
+                        "upstream_inventory_unavailable")
+                return MaintenanceResult.unavailable(
+                    action, "refused", False, listener,
+                    "upstream_inventory_unavailable")
+            from .models import WorkerImpact
+            records = self._broker.registry.list()
+            all_names = {record.name for record in records if record.name is not None}
+            active_names = {item.worker for item in inventory.items
+                            if item.worker is not None}
+            workers = WorkerImpact(sorted(active_names), sorted(all_names - active_names))
+            if inventory.items and not force:
+                return MaintenanceResult.refused(
+                    inventory, action, listener, workers)
+            self._terminate_owned(lease)
+            return MaintenanceResult.completed(
+                action, inventory, force, listener, workers)
+
+    def _bounded_force_inventory(self) -> ActiveInventory:
+        outcome = queue.Queue(maxsize=1)  # type: queue.Queue
+
+        def load() -> None:
+            try:
+                outcome.put((True, self._broker.list_active_threads(
+                    timeout=FORCE_INVENTORY_TIMEOUT_SECONDS)))
+            except BaseException as exc:
+                outcome.put((False, exc))
+
+        worker = threading.Thread(
+            target=load, name="codex-force-inventory", daemon=True)
+        worker.start()
+        worker.join(timeout=FORCE_INVENTORY_TIMEOUT_SECONDS)
+        if worker.is_alive():
+            raise RpcFault(
+                -32020, "forced maintenance inventory timed out",
+                "codex_failure", details={"reason": "inventory_timeout"})
+        succeeded, value = outcome.get_nowait()
+        if succeeded:
+            if not isinstance(value, ActiveInventory):
+                raise TypeError("force inventory returned an invalid result")
+            return value
+        if isinstance(value, RpcFault):
+            raise value
+        raise value
+
+    def _terminate_owned(self, lease: DrainLease) -> None:
+        try:
+            self._lifecycle.terminate_owned(lease)
+        except OwnedTeardownError as exc:
+            raise MaintenanceTerminationError(exc.cause) from exc

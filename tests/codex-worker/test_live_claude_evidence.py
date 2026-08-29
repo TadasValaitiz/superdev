@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
@@ -6,155 +7,186 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).with_name("live_claude_evidence.py")
+LIVE_SCRIPT = Path(__file__).with_name("live_claude_check.sh")
+WRAPPER = Path(__file__).with_name("codex_worker_isolation_wrapper.sh")
 SPEC = importlib.util.spec_from_file_location("live_claude_evidence", SCRIPT)
 assert SPEC and SPEC.loader
-EVIDENCE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(EVIDENCE)
+EVIDENCE = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(EVIDENCE)
 
 
 class ClaudeEvidenceTests(unittest.TestCase):
-    def test_validates_path_common_command_journey(self):
+    def test_real_claude_auth_and_worker_state_have_an_explicit_isolation_boundary(self):
+        source = LIVE_SCRIPT.read_text(encoding="utf-8")
+        wrapper = WRAPPER.read_text(encoding="utf-8")
+        self.assertIn('env -u CLAUDE_CONFIG_DIR HOME="$CLAUDE_CALLER_HOME" claude -p', source)
+        self.assertIn('install -m 600 "$REAL_HOME/.claude.json"', source)
+        self.assertIn('AUTH_FILE_DEV_INO=$(stat', source)
+        self.assertIn('os.unlink(str(auth))', source)
+        self.assertNotIn('"external_claude_config_modified":False', source)
+        self.assertLess(source.index('cleanup-owner-before.json'),
+                        source.index('daemon stop >"$RUN_DIR/cleanup-stop.json"'))
+        self.assertIn('cleanup-pid-binding.json', source)
+        for field in ('"stderr"', '"environment_names"', '"elapsed_seconds"',
+                      '"substrate"', '"owner_assertion"', '"pid_binding_assertion"'):
+            self.assertIn(field, source)
+        self.assertNotIn('HOME="$REAL_HOME" claude', source)
+        self.assertIn('codex_worker_isolation_wrapper.sh', source)
+        self.assertIn('codex-worker.uv-real', source)
+        self.assertNotIn('cp "$REAL_HOME/.claude.json"', source)
+        self.assertNotIn('CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$REAL_HOME/.claude}"', source)
+        for variable in ("HOME", "XDG_STATE_HOME", "TMPDIR", "CLAUDE_CONFIG_DIR"):
+            self.assertIn('export %s=' % variable, wrapper)
+        self.assertIn('exec "$CODEX_WORKER_UV_EXECUTABLE" "$@"', wrapper)
+        self.assertIn('RUNTIME_REAL=$(cd "$RUNTIME" && pwd -P)', source)
+        self.assertIn('"$RUNTIME_REAL" == /private/tmp/cw5-claude.*', source)
+
+    def test_tracked_real_claude_receipt_covers_every_family_and_cleanup(self):
+        path = (Path(__file__).parents[2] / "docs" / "superdev" / "checkrides" /
+                "2026-08-28-codex-worker-shared-app-server-evidence" /
+                "real-claude-caller-summary.json")
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "MEASURED complete")
+        self.assertEqual(receipt["checkride_verdict"],
+                         "PENDING controller executor/evaluator")
+        self.assertEqual(set(receipt["command_coverage"]), {
+            "start", "run", "message", "status", "messages", "history",
+            "steer", "interrupt", "goal_set", "goal_show", "limits", "model_list",
+            "session_start", "session_list", "session_show", "session_resume",
+            "turn_start", "turn_wait", "turn_status", "turn_events", "turn_steer",
+            "turn_interrupt",
+        })
+        self.assertTrue(all(receipt["command_coverage"].values()))
+        self.assertEqual(receipt["command_accounting"], {
+            "attempted": 26, "completed": 26, "unmatched_attempts": 0,
+            "not_run": 0, "codex_failure_count": 0,
+        })
+        self.assertEqual(receipt["tracked_literal_transcript"]["line_count"], 26)
+        cleanup = receipt["cleanup"]
+        self.assertEqual({key: cleanup[key] for key in (
+            "historical_auth_isolation", "processes_remaining", "runtime_deleted",
+            "service_status", "socket_listeners_remaining")}, {
+                "historical_auth_isolation": "external HOME used; superseded by isolated runtime copy",
+                "processes_remaining": 0,
+                "runtime_deleted": True, "service_status": "stopped",
+                "socket_listeners_remaining": 0,
+            })
+        cleanup_record = Path(__file__).parents[2] / cleanup["literal_record"]
+        self.assertEqual(hashlib.sha256(cleanup_record.read_bytes()).hexdigest(),
+                         cleanup["literal_record_sha256"])
+        literal_cleanup = json.loads(cleanup_record.read_text(encoding="utf-8"))
+        self.assertEqual([row["exit"] for row in literal_cleanup["cleanup_commands"]],
+                         [0, 0, 0])
+        self.assertTrue(all(set(("argv", "exit", "elapsed_seconds", "environment_names",
+                                     "result", "stderr", "substrate")) <= set(row)
+                            for row in literal_cleanup["cleanup_commands"]))
+        self.assertEqual(literal_cleanup["cleanup_commands"][-1]["result"]["status"],
+                         "stopped")
+        self.assertEqual(literal_cleanup["owner_verification"]["token"], "[REDACTED]")
+        self.assertTrue(set(("argv", "assertion", "output", "exit", "elapsed_seconds",
+                                 "environment_names", "stderr", "substrate")) <=
+                        set(literal_cleanup["owner_verification"]))
+
+    def test_validates_path_only_complete_family_coverage(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td); cwd = root / "repo"; cwd.mkdir()
-            cli = "codex-worker"
-            sid, tid, turn = "session-1", "thread-1", "turn-1"
+            root = Path(td); cwd = root / "unrelated"; cwd.mkdir()
             worker = {
-                "instance": "claude-live", "name": "claude-caller-a31f09",
-                "session_id": sid, "thread_id": tid, "cwd": str(cwd.resolve()),
+                "name": "claude-live-a31f09", "session_id": "session-1",
+                "thread_id": "thread-1", "cwd": str(cwd.resolve()),
                 "tier": "medium", "model": "gpt-5.6-terra", "effort": "medium",
-                "access": "full",
+                "access": "full", "attach": {"listener": "ws://127.0.0.1:4777",
+                    "thread_id": "thread-1", "attach_command": "codex --remote ws://127.0.0.1:4777",
+                    "resume_command": "codex --remote ws://127.0.0.1:4777 resume thread-1"},
             }
-            completion = {
-                "worker": worker,
-                "turn": {"turn_id": turn, "status": "completed", "error": None},
-                "messages": [{"type": "agent_message", "item_id": "item-1",
-                              "phase": "final_answer", "selection": "explicit_final",
-                              "text": "complete result"}],
+            completion = {"worker": worker,
+                "turn": {"turn_id": "turn-1", "status": "completed", "error": None},
+                "messages": [{"type": "agent_message", "item_id": "i", "phase": "final_answer",
+                              "selection": "explicit_final", "text": "ok"}],
                 "structured_output": None,
                 "metrics": {"token_usage": {"value": None, "source": "codex",
-                                              "availability": "unavailable"}},
-                "recovery": {"status": "codex-worker status --name claude-caller-a31f09"},
-            }
-            callback_event = {
-                "schema": "codex-worker.claude-callback/v1",
-                "event": "turn_terminal",
-                "event_id": "callback-event-1",
-                "payload": {"completion": dict(completion)},
-            }
-            run_completion = dict(
-                completion, turn={"turn_id": "turn-2", "status": "completed", "error": None},
-                messages=[dict(completion["messages"][0], text="follow-up result")])
-            callback_event_2 = {
-                "schema": "codex-worker.claude-callback/v1",
-                "event": "turn_terminal",
-                "event_id": "callback-event-2",
-                "payload": {"completion": dict(run_completion)},
-            }
+                                             "availability": "unavailable"}},
+                "recovery": {"status": "codex-worker status --name claude-live-a31f09"}}
             commands = [
-                f"cd {cwd} && {cli} start --name claude-caller-a31f09 --prompt 'answer briefly'",
-                f"{cli} message --name claude-caller-a31f09 --message 'progress'",
-                f"{cli} run --name claude-caller-a31f09 --prompt 'short follow-up'",
-                f"{cli} goal show --name claude-caller-a31f09",
-                f"{cli} history --name claude-caller-a31f09 --tail 2",
-                f"{cli} status --name claude-caller-a31f09",
-                f"{cli} daemon stop",
+                "codex-worker start --name claude-live-a31f09 --cwd %s --prompt hi" % cwd,
+                "codex-worker run --name claude-live-a31f09 --prompt again",
+                "codex-worker message --name claude-live-a31f09 --message update",
+                "codex-worker status --name claude-live-a31f09",
+                "codex-worker messages --name claude-live-a31f09",
+                "codex-worker history --name claude-live-a31f09",
+                "codex-worker steer --name claude-live-a31f09 --prompt steer",
+                "codex-worker interrupt --name claude-live-a31f09",
+                "codex-worker goal set --name claude-live-a31f09 --goal finish",
+                "codex-worker goal show --name claude-live-a31f09", "codex-worker limits",
+                "codex-worker model list", "codex-worker session start --cwd %s" % cwd,
+                "codex-worker session list", "codex-worker session show --session session-2",
+                "codex-worker session resume --session session-2",
+                "codex-worker turn start --session session-2 --prompt long",
+                "codex-worker turn wait --session session-2", "codex-worker turn status --session session-2",
+                "codex-worker turn events --session session-2",
+                "codex-worker turn steer --session session-2 --prompt steer",
+                "codex-worker turn interrupt --session session-2",
+                "codex-worker turn start --session session-2 --prompt second",
+                "codex-worker turn wait --session session-2 --timeout 60",
+                "codex-worker turn start --session session-1 --prompt third",
+                "codex-worker turn wait --session session-1 --timeout 60",
             ]
-            results = [
-                completion,
-                {"worker": worker, "event_id": "proactive-event-1", "attempt": {
-                    "state": "written", "reason": None,
-                    "attempted_at": "2026-08-20T00:00:00Z", "attempt_count": 1}},
-                run_completion,
-                {"worker": worker, "availability": "absent", "goal": None},
-                {"worker": worker, "turns": [], "requested_tail": 2, "returned": 0,
-                 "older_available": False},
-                {"worker": worker, "daemon_status": "ready", "attached": True,
-                 "active_turn_id": None, "latest_turn": completion["turn"],
-                 "callback": {"state": "enabled", "pending_terminal_count": 0,
-                              "last_terminal_attempt": {"event_id": "callback-event-2",
-                                "state": "written", "reason": None,
-                                "attempted_at": "2026-08-20T00:00:00Z", "attempt_count": 1}}},
-                {"instance": {"instance": "claude-live"}, "status_before": "ready",
-                 "status_after": "stopped", "daemon_pid": 1, "codex_pid": 2,
-                 "durable_state": "preserved", "worker_count": 1},
-            ]
-            transcript = root / "stream.jsonl"
-            lines = []
-            for i, (command, result) in enumerate(zip(commands, results)):
-                lines.append({"message": {"content": [{"type": "tool_use", "id": f"t{i}", "name": "Bash", "input": {"command": command}}]}})
-                lines.append({"message": {"content": [{"type": "tool_result", "tool_use_id": f"t{i}", "is_error": False, "content": json.dumps({"result": result})}]}})
-                if i == 0:
-                    lines.append({"type": "user", "message": {"role": "user", "content": json.dumps(callback_event)}})
-                if i == 2:
-                    lines.append({"type": "user", "message": {"role": "user", "content": json.dumps(callback_event_2)}})
-            transcript.write_text("\n".join(map(json.dumps, lines)) + "\n")
-            receipt = EVIDENCE.validate(transcript, cwd, cli)
-            self.assertEqual((receipt["session_id"], receipt["thread_id"], receipt["turn_id"]), (sid, tid, turn))
-            self.assertTrue(receipt["native_claude_available"])
-            self.assertEqual(receipt["durable_state"], "preserved")
-            self.assertEqual(receipt["callback_event_ids"], ["callback-event-1", "callback-event-2"])
-            self.assertTrue(receipt["full_result_recovered"])
+            status = {"worker": worker, "daemon_status": "ready", "attached": True,
+                      "active_turn_id": None, "latest_turn": completion["turn"],
+                      "callback": {"state": "enabled", "pending_terminal_count": 0,
+                                   "last_terminal_attempt": {"state": "written"}}}
+            history = {"worker": worker, "turns": [], "requested_tail": 1,
+                       "returned": 0, "older_available": False}
+            results = []
+            for command in commands:
+                if " start " in command and "session start" not in command: value = completion
+                elif " run " in command: value = completion
+                elif " status " in command and "turn status" not in command: value = status
+                elif " history " in command: value = history
+                else: value = {"ok": True}
+                results.append(value)
+            transcript = root / "stream.jsonl"; rows = []
+            for index, (command, result) in enumerate(zip(commands, results)):
+                tool_id = "t%d" % index
+                rows.append({"message": {"content": [{"type": "tool_use", "id": tool_id,
+                    "name": "Bash", "input": {"command": command}}]}})
+                rows.append({"message": {"content": [{"type": "tool_result",
+                    "tool_use_id": tool_id, "is_error": False,
+                    "content": json.dumps({"result": result})}]}})
+            transcript.write_text("\n".join(map(json.dumps, rows)) + "\n")
+            receipt = EVIDENCE.validate(transcript, cwd, "codex-worker")
+            self.assertEqual(set(receipt["coverage"]), set(EVIDENCE.REQUIRED_COMMAND_PATTERNS))
+            self.assertEqual(receipt["attach"]["thread_id"], "thread-1")
+            self.assertEqual(receipt["command_attempt_count"], 26)
+            self.assertEqual(receipt["completed_command_count"], 26)
+            self.assertEqual(receipt["unmatched_attempt_count"], 0)
+            self.assertEqual(receipt["codex_failure_count"], 0)
 
-            # Claude stream-json can omit injected callback frames while Claude's
-            # final answer still reports their durable IDs and recovered result.
-            terminal_id_1 = "terminal-" + "a" * 64
-            terminal_id_2 = "terminal-" + "b" * 64
-            status_result = results[5]
-            status_result["callback"]["last_terminal_attempt"]["event_id"] = terminal_id_2
-            without_injected_frame = [line for line in lines if line.get("type") != "user"]
-            attested = []
-            for line in without_injected_frame:
-                attested.append(line)
-                block = line.get("message", {}).get("content", [{}])[0]
-                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t5":
-                    block["content"] = json.dumps({"result": status_result})
-                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t0":
-                    attested.append({"message": {"content": [{"type": "text", "text":
-                        "Callback 1 received (`%s...`). CALLBACK_COMPLETION_1=%s" % (
-                            terminal_id_1[:17], json.dumps(completion, separators=(",", ":")))}]}})
-                if block.get("type") == "tool_result" and block.get("tool_use_id") == "t2":
-                    attested.append({"message": {"content": [{"type": "text", "text":
-                        "Callback 2 received (`%s...`). CALLBACK_COMPLETION_2=%s" % (
-                            terminal_id_2[:17], json.dumps(run_completion,
-                                                          separators=(",", ":")))}]}})
-            attested.append({
-                "message": {"content": [{
-                    "type": "text",
-                    "text": ("Callbacks %s and %s; recovered: complete result / "
-                             "follow-up result") % (terminal_id_1, terminal_id_2),
-                }]},
-            })
-            transcript.write_text("\n".join(map(json.dumps, attested)) + "\n")
-            hidden_receipt = EVIDENCE.validate(transcript, cwd, cli)
-            self.assertEqual(hidden_receipt["callback_event_ids"], [terminal_id_1, terminal_id_2])
-            self.assertTrue(hidden_receipt["full_result_recovered"])
-
-            attested_without_payload = json.loads(json.dumps(attested))
-            for line in attested_without_payload:
-                block = line.get("message", {}).get("content", [{}])[0]
-                if block.get("type") == "text" and "CALLBACK_COMPLETION_" in block["text"]:
-                    block["text"] = block["text"].split(" CALLBACK_COMPLETION_", 1)[0]
-            transcript.write_text(
-                "\n".join(map(json.dumps, attested_without_payload)) + "\n")
-            with self.assertRaises(AssertionError):
-                EVIDENCE.validate(transcript, cwd, cli)
-
-            # Successful synchronous start/run output plus a later status event ID is
-            # not proof that Claude observed either automatic callback.
-            unobserved = list(without_injected_frame)
-            unobserved.append({"message": {"content": [{"type": "text", "text":
-                ("Command summary copied IDs %s and %s and outputs complete result / "
-                 "follow-up result") % (terminal_id_1, terminal_id_2)}]}})
-            transcript.write_text("\n".join(map(json.dumps, unobserved)) + "\n")
-            with self.assertRaises(AssertionError):
-                EVIDENCE.validate(transcript, cwd, cli)
-
-            for forbidden in ("codex app-server", "python3 /repo/codex-worker model list", "mcp__codex__call"):
-                lines[0]["message"]["content"][0]["input"]["command"] = forbidden
-                transcript.write_text("\n".join(map(json.dumps, lines)) + "\n")
+            for forbidden in ("codex app-server", "codex-worker --instance x status --name a",
+                              "codex-worker --socket /tmp/s turn status --session x",
+                              "codex-worker daemon stop", "mcp__codex__call"):
+                changed = json.loads(json.dumps(rows)); changed[0]["message"]["content"][0]["input"]["command"] = forbidden
+                transcript.write_text("\n".join(map(json.dumps, changed)) + "\n")
                 with self.assertRaises(AssertionError):
-                    EVIDENCE.validate(transcript, cwd, cli)
+                    EVIDENCE.validate(transcript, cwd, "codex-worker")
+
+    def test_tracked_literal_real_claude_outputs_are_reconstructable(self):
+        root = Path(__file__).parents[2]
+        evidence_root = (root / "docs" / "superdev" / "checkrides" /
+                         "2026-08-28-codex-worker-shared-app-server-evidence")
+        literal = evidence_root / "real-claude-commands.jsonl"
+        rows = [json.loads(line) for line in literal.read_text(encoding="utf-8").splitlines()]
+        receipt = json.loads((evidence_root / "real-claude-caller-summary.json").read_text(
+            encoding="utf-8"))["tracked_literal_transcript"]
+        self.assertEqual(hashlib.sha256(literal.read_bytes()).hexdigest(), receipt["sha256"])
+        self.assertEqual([row["sequence"] for row in rows], list(range(1, 27)))
+        self.assertTrue(all(set(row) == {
+            "sequence", "attempt_id", "terminal_attempt_id", "command",
+            "exit", "exit_basis", "output"} for row in rows))
+        self.assertTrue(all(row["exit"] == 0 for row in rows))
+        self.assertTrue(all(row["attempt_id"] == row["terminal_attempt_id"] for row in rows))
+        self.assertTrue(all(row["command"].startswith("codex-worker ") for row in rows))
+        self.assertTrue(all(set(row["output"]) == {"jsonrpc", "id", "result"}
+                            for row in rows))
+        self.assertFalse(EVIDENCE.SECRET_PATTERN.search(json.dumps(rows, sort_keys=True)))
 
 
-if __name__ == "__main__":
-    unittest.main()
+if __name__ == "__main__": unittest.main()

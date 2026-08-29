@@ -34,7 +34,7 @@
 
 **Test lanes:** fast (the gate): `python3 -W error::ResourceWarning -m unittest discover -s tests/codex-worker -p 'test_*.py'` plus focused repository shell/package tests touched by the commit · slow-by-area (separate killable commands): the six exact `live_broker_check.py --scenario` names in Task 5, `python3 tests/codex-worker/live_uv_tool_check.py --scenario package-independence`, `bash tests/codex-worker/live_claude_check.sh`, the common-attach real two-client Codex/TUI probe, and CLI checkride executor/evaluator · scheduled sweep: none declared. Every commit gate runs the warning-strict fast suite; slow scenarios run separately only at their owning checkpoint and finishing gate.
 
-**Engineering patterns:** `skills/engineering-patterns/python-patterns.md` (BINDING by stack detection), with the bounded D18 strict-dataclass exception, plus `skills/engineering-patterns/process-discipline.md` (ALWAYS). Implementers read the cited sections before coding and report every knowing departure.
+**Engineering patterns:** `skills/engineering-patterns/python-patterns.md` (BINDING by stack detection), with the bounded D18 strict-dataclass exception, plus `skills/engineering-patterns/process-discipline.md` (ALWAYS). Implementers read the cited sections before coding and report every knowing departure. D18 also preserves the explicitly planned raw `CodexConnection.call(method, params, timeout)` wire seam and typed internal protocol exceptions; Task 4 owns closed public fault conversion.
 
 ## The Through-Line
 

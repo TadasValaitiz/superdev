@@ -142,7 +142,7 @@ class ClaudeTransportTests(unittest.TestCase):
                                "2026-08-20T00:00:00Z")
 
     def _event(self, message="hello", event_id="event-fixture-1"):
-        worker = WorkerView("default", "builder", str(uuid.uuid4()), "thread-1",
+        worker = WorkerView("builder", str(uuid.uuid4()), "thread-1",
                             str(self.root), Tier.MEDIUM, "gpt-5.6-terra", "medium",
                             AccessMode.FULL)
         return CallbackEvent("codex-worker.claude-callback/v1", "worker_message",

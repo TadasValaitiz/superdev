@@ -115,6 +115,20 @@ class CallbackArtifact:
 
 
 @dataclass(frozen=True)
+class CallbackStoreSnapshot:
+    bindings: List[CallbackBinding]
+    outbox: List[CallbackOutboxEntry]
+
+    def __post_init__(self) -> None:
+        if (not all(isinstance(value, CallbackBinding) for value in self.bindings)
+                or not all(isinstance(value, CallbackOutboxEntry) for value in self.outbox)):
+            raise ValueError("invalid callback store snapshot")
+        if (len({value.session_id for value in self.bindings}) != len(self.bindings)
+                or len({value.event_id for value in self.outbox}) != len(self.outbox)):
+            raise ValueError("duplicate callback snapshot key")
+
+
+@dataclass(frozen=True)
 class CallbackStoreDeps:
     lstat: Callable[[Path], os.stat_result] = os.lstat
     getuid: Callable[[], int] = os.getuid
@@ -130,6 +144,34 @@ class CallbackStore:
         self.artifact_dir = Path(artifact_dir)
         self.deps = deps or CallbackStoreDeps()
         self._lock = threading.RLock()
+
+    @classmethod
+    def read_existing(cls, path: Path, artifact_dir: Path,
+                      deps: Optional[CallbackStoreDeps] = None) -> CallbackStoreSnapshot:
+        """Validate a legacy store without creating, hardening, or rewriting it."""
+        store = cls(path, artifact_dir, deps)
+        store._owner_regular(store.path, 0o600)
+        raw = store.path.read_bytes()
+        if not raw:
+            raise ValueError("existing callback state must not be empty")
+        return store._snapshot_from_state(store._decode(raw))
+
+    def snapshot(self) -> CallbackStoreSnapshot:
+        with self._lock:
+            return self._snapshot_from_state(self._load())
+
+    def replace_snapshot(self, snapshot: CallbackStoreSnapshot) -> None:
+        if not isinstance(snapshot, CallbackStoreSnapshot):
+            raise ValueError("snapshot must be a CallbackStoreSnapshot")
+        state = self._empty()
+        for binding in sorted(snapshot.bindings, key=lambda value: value.session_id):
+            state["bindings"][binding.session_id] = self._binding_dict(binding)
+        for entry in sorted(snapshot.outbox, key=lambda value: value.event_id):
+            if entry.session_id not in state["bindings"]:
+                raise ValueError("callback outbox session has no binding")
+            state["outbox"][entry.event_id] = self._entry_dict(entry)
+        with self._lock:
+            self._write(state)
 
     def bind(self, binding: CallbackBinding) -> CallbackBinding:
         with self._lock:
@@ -233,7 +275,7 @@ class CallbackStore:
                              allow_nan=False).encode("utf-8") + b"\n"
         digest = hashlib.sha256(payload).hexdigest(); target = self.artifact_dir / (event_id + ".json")
         with self._lock:
-            self._ensure_layout()
+            self._mkdir(self.artifact_dir)
             if target.exists() or target.is_symlink():
                 self._verify_artifact(target, digest, len(payload))
                 return CallbackArtifact(event_id, str(target), digest, len(payload))
@@ -261,6 +303,9 @@ class CallbackStore:
         except OSError as exc: raise UnsafeCallbackStoreError("callback store is unreadable") from exc
         if not raw:
             state = self._empty(); self._write(state); return state
+        return self._decode(raw)
+
+    def _decode(self, raw: bytes) -> Dict[str, Any]:
         try: state = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc: raise ValueError("malformed callback state") from exc
         if not isinstance(state, dict) or set(state) != {"version", "bindings", "outbox"} or state["version"] != 1 or not isinstance(state["bindings"], dict) or not isinstance(state["outbox"], dict):
@@ -275,6 +320,13 @@ class CallbackStore:
             if entry.event_id != event_id:
                 raise ValueError("callback outbox key does not match its record")
         return state
+
+    def _snapshot_from_state(self, state: Dict[str, Any]) -> CallbackStoreSnapshot:
+        bindings = [self._binding_from_dict(state["bindings"][key])
+                    for key in sorted(state["bindings"])]
+        outbox = [self._entry_from_dict(state["outbox"][key])
+                  for key in sorted(state["outbox"])]
+        return CallbackStoreSnapshot(bindings, outbox)  # type: ignore[arg-type]
 
     @staticmethod
     def _empty() -> Dict[str, Any]: return {"version": 1, "bindings": {}, "outbox": {}}
@@ -307,7 +359,9 @@ class CallbackStore:
             raise UnsafeCallbackStoreError("unsafe callback directory: %s" % path)
 
     def _write(self, state: Dict[str, Any]) -> None:
-        self._ensure_layout()
+        self._mkdir(self.path.parent); self._mkdir(self.artifact_dir)
+        if self.path.exists() or self.path.is_symlink():
+            self._owner_regular(self.path, 0o600)
         fd, temporary = tempfile.mkstemp(prefix="callbacks.", dir=str(self.path.parent))
         try:
             os.fchmod(fd, 0o600)

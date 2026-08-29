@@ -134,7 +134,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   - A: keep stop, refuse active work, and reserve force for supervised maintenance — gains recoverability with explicit blast-radius control / sacrifices a completely frictionless shutdown.
   - B: remove stop from the CLI — gains maximal accidental-shutdown resistance / sacrifices supported maintenance and port recovery.
   - C: retain unconditional stop — gains simplicity / sacrifices shared-service safety.
-- **Decided:** A. `daemon stop` is machine-wide maintenance and refuses while any turn is active. `daemon stop --force` is a highly visible exceptional operation that reports affected workers. The skill marks both as dangerous and forbids agent use without explicit human supervision and agreement; neither appears in normal completion/cleanup recipes.
+- **Decided:** A. `daemon stop` is machine-wide maintenance and refuses while any turn is active. `daemon stop --force` is a highly visible exceptional operation that reports affected workers when inventory is measurable, or the explicit unavailable impact required by D30 when the owned runtime is degraded. The skill marks both as dangerous and forbids agent use without explicit human supervision and agreement; neither appears in normal completion/cleanup recipes.
 - **Not permission inferred from task completion:** finishing a worker, Claude session, plan, or orchestrator milestone grants no authority to stop the service.
 - **Extension law:** every future service-wide destructive/disruptive command carries the same active-work preflight, impact projection, and supervised-human requirement.
 - **Anti-patterns:** no automatic stop in `finally`; no stop suggested as routine recovery; no `--force` hidden in next actions; no treating absence of locally visible work as proof the global service is idle.
@@ -439,6 +439,11 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
   exhaustive serialization and extra-field rejection. New domain models follow that same seam.
   New effects live behind typed dependency records/protocols; CLI remains wiring only. Moves
   retain compatibility re-exports where tests or internal consumers still import old homes.
+- **C1 clarification (2026-08-28):** the generated Codex JSON-RPC connection and gateway are
+  protocol adapters, so their approved `call(method, params, timeout)` seam retains exact open
+  wire objects and typed internal transport/call exceptions. D18's strict frozen-model rule
+  governs worker domain and public command seams; Task 4 converts internal service/protocol
+  failures into the closed public RPC/CLI fault model.
 - **Shape at selection:** `service_domain.py` owns L0 value objects; `migration.py` owns durable
   legacy discovery/import; `websocket_transport.py` owns the initialized broker connection;
   `websocket_gateway.py` owns one-to-one forwarding and drain classification; `service.py` owns
@@ -508,3 +513,173 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** `ServicePaths`, legacy compatibility models, migration planner/commit order, callback
   store import API, artifact evidence and AH7/AH9.
 - **Revisit-when:** callbacks move into one transactional database with registry/migration state.
+
+## D21 — Separate internal startup readiness from authoritative public status
+**When:** 2026-08-29T00:00:00Z · **Phase:** build · **Status:** provisional (Task 4 interface erratum)
+**Decided by:** operator after Task 5 isolated live startup exposed cold-inventory coupling
+
+- **Trigger:** the managed child bound both its private RPC socket and public listener in about
+  200 ms, but the parent terminated it at the two-second startup deadline. Its readiness poll used
+  public `service/status`, whose authoritative projection synchronously enumerates upstream Codex
+  threads; a cold or blocked inventory made a healthy service look unready.
+- **Options weighed:** lengthen startup timeouts, weaken public status, or add one private liveness
+  handshake. Longer waits retain the incorrect dependency, while weakening status loses the
+  operator's authoritative inventory view.
+- **Decided:** add private JSON-RPC `service/readiness`, absent from CLI parsing and help. It reports
+  only exact readiness, service version, daemon/app-server PIDs, configured listener, and the
+  pre-readiness migration invariant. The managed startup/reuse loop validates the closed response,
+  listener, and exact version without enumerating threads. Malformed and wrong-version responses
+  terminate only the just-spawned generation and return typed refusals.
+- **Public contract:** `service/status` remains authoritative and may be slower because it retains
+  inventory and migration projection. Explicit `daemon start` still returns that public shape after
+  the private readiness gate; common worker commands use only the private gate.
+- **Rests on:** D4/D10/D14/D17; Task 5 live evidence; strict dataclass seam exception D18.
+- **Affects:** Task 4 manager/facade/RPC interface, startup regression tests, live common commands.
+- **Revisit-when:** Codex exposes a constant-time authoritative thread inventory or an atomic native
+  service readiness primitive.
+
+## D22 — Own and verify the complete Codex process group
+**When:** 2026-08-29T00:04:00Z · **Phase:** build · **Status:** provisional (Task 4 lifecycle erratum)
+**Decided by:** operator after Task 5 lifecycle evidence exposed a reparented native child
+
+- **Trigger:** supervised restart terminated the spawned Node `codex` wrapper but left its native
+  app-server child reparented to PID 1. The replacement could become ready while an owned child and
+  private listener from the prior generation remained alive.
+- **Decided:** spawn Codex with a new session, pin the verified PGID equal to its positive leader PID,
+  and reject group 0, the daemon's current group, or any changed leader→group mapping. Maintenance
+  sends TERM, then KILL when necessary, only to that pinned group; it reaps the wrapper and verifies
+  the group is absent before termination returns and replacement readiness is possible.
+- **Safety law:** no unpinned, reused, current, or zero PGID is signalled. A post-spawn identity
+  mismatch fails closed. Direct wrapper termination is limited to the pre-pin failure path.
+- **Evidence:** deterministic descendant/reparent, group-zero/current, and reuse controls plus the
+  isolated lifecycle lane's active refusal, supervised force, and no-descendant/no-listener check.
+- **Affects:** Task 4 service ownership seam and Task 5 finally-safe cleanup.
+- **Revisit-when:** Codex exposes a single native process whose lifecycle provably includes every
+  descendant, or the launcher supplies an equivalent verified process-tree handle.
+
+## D23 — Accept additive fields in the native rate-limit envelope
+**When:** 2026-08-29T00:24:00Z · **Phase:** build · **Status:** provisional (measured compatibility erratum)
+**Decided by:** implementer after the required real-Claude caller exercised Codex 0.150.1
+
+- **Trigger:** the live `limits` command reached Codex 0.150.1 successfully, but the adapter
+  rejected the response because it required the top-level envelope to contain only
+  `rateLimits`. The measured response also contained `rateLimitsByLimitId` and
+  `rateLimitResetCredits`, while `rateLimits` remained a JSON object with the expected data.
+- **Decided:** require a present object-valued `rateLimits` field and ignore additive top-level
+  fields. Missing or non-object `rateLimits` remains a typed protocol error; no limit value is
+  inferred, merged, or relabelled.
+- **Evidence:** a deterministic additive-field positive control plus malformed-envelope negative
+  control, followed by the real Claude PATH-only `limits` success on Codex 0.150.1.
+- **Affects:** the inherited limits family and Task 5 real-Claude acceptance evidence only.
+- **Revisit-when:** Codex removes or retypes `rateLimits`, or the product decides to expose the
+  additional limit-ID/reset-credit families publicly.
+
+## D24 — Restore the governing four-way CLI exit contract
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the independent evaluator found the companion surface contradicted the binding Python canon
+
+- **Trigger:** handled operational states such as `timeout_active`, `service_busy`, and
+  `address_in_use` exited 1, which the governing canon reserves for an internal bug.
+- **Decided:** 0 is success, 1 is an uncaught or peer-reported internal bug, 2 is local usage, and 3 is every
+  typed operational refusal returned by the local façade, RPC peer, managed supervisor, or
+  endpoint safety boundary. One structured JSON object remains the refusal output.
+- **Not exit 2:** a syntactically valid request refused by current runtime state is operational,
+  even when the upstream JSON-RPC code resembles invalid params.
+- **Affects:** CLI surface, exhaustive error mapping, subprocess/checkride expectations.
+- **Revisit-when:** never without changing the governing Python operator-experience law first.
+
+## D25 — Raw managed commands depend on strict readiness, not global inventory
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after an unrelated ambiguous active thread blocked an exact session resume
+
+- **Trigger:** `_managed_raw_endpoint` used full public status, so all-thread inventory failure
+  prevented dispatch of an independently selected durable session/thread operation.
+- **Decided:** managed raw session/turn/model commands use the hidden strict
+  `service/readiness` RPC already introduced by D21. It validates exact ready state, version,
+  listener, and process identity without inventory. The selected RPC remains responsible for
+  its own session/thread validity.
+- **Partial-failure law:** once a selected session/thread is known, any typed failure retains
+  those IDs and a literal attach/resume route; unrelated inventory never replaces them with null.
+- **Affects:** managed raw endpoint selection, ambiguity regression, raw reride rows.
+- **Revisit-when:** public status becomes constant-time and provably independent of inventory.
+
+## D26 — Emit only literal, parser-valid recovery actions
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the evaluator found placeholders, prose prefixes, and a hidden serve command
+
+- **Decided:** every command-valued remedy is shell-safe, contains no angle-bracket placeholder,
+  resolves to a real executable/public parser path, and parses without network contact. A stopped
+  managed service points to `codex-worker daemon start`. A stopped known worker points to exact
+  status and attach/resume commands rather than inventing continuation text. Busy maintenance
+  substitutes every known exact worker name. Address collision provides a deterministic explicit
+  alternate-listener start command but never executes fallback automatically.
+- **Not force:** no ordinary refusal action suggests or invokes automated `--force`.
+- **Affects:** façade faults, raw RPC recoveries, service manager refusals, exhaustive action guard.
+- **Revisit-when:** the CLI gains a typed interactive prompt mechanism that can safely collect a
+  missing value without encoding a fake shell command.
+
+## D27 — Put limits and reconstructable count provenance on the public surface
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after dangerous help and naked derived counts failed the governing surface law
+
+- **Decided:** every public leaf `--help` includes a `Limits:` block. Stop/restart explicitly
+  describe machine-wide scope, active refusal, and force impact. `daemon status` wraps worker and
+  active-turn counts with value/source/availability/basis; the worker basis lists exact active and
+  idle names, and active basis lists exact origin/worker/session/thread/turn/flags rows.
+- **Stopped-state law:** durable worker names are reconstructable from registry state; active
+  inventory is explicitly available and empty rather than inferred from absence.
+- **Affects:** parser help, status models/projections, live help/status reride rows.
+- **Revisit-when:** a separate inventory detail command replaces the embedded basis without
+  reducing exact reconstruction.
+
+## D28 — Count attempts and track literal sanitized ride evidence
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** operator after the first executor record mixed completed commands, an unmatched attempt, and placeholder cleanup corrections
+
+- **Decided:** attempt count includes every `command_start`; completion distribution includes only
+  terminal command records and separately reports unmatched attempts as NOT RUN. Claims such as
+  `codex_failure` are derived from literal records. Cleanup corrections retain literal sanitized
+  argv/assertion/output/exit/timing/substrate sufficient for reconstruction. The tracked real-Claude
+  record contains sanitized literal command/output/exit rows for all 26 commands, not only a hash
+  pointer to ignored raw text.
+- **Affects:** recorder/harness contracts, real-Claude tracked evidence, affected-row reride.
+- **Revisit-when:** the evidence format moves to a content-addressed artifact store that remains
+  available from a fresh checkout.
+
+## D29 — Preserve unavailable historical cleanup fields and require the reride to measure them
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** implementation erratum under D28's no-invention rule
+
+- **Decided:** a historical cleanup row may label timing unavailable when the original measured
+  harness did not retain it; it may not synthesize a duration. Such a row does not satisfy the
+  final D28 gate. The same-executor reride must replace it with measured timing, substrate,
+  stderr, environment-name allowlist, and literal pre-stop owner/path/PID assertions.
+- **Future harness:** verifies owner markers and exact live PIDs before stop, removes its pinned
+  isolated credential copy independently, and emits every D28 field for commands and assertions.
+- **Affects:** historical real-Claude cleanup erratum and affected cleanup reride rows.
+- **Revisit-when:** the required reride has produced a fully measured tracked cleanup record.
+
+## D30 — Forced maintenance must not depend on responsive upstream inventory
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** implementation erratum after an owned SIGSTOP child blocked supervised force
+
+- **Trigger:** both the managed force-stop preflight and the drained maintenance coordinator
+  synchronously enumerated Codex threads. A stopped or degraded owned child therefore prevented
+  the explicit recovery operation that was supposed to terminate it.
+- **Decided:** `daemon stop --force` and `daemon restart --force` use strict internal readiness
+  for their managed preflight. Under the shared maintenance drain, a responsive healthy runtime
+  gets one authoritative inventory bounded end-to-end across send-lock acquisition, transport,
+  retries, pagination, and active-thread reads, and reports every affected thread, including
+  `unmapped_tui`. Measurement is permitted only when the drained gate has zero already-forwarded
+  mutations; otherwise their unsettled registry/upstream identity race makes impact unavailable.
+  If bounded inventory fails or times out, force may continue against only the
+  pinned, identity-verified lifecycle. The forced drain excludes new mutations but may proceed past
+  an already-forwarded request that cannot settle; owned teardown closes that request.
+- **Honesty law:** when degraded force cannot measure upstream impact, both `inventory` and `workers` report
+  `availability: unavailable` with reason `upstream_inventory_unavailable`; they contain no
+  invented rows, names, IDs, or counts. Non-force still attempts authoritative inventory and
+  refuses without teardown if it is unavailable. Any incomplete owned teardown remains a typed,
+  actionable `daemon_stop_failed`.
+- **Affects:** D8 force-impact wording, managed stop preflight, maintenance gate/coordinator,
+  strict maintenance result, public SIGSTOP acceptance row.
+- **Revisit-when:** upstream inventory has a bounded, independently responsive snapshot API.

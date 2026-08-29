@@ -7,7 +7,7 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -15,9 +15,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instance_paths,
-                                   load_managed_identity, resolve_instance)
+                                   derive_service_paths, load_managed_identity,
+                                   resolve_instance, ServiceDeps, ServiceManager)
+from codex_worker.service_domain import DEFAULT_PUBLIC_LISTENER
 import codex_worker.instance as instance_module
 from codex_worker.rpc import rpc_call as production_rpc_call
+from codex_worker.models import RpcFault
+from codex_worker.commands import FacadeFaultCode
 
 
 @dataclass
@@ -58,6 +62,7 @@ class LifecycleTests(unittest.TestCase):
         self.manager = InstanceManager(InstanceDeps(self.paths, "/launcher", "codex", spawn,
                                                        rpc_call, lambda: 0.0), self.identity)
 
+
     def _leave_stale_socket(self):
         self.paths.socket_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         endpoint = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -78,13 +83,12 @@ class LifecycleTests(unittest.TestCase):
             "durable_state": "preserved",
         })
         self.assertEqual(fault.known_ids, {
-            "instance": self.identity.value, "name": None, "session_id": None,
+            "name": None, "session_id": None,
             "thread_id": None, "turn_id": None,
         })
-        self.assertEqual(len(fault.next_actions), 3)
-        self.assertIn("daemon status", fault.next_actions[0]["command"])
-        self.assertIn(str(path), fault.next_actions[1]["command"])
-        self.assertIn(str(self.paths.log_path), fault.next_actions[2]["command"])
+        self.assertEqual(len(fault.next_actions), 2)
+        self.assertIn(str(path), fault.next_actions[0]["command"])
+        self.assertIn(str(self.paths.log_path), fault.next_actions[1]["command"])
 
     def test_concurrent_start_spawns_once_and_writes_verified_metadata(self):
         results = []
@@ -242,7 +246,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, instance_module.FacadeFaultCode.DAEMON_START_FAILED)
         self.assertEqual(caught.exception.details["offending_path"], str(self.paths.lock_path))
         self.assertEqual(caught.exception.details["log_path"], str(self.paths.log_path))
-        self.assertEqual(caught.exception.known_ids["instance"], self.identity.value)
+        self.assertNotIn("instance", caught.exception.known_ids)
         self.assertTrue(caught.exception.next_actions)
         self.assertTrue(self.paths.lock_path.is_symlink())
 
@@ -278,7 +282,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["reason"], "socket_changed")
         self.assertTrue(self.paths.socket_path.exists())
 
-    def test_stop_timeout_recovery_commands_keep_selected_instance(self):
+    def test_stop_timeout_recovery_commands_inspect_exact_owned_process(self):
         self._leave_stale_socket()
 
         def rpc(socket_path, method, params, timeout):
@@ -297,11 +301,11 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaises(instance_module.FacadeFault) as caught:
                 manager.stop()
         self.assertEqual(caught.exception.kind, "daemon_stop_failed")
-        self.assertEqual(caught.exception.known_ids["instance"], "session-alpha")
+        self.assertNotIn("instance", caught.exception.known_ids)
         self.assertEqual(
             [action["command"] for action in caught.exception.next_actions],
-            ["codex-worker --instance session-alpha daemon status",
-             "codex-worker --instance session-alpha daemon stop"],
+            ["/bin/ps -p 11",
+             "/usr/bin/tail -n 100 %s" % self.paths.log_path],
         )
 
     def test_stale_pid_metadata_does_not_block_safe_socket_repair(self):
@@ -546,6 +550,456 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(shutdowns, [])
         self.assertTrue(self.paths.socket_path.exists())
 
+class GlobalServiceManagerTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory(); self.addCleanup(self.tempdir.cleanup)
+        root = Path(self.tempdir.name)
+        self.paths = derive_service_paths("darwin", root / "state", root / "tmp", os.getuid())
+        self.ready = None; self.calls = []; self.spawns = []; self.maintenance = None
+
+        def rpc(socket_path, method, params, timeout):
+            self.calls.append((socket_path, method, params))
+            if method == "service/readiness":
+                if self.ready is None: raise OSError("stopped")
+                return {"jsonrpc": "2.0", "id": "cli", "result":
+                        self.readiness_payload(self.ready["listener"],
+                                               self.ready["service_version"])}
+            if method == "service/status":
+                if self.ready is None: raise OSError("stopped")
+                return {"jsonrpc": "2.0", "id": "cli", "result": dict(self.ready)}
+            if method in ("service/stop", "service/restart"):
+                self.ready = None
+                if self.maintenance is not None:
+                    return {"jsonrpc": "2.0", "id": "cli",
+                            "result": dict(self.maintenance)}
+                return {"jsonrpc": "2.0", "id": "cli", "result": {
+                    "action": method.split("/")[1], "status": "completed",
+                    "forced": params["force"], "listener": params.get("listener"),
+                    "inventory": {"items": []},
+                    "workers": {"active_names": [], "idle_names": [],
+                                "active_count": 0, "idle_count": 0, "total_count": 0},
+                    "durable_state": "preserved"}}
+            raise AssertionError(method)
+
+        def spawn(argv, log_path):
+            self.spawns.append((list(argv), log_path))
+            listener = argv[argv.index("--app-server-listen") + 1]
+            self.ready = self.status_payload(listener, "8.1.0")
+            return Process()
+
+        self.manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc, lambda: 0.0,
+            wait=lambda _: None, which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: True, pid_alive=lambda _: False))
+
+    def status_payload(self, listener=DEFAULT_PUBLIC_LISTENER, version="8.1.0"):
+        return {"status": "ready", "service_version": version, "pid": 1234,
+                "app_server_pid": 5678, "listener": listener, "exposure": "loopback",
+                "auth": "none", "attach_command": "codex --remote %s" % listener,
+                "worker_count": {"value": 0, "source": "codex-worker registry",
+                                 "availability": "derived", "basis": {
+                                     "active_names": [], "idle_names": [],
+                                     "active_count": 0, "idle_count": 0, "total_count": 0}},
+                "active_turn_count": {"value": 0, "source": "codex app-server inventory",
+                                      "availability": "derived", "basis": {"items": []}},
+                "migration": {"status": "complete", "ready": True, "imported_count": 0,
+                              "deduplicated_count": 0, "conflict_count": 0,
+                              "sources": [], "conflicts": []}, "durable_state": "preserved"}
+
+    def readiness_payload(self, listener=DEFAULT_PUBLIC_LISTENER, version="8.1.0"):
+        return {"status": "ready", "service_version": version, "pid": 1234,
+                "app_server_pid": 5678, "listener": listener,
+                "migration_ready": True}
+
+    def test_cold_blocked_inventory_cannot_prevent_managed_startup(self):
+        running = {"value": False}
+        process = Process(running=True)
+        terminated = []
+
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method == "service/readiness":
+                if not running["value"]:
+                    raise OSError("stopped")
+                return {"jsonrpc": "2.0", "id": "cli",
+                        "result": self.readiness_payload()}
+            if method == "service/status":
+                raise AssertionError("cold inventory must not run in startup readiness")
+            raise AssertionError(method)
+
+        def spawn(unused_argv, unused_log):
+            running["value"] = True
+            return process
+
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc, lambda: 0.0,
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        ready = manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual((ready.status, ready.service_version, ready.listener),
+                         ("ready", "8.1.0", DEFAULT_PUBLIC_LISTENER))
+        self.assertEqual(terminated, [])
+
+    def test_malformed_hidden_readiness_is_refused_and_spawn_is_terminated(self):
+        running = {"value": False}
+        clock = {"value": 0.0}
+        process = Process(running=True); terminated = []
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method != "service/readiness" or not running["value"]:
+                raise OSError("stopped")
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": {"status": "ready", "service_version": "8.1.0"}}
+        def spawn(unused_argv, unused_log):
+            running["value"] = True; return process
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc,
+            lambda: clock.__setitem__("value", clock["value"] + 0.1) or clock["value"],
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.CODEX_PROTOCOL_ERROR)
+        self.assertEqual(terminated, [process])
+
+    def test_wrong_version_hidden_readiness_is_refused_and_spawn_is_terminated(self):
+        running = {"value": False}
+        clock = {"value": 0.0}
+        process = Process(running=True); terminated = []
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            if method != "service/readiness" or not running["value"]:
+                raise OSError("stopped")
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": self.readiness_payload(version="8.0.0")}
+        def spawn(unused_argv, unused_log):
+            running["value"] = True; return process
+        manager = ServiceManager(ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, rpc,
+            lambda: clock.__setitem__("value", clock["value"] + 0.1) or clock["value"],
+            wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            terminate_spawn=lambda value: terminated.append(value)))
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.TOOL_VERSION_MISMATCH)
+        self.assertEqual(terminated, [process])
+
+    def test_five_concurrent_clients_create_one_fixed_listener_generation(self):
+        results = []
+        threads = [threading.Thread(target=lambda: results.append(
+            self.manager.ensure_running(DEFAULT_PUBLIC_LISTENER))) for _ in range(5)]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join()
+        self.assertEqual(len(self.spawns), 1)
+        self.assertEqual({result.listener for result in results}, {DEFAULT_PUBLIC_LISTENER})
+        self.assertEqual(json.loads(self.paths.config_path.read_text())["listener"],
+                         DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(self.spawns[0][0], [
+            "/launcher", "--socket", str(self.paths.rpc_socket), "daemon", "serve",
+            "--state", str(self.paths.registry_path), "--codex-bin", "codex",
+            "--app-server-listen", DEFAULT_PUBLIC_LISTENER,
+            "--generation", json.loads(self.paths.config_path.read_text())["generation_id"],
+            "--startup-receipt", str(
+                self.paths.rpc_socket.parent / ("start-%s.json" %
+                json.loads(self.paths.config_path.read_text())["generation_id"]))])
+
+    def test_status_never_creates_or_starts_and_listener_conflict_is_typed(self):
+        self.assertEqual(self.manager.status().status, "stopped")
+        self.assertEqual(self.spawns, []); self.assertFalse(self.paths.config_path.exists())
+        self.manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            self.manager.ensure_running("ws://localhost:4600")
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.SERVICE_CONFIG_CONFLICT)
+        self.assertEqual(len(self.spawns), 1)
+
+    def test_public_status_allows_authoritative_inventory_latency(self):
+        observed = []
+        def rpc(unused_socket, method, unused_params, timeout):
+            observed.append((method, timeout))
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "result": self.status_payload()}
+        manager = ServiceManager(replace(self.manager.deps, rpc_call=rpc))
+        self.assertEqual(manager.status().status, "ready")
+        self.assertEqual(observed, [("service/status", 30.0)])
+
+    def test_force_stop_preflight_uses_hidden_readiness_not_inventory_status(self):
+        self.ready = self.status_payload()
+
+        result = self.manager.stop(force=True)
+
+        methods = [call[1] for call in self.calls]
+        self.assertEqual(methods[:2], ["service/readiness", "service/stop"])
+        self.assertNotIn("service/status", methods)
+        self.assertEqual((result["status"], result["forced"]),
+                         ("completed", True))
+
+    def test_force_stop_continues_past_typed_degraded_readiness(self):
+        self.ready = self.status_payload()
+        degraded = instance_module.FacadeFault(
+            FacadeFaultCode.CODEX_FAILURE,
+            "Global service components are degraded", "codex_failure",
+            details={"reason": "service_degraded"})
+
+        with mock.patch.object(
+                self.manager, "_probe_readiness", side_effect=[degraded, None]):
+            result = self.manager.stop(force=True)
+
+        self.assertIn("service/stop", [call[1] for call in self.calls])
+        self.assertEqual((result["status"], result["forced"]),
+                         ("completed", True))
+
+    def test_force_restart_uses_readiness_and_degraded_basis_before_replacement(self):
+        self.ready = self.status_payload()
+        result = self.manager.restart(force=True)
+        methods = [call[1] for call in self.calls]
+        self.assertEqual(methods[:2], ["service/readiness", "service/restart"])
+        self.assertGreater(methods.index("service/status"),
+                           methods.index("service/restart"))
+        self.assertEqual(result["maintenance"]["status"], "completed")
+
+        self.calls = []
+        self.ready = self.status_payload()
+        with mock.patch.object(
+                self.manager, "_force_maintenance_basis",
+                return_value=instance_module._StopBasis(None, None)):
+            degraded = self.manager.restart(force=True)
+        self.assertIn("service/restart", [call[1] for call in self.calls])
+        self.assertEqual(degraded["maintenance"]["status"], "completed")
+
+    def test_shutdown_poll_treats_typed_stopping_readiness_as_not_ready(self):
+        before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
+        observations = iter([True, False])
+        self.paths.rpc_socket.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.rpc_socket.touch()
+
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            self.assertEqual(method, "service/readiness")
+            if next(observations):
+                from codex_worker.commands import FacadeFault
+                self.paths.rpc_socket.unlink()
+                return {"jsonrpc": "2.0", "id": "cli", "error": FacadeFault(
+                    FacadeFaultCode.DAEMON_STOPPED,
+                    "Global service is stopping", "daemon_stopped").to_dict()}
+            raise OSError("stopped")
+
+        manager = ServiceManager(replace(
+            self.manager.deps, rpc_call=rpc, pid_alive=lambda unused_pid: False))
+        manager._await_stopped(before)
+
+    def test_shutdown_timeout_reports_exact_residual_basis_and_safe_retry_actions(self):
+        from codex_worker import cli as worker_cli
+
+        before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
+        self.paths.rpc_socket.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.rpc_socket.touch()
+        ticks = iter((0.0, 3.0))
+        manager = ServiceManager(replace(
+            self.manager.deps,
+            rpc_call=lambda *unused: (_ for _ in ()).throw(OSError("stopping")),
+            monotonic=lambda: next(ticks), wait=lambda unused: None,
+            pid_alive=lambda pid: pid == 1234))
+
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            manager._await_stopped(before)
+
+        self.assertEqual(caught.exception.details, {
+            "reason": "stop_timeout", "durable_state": "preserved",
+            "rpc_endpoint_present": True, "live_pids": [1234],
+        })
+        self.assertEqual([action["command"] for action in caught.exception.next_actions], [
+            "codex-worker daemon status", "codex-worker daemon stop",
+        ])
+        worker_cli._validate_wire_recovery_actions({
+            "error": {"data": caught.exception.to_dict()}})
+
+    def test_stopped_status_corrupt_durable_files_fail_as_closed_operational_faults(self):
+        self.paths.durable_dir.mkdir(parents=True, mode=0o700)
+        self.paths.registry_path.write_text("{secret-invalid", encoding="utf-8")
+        os.chmod(self.paths.registry_path, 0o600)
+        with self.assertRaises(instance_module.FacadeFault) as registry:
+            self.manager.status()
+        self.assertEqual(registry.exception.code,
+                         instance_module.FacadeFaultCode.REGISTRY_ERROR)
+        self.assertNotIn("secret-invalid", json.dumps(registry.exception.to_dict()))
+        self.paths.registry_path.unlink()
+        self.paths.migration_path.write_text("{secret-invalid", encoding="utf-8")
+        os.chmod(self.paths.migration_path, 0o600)
+        with self.assertRaises(instance_module.FacadeFault) as migration:
+            self.manager.status()
+        self.assertEqual(migration.exception.code,
+                         instance_module.FacadeFaultCode.CODEX_PROTOCOL_ERROR)
+        self.assertNotIn("secret-invalid", json.dumps(migration.exception.to_dict()))
+
+    def test_address_collision_is_typed_before_spawn_without_force_recovery(self):
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex", self.manager.deps.spawn,
+            self.manager.deps.rpc_call, lambda: 0.0, wait=lambda _: None,
+            which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: False)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            ServiceManager(deps).ensure_running("ws://127.0.0.1:4777")
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.ADDRESS_IN_USE)
+        self.assertEqual(caught.exception.details["listener"],
+                         "ws://127.0.0.1:4777")
+        self.assertEqual(caught.exception.next_actions, [{
+            "command": ("codex-worker daemon start --app-server-listen "
+                        "ws://127.0.0.1:4778"),
+            "reason": "Retry explicitly on the deterministic alternate listener",
+        }])
+        self.assertNotIn("--force", json.dumps(caught.exception.to_dict()))
+        self.assertEqual(self.spawns, [])
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_multi_address_listener_probe_closes_every_socket_on_late_collision(self):
+        class Probe:
+            def __init__(self, collision):
+                self.collision = collision
+                self.closed = False
+
+            def bind(self, address):
+                del address
+                if self.collision:
+                    raise OSError(instance_module.errno.EADDRINUSE, "occupied")
+
+            def close(self):
+                self.closed = True
+
+        probes = [Probe(False), Probe(True)]
+        rows = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 4777)),
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", 4777)),
+        ]
+        with mock.patch.object(instance_module.socket, "getaddrinfo",
+                               return_value=rows), mock.patch.object(
+                                   instance_module.socket, "socket",
+                                   side_effect=probes):
+            self.assertFalse(instance_module._listener_available(
+                "ws://localhost:4777"))
+
+        self.assertEqual([probe.closed for probe in probes], [True, True])
+
+    def test_listener_resolution_failure_is_typed_before_spawn_or_config(self):
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex", self.manager.deps.spawn,
+            self.manager.deps.rpc_call, lambda: 0.0, wait=lambda _: None,
+            which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: (_ for _ in ()).throw(
+                socket.gaierror("unresolvable")), pid_alive=lambda _: False)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            ServiceManager(deps).ensure_running("ws://unresolvable.example:4777")
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.DAEMON_START_FAILED)
+        self.assertEqual(caught.exception.details["reason"], "listener_probe_failed")
+        self.assertEqual(self.spawns, [])
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_child_bind_receipt_preserves_address_collision_typing_after_preflight(self):
+        def spawn(argv, unused_log):
+            receipt = Path(argv[argv.index("--startup-receipt") + 1])
+            receipt.write_text(json.dumps({
+                "kind": "address_in_use", "listener": "ws://127.0.0.1:4778"}),
+                encoding="utf-8")
+            os.chmod(receipt, 0o600)
+            return Process(running=False)
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex", spawn, self.manager.deps.rpc_call,
+            lambda: 0.0, wait=lambda _: None, which=lambda _: "/bin/codex",
+            expected_version="8.1.0", listener_available=lambda _: True,
+            pid_alive=lambda _: False)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            ServiceManager(deps).ensure_running("ws://127.0.0.1:4778")
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.ADDRESS_IN_USE)
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_failed_child_never_publishes_listener_generation(self):
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex", lambda *_: Process(running=False),
+            self.manager.deps.rpc_call, lambda: 0.0, wait=lambda _: None,
+            which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: True, pid_alive=lambda _: False)
+        with self.assertRaises(instance_module.FacadeFault):
+            ServiceManager(deps).ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_spawn_oserror_is_typed_without_publishing_or_orphaning(self):
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex",
+            lambda *_: (_ for _ in ()).throw(PermissionError("denied")),
+            self.manager.deps.rpc_call, lambda: 0.0, wait=lambda _: None,
+            which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: True, pid_alive=lambda _: False)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            ServiceManager(deps).ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.DAEMON_START_FAILED)
+        self.assertEqual(caught.exception.details["reason"], "spawn_failed")
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_readiness_timeout_terminates_exact_spawned_generation(self):
+        process = Process(running=True)
+        terminated = []
+        ticks = iter((0.0, 3.0))
+        deps = ServiceDeps(
+            self.paths, "/launcher", "codex", lambda *_: process,
+            self.manager.deps.rpc_call, lambda: next(ticks), wait=lambda _: None,
+            which=lambda _: "/bin/codex", expected_version="8.1.0",
+            listener_available=lambda _: True, pid_alive=lambda _: False,
+            terminate_spawn=lambda value: (terminated.append(value),
+                                             setattr(value, "running", False)))
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            ServiceManager(deps).ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(caught.exception.details["reason"], "readiness_timeout")
+        self.assertEqual(terminated, [process])
+        self.assertFalse(self.paths.config_path.exists())
+
+    def test_malformed_maintenance_result_cannot_cross_public_projection(self):
+        self.ready = self.status_payload()
+        original = self.manager.deps.rpc_call
+        def rpc(socket_path, method, params, timeout):
+            if method == "service/stop":
+                return {"result": {"status": "completed", "secret": "TOKEN"}}
+            return original(socket_path, method, params, timeout)
+        self.manager.deps = replace(
+            self.manager.deps, rpc_call=rpc)
+        with self.assertRaises(instance_module.FacadeFault) as caught:
+            self.manager.stop(force=True)
+        self.assertEqual(caught.exception.code,
+                         instance_module.FacadeFaultCode.CODEX_PROTOCOL_ERROR)
+        self.assertNotIn("TOKEN", json.dumps(caught.exception.to_dict()))
+
+    def test_idle_version_mismatch_uses_guarded_restart_then_replaces(self):
+        self.manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.ready = self.status_payload(version="8.0.0")
+        result = self.manager.ensure_running(DEFAULT_PUBLIC_LISTENER)
+        self.assertEqual(result.service_version, "8.1.0")
+        self.assertIn("service/restart", [call[1] for call in self.calls])
+        self.assertEqual(len(self.spawns), 2)
+
+    def test_forced_restart_preserves_exact_pretermination_impact_and_new_status(self):
+        self.ready = self.status_payload()
+        self.maintenance = {
+            "action": "restart", "status": "completed", "forced": True,
+            "listener": DEFAULT_PUBLIC_LISTENER,
+            "inventory": {"items": [{
+                "thread_id": "tui-thread", "origin": "unmapped_tui",
+                "worker": None, "session_id": None, "turn_id": "tui-turn",
+                "active_flags": ["waitingOnApproval"]}]},
+            "workers": {"active_names": [], "idle_names": ["idle-a"],
+                        "active_count": 0, "idle_count": 1, "total_count": 1},
+            "durable_state": "preserved",
+        }
+        result = self.manager.restart(force=True)
+        self.assertEqual(result["maintenance"], self.maintenance)
+        self.assertEqual(result["service"]["status"], "ready")
+        self.assertEqual(result["maintenance"]["inventory"]["items"][0]["turn_id"],
+                         "tui-turn")
+
+
 class ControlledParentTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
@@ -658,6 +1112,13 @@ class InstanceResolutionTests(unittest.TestCase):
                                       self.state_home, self.temp_root, 501)
         self.assertLess(len(os.fsencode(paths.socket_path)), 100)
         self.assertNotIn("default", paths.socket_path.name)
+
+    def test_global_path_compatibility_export_ignores_all_instance_inputs(self):
+        paths = derive_service_paths("darwin", self.state_home.resolve(),
+                                     self.temp_root.resolve(), 501)
+        self.assertEqual(paths.durable_dir,
+                         self.state_home.resolve() / "superdev/codex-worker/service")
+        self.assertNotIn("instances", str(paths))
 
     def test_load_managed_identity_refuses_writable_ancestor_without_touching_metadata(self):
         identity = resolve_instance("unsafe-load-parent", {})

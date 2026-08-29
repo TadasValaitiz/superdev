@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.callback_store import (CallbackBinding, CallbackEvent, CallbackOutboxState,
-                                         CallbackStore, CallbackStoreDeps, UnsafeCallbackStoreError)
+                                         CallbackStore, CallbackStoreDeps,
+                                         CallbackStoreSnapshot, UnsafeCallbackStoreError)
 from codex_worker.commands import (AccessMode, CallbackState, CompletionResponse,
                                    CompletionSelection, MetricAvailability, MetricEvidence,
                                    RecoveryView, Tier, TurnView, WorkerView)
@@ -27,7 +28,7 @@ class CallbackStoreTests(unittest.TestCase):
         self.path = root / "callbacks.json"
         self.artifacts = root / "callback-artifacts"
         self.store = CallbackStore(self.path, self.artifacts)
-        self.worker = WorkerView("scope", "worker", "12345678-1234-5678-1234-567812345678",
+        self.worker = WorkerView("worker", "12345678-1234-5678-1234-567812345678",
                                  "thread", str(root), Tier.MEDIUM, "model", "medium", AccessMode.FULL)
 
     def binding(self, state=CallbackState.ENABLED):
@@ -62,6 +63,40 @@ class CallbackStoreTests(unittest.TestCase):
         reloaded = CallbackStore(self.path, self.artifacts)
         self.assertEqual(reloaded.binding(self.worker.session_id).state, CallbackState.ENABLED)
         self.assertEqual([entry.event_id for entry in reloaded.pending(self.worker.session_id)], ["event-1", "event-2"])
+
+    def test_read_existing_snapshot_is_lossless_and_never_hardens_source(self):
+        self.store.bind(self.binding())
+        self.store.enqueue_terminal(self.worker.session_id, self.event())
+        before = self.path.read_bytes()
+        before_stat = os.stat(self.path)
+
+        snapshot = CallbackStore.read_existing(self.path, self.artifacts)
+
+        self.assertEqual(snapshot.bindings, [self.binding()])
+        self.assertEqual(snapshot.outbox[0].event_id, "event-1")
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual((os.stat(self.path).st_mode, os.stat(self.path).st_mtime_ns),
+                         (before_stat.st_mode, before_stat.st_mtime_ns))
+        os.chmod(self.path, 0o644)
+        with self.assertRaises(UnsafeCallbackStoreError):
+            CallbackStore.read_existing(self.path, self.artifacts)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o644)
+
+    def test_replace_snapshot_publishes_one_complete_store(self):
+        binding = self.binding()
+        entry = CallbackStoreSnapshot([binding], [])
+        self.store.replace_snapshot(entry)
+        self.assertEqual(self.store.snapshot(), entry)
+
+    def test_replace_snapshot_failed_first_replace_leaves_no_empty_authority(self):
+        binding = self.binding()
+        store = CallbackStore(
+            self.path, self.artifacts,
+            CallbackStoreDeps(replace=lambda source, target: (_ for _ in ()).throw(
+                OSError("crash"))))
+        with self.assertRaisesRegex(OSError, "crash"):
+            store.replace_snapshot(CallbackStoreSnapshot([binding], []))
+        self.assertFalse(self.path.exists())
 
     def test_disabled_binding_rejects_even_a_resolver_root(self):
         with self.assertRaises(ValueError):

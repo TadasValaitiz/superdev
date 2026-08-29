@@ -1,0 +1,37 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003345.420308Z-7527-preflight-package/fixture-preflight-package",
+    "expected_pid": null,
+    "observed_pid": null,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-preflight-package/fixture-owner.json": "1ccad4108b5c2017998b950ce151060167d0bcce76c34201c6d6c3418c74d0c2",
+    "transcript.jsonl": "983613f089b4dd6fe3d5f2ce6f98e62418f0d109867eb817c4e7876d28c9b64a"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003345.420308Z-7527-preflight-package",
+  "record_count": 7,
+  "result": {
+    "codex": "codex-cli 0.150.1",
+    "package_sha256": "813572a5b200a5a703986086becd28e4ffed7f0998021b99534e0fb9d2120b63",
+    "path_command": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003345.420308Z-7527-preflight-package/fixture-preflight-package/uv-tools/codex-worker/bin/codex-worker",
+    "python": "Python 3.9.6",
+    "websockets": "15.0.1",
+    "websockets_provenance": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003345.420308Z-7527-preflight-package/fixture-preflight-package/uv-tools/codex-worker/bin/python",
+    "worker_version": "codex-worker 8.0.0"
+  },
+  "scenario": "preflight-package",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/preflight-package/transcript.jsonl"
+}

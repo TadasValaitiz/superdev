@@ -1,0 +1,56 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003354.796768Z-7796-common-attach/fixture-common-attach",
+    "expected_pid": 7815,
+    "observed_pid": 7815,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-common-attach/fixture-owner.json": "80a3c9ccddbfb1058eecb060f62c0cfbf6488369bdf915c71506fe2d90b36741",
+    "fixture-common-attach/home/Library/Application Support/chrome-devtools-mcp/telemetry_state.json": "516b4bc2cad9cca13703cf49a01005ab639eb27cfc93ba2ef6a318351fcf1cd7",
+    "fixture-common-attach/home/Library/Application Support/superdev/codex-worker/service/callbacks.json": "89f4339bb8808a5fb4aa20e5e8385ed01829f9cbfc884ded1ea8a7201d075f36",
+    "fixture-common-attach/home/Library/Application Support/superdev/codex-worker/service/daemon.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fixture-common-attach/home/Library/Application Support/superdev/codex-worker/service/migration.json": "3a5f5e3f41b37a4ec8e39a4546107f701ba9458a2b0d54a9428e67e3e4cc08f2",
+    "fixture-common-attach/home/Library/Application Support/superdev/codex-worker/service/registry.json": "efcbb5208eed63c5de8cb49d08c9eddca4d03869d264959ba85104a9a49e653a",
+    "fixture-common-attach/home/Library/Application Support/superdev/codex-worker/service/service.json": "cb45670eff23e6724a79a4c71809bef574680fc0a6ce95a2e6bc07c605498609",
+    "transcript.jsonl": "679dfc71b0b43d7824fd62393a63a78a95c0caf1e0121a7c8d145b83f56d041c"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003354.796768Z-7796-common-attach",
+  "record_count": 13,
+  "result": {
+    "attach": {
+      "attach_command": "codex --remote ws://127.0.0.1:51969",
+      "listener": "ws://127.0.0.1:51969",
+      "resume_command": "codex --remote ws://127.0.0.1:51969 resume 01a04af0-0108-7281-bf33-a4a7098aeeeb",
+      "thread_id": "01a04af0-0108-7281-bf33-a4a7098aeeeb"
+    },
+    "authoritative_events": {
+      "remote": 16,
+      "wrapper": 9
+    },
+    "name": "attach-d4bbf0bd",
+    "remote_control": {
+      "interrupt": "accepted",
+      "resumed_thread_id": "01a04af0-0108-7281-bf33-a4a7098aeeeb",
+      "steer": "01a04af0-316d-7393-a2ca-20fcca167379",
+      "turn_id": "01a04af0-316d-7393-a2ca-20fcca167379"
+    },
+    "resume_command": "codex --remote ws://127.0.0.1:51969 resume 01a04af0-0108-7281-bf33-a4a7098aeeeb",
+    "session_id": "3aaaa39b-df19-414f-a031-5daba3e8ab98",
+    "thread_id": "01a04af0-0108-7281-bf33-a4a7098aeeeb"
+  },
+  "scenario": "common-attach",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/common-attach/transcript.jsonl"
+}

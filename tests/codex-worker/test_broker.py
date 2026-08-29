@@ -1,7 +1,9 @@
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from dataclasses import FrozenInstanceError
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
@@ -11,11 +13,14 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development" / "scripts"))
 
 from codex_worker.app_server import CodexCallError
-from codex_worker.broker import ModelSelectionError, WorkerBroker
-from codex_worker.models import IdentifierSelector, RpcFault
+from codex_worker.broker import (FORCE_INVENTORY_TIMEOUT_SECONDS,
+                                 MaintenanceCoordinator, ModelSelectionError, WorkerBroker)
+from codex_worker.models import (ActiveInventory, ActiveThreadItem, IdentifierSelector,
+                                 MaintenanceResult, RpcFault)
 from codex_worker.registry import SessionRegistry
 from codex_worker.runtime import RuntimeStore
 from codex_worker.version import distribution_version
+from codex_worker.websocket_gateway import ServiceBusyError, ServiceMaintenanceGate
 
 
 class FakeCodex:
@@ -44,9 +49,45 @@ class FakeCodex:
         self.notification_turn_id = None
         self.control_failure = None
         self.control_hook = None
+        self.steer_return_id = None
+        self.calls = []
+        self.call_timeouts = []
+        self.thread_pages = {}
+        self.thread_reads = {}
+        self.turn_pages = {}
+        self.turns_by_thread = {}
 
     def list_models(self):
         return list(self.models)
+
+    def call(self, method, params, timeout=120.0):
+        self.call_timeouts.append((method, timeout))
+        self.calls.append((method, dict(params)))
+        if method == "thread/list":
+            value = self.thread_pages.get(params.get("cursor"))
+            if isinstance(value, BaseException):
+                raise value
+            if value is None:
+                return {"data": [], "nextCursor": None, "backwardsCursor": None}
+            return value
+        if method == "thread/read":
+            thread_id = params["threadId"]
+            if thread_id in self.thread_reads:
+                return self.thread_reads[thread_id]
+            turns = list(self.turns_by_thread.get(thread_id, []))
+            active = self._active is not None and self._active[0] == thread_id
+            return {"thread": {
+                "id": thread_id,
+                "status": ({"type": "active", "activeFlags": []}
+                           if active else {"type": "idle"}),
+                "turns": turns,
+            }}
+        if method == "thread/turns/list":
+            value = self.turn_pages.get(params.get("cursor"))
+            if value is None:
+                return {"data": [], "nextCursor": None, "backwardsCursor": None}
+            return value
+        raise AssertionError("unexpected raw call: %s" % method)
 
     def start_thread(self, cwd, model=None, sandbox="workspace-write", allow_provider_model_fallback=None):
         self.start_calls.append({"cwd": cwd, "model": model, "sandbox": sandbox,
@@ -70,6 +111,8 @@ class FakeCodex:
         turn_id = self.response_turn_id or "turn-%d" % self._next_turn
         self._next_turn += 1
         self._active = (thread_id, turn_id)
+        self.turns_by_thread.setdefault(thread_id, []).append({
+            "id": turn_id, "status": "inProgress", "items": []})
         if self.emit_before_response:
             notified_id = self.notification_turn_id or turn_id
             self._emit_started(thread_id, notified_id)
@@ -83,7 +126,7 @@ class FakeCodex:
             self.control_hook()
         if self.control_failure is not None:
             raise self.control_failure
-        return turn_id
+        return self.steer_return_id or turn_id
 
     def interrupt(self, thread_id, turn_id):
         self.interrupt_calls.append({"thread_id": thread_id, "turn_id": turn_id})
@@ -111,6 +154,12 @@ class FakeCodex:
         }})
 
     def _emit_completed(self, thread_id, turn_id, status):
+        turns = self.turns_by_thread.setdefault(thread_id, [])
+        existing = next((turn for turn in turns if turn["id"] == turn_id), None)
+        if existing is None:
+            turns.append({"id": turn_id, "status": status, "items": []})
+        else:
+            existing["status"] = status
         self._on_notification({"method": "turn/completed", "params": {
             "threadId": thread_id, "turn": {"id": turn_id, "status": status},
         }})
@@ -125,11 +174,404 @@ class WorkerBrokerTests(unittest.TestCase):
         self.runtime = RuntimeStore(event_limit=5)
         self.codex = FakeCodex()
         self.codex._on_notification = self.runtime.on_notification
+        self.gate = ServiceMaintenanceGate()
         self.broker = WorkerBroker(
             self.registry, self.codex, self.runtime,
             socket_path=str(Path(self.cwd) / "worker.sock"), state_path=self.state_path,
-            daemon_pid=1234,
+            daemon_pid=1234, gate=self.gate, listener="ws://127.0.0.1:4500",
         )
+
+    @staticmethod
+    def active_thread(thread_id):
+        return {"id": thread_id, "status": {
+            "type": "active", "activeFlags": ["waitingOnApproval"]}}
+
+    @staticmethod
+    def idle_thread(thread_id):
+        return {"id": thread_id, "status": {"type": "idle"}}
+
+    def test_inventory_pages_all_sources_deduplicates_and_includes_unmapped_tui(self):
+        worker = self.registry.create_worker(
+            "worker-thread", self.cwd, "known-worker", "medium",
+            "fake-model-a", "medium", "full")
+        self.codex.thread_pages = {
+            None: {"data": [self.active_thread("worker-thread"),
+                            self.active_thread("tui-thread")],
+                   "nextCursor": "page-2", "backwardsCursor": None},
+            "page-2": {"data": [self.active_thread("tui-thread"),
+                                 self.idle_thread("idle-thread")],
+                       "nextCursor": None, "backwardsCursor": "back"},
+        }
+        self.codex.thread_reads = {
+            "worker-thread": {"thread": {
+                "id": "worker-thread", "status": {"type": "active"},
+                "turns": [{"id": "worker-turn", "status": "inProgress"}]}},
+            "tui-thread": {"thread": {
+                "id": "tui-thread", "status": {"type": "active"},
+                "turns": [{"id": "tui-turn", "status": "inProgress"}]}},
+        }
+
+        inventory = self.broker.list_active_threads()
+
+        self.assertIsInstance(inventory, ActiveInventory)
+        self.assertEqual([item.thread_id for item in inventory.items],
+                         ["worker-thread", "tui-thread"])
+        self.assertEqual(inventory.items[0].worker, "known-worker")
+        self.assertEqual(inventory.items[0].session_id, worker.session_id)
+        self.assertEqual(inventory.items[0].origin, "worker")
+        self.assertEqual(inventory.items[1].origin, "unmapped_tui")
+        self.assertIsNone(inventory.items[1].worker)
+        self.assertEqual([item.turn_id for item in inventory.items],
+                         ["worker-turn", "tui-turn"])
+        self.assertEqual(self.codex.calls, [
+            ("thread/list", {"sourceKinds": []}),
+            ("thread/list", {"sourceKinds": [], "cursor": "page-2"}),
+            ("thread/read", {"threadId": "worker-thread", "includeTurns": True}),
+            ("thread/read", {"threadId": "tui-thread", "includeTurns": True}),
+        ])
+
+    def test_activity_and_maintenance_models_are_strict_frozen_round_trips(self):
+        inventory = ActiveInventory([
+            ActiveThreadItem("tui-thread", "unmapped_tui", None, None, "tui-turn",
+                             ["waitingOnApproval"]),
+        ])
+        result = MaintenanceResult.completed("stop", inventory, True)
+        self.assertEqual(MaintenanceResult.from_dict(result.to_dict()), result)
+        with self.assertRaises(FrozenInstanceError):
+            result.status = "refused"
+        with self.assertRaises(AttributeError):
+            result.inventory.items.clear()
+        with self.assertRaises(AttributeError):
+            result.inventory.items[0].active_flags.clear()
+        malformed = result.to_dict()
+        malformed["extra"] = True
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(malformed)
+        with self.assertRaises(ValueError):
+            MaintenanceResult("restart", "completed", False, None, inventory)
+        with self.assertRaises(ValueError):
+            MaintenanceResult("stop", "completed", False,
+                              "ws://localhost:4500", inventory)
+        with self.assertRaises(ValueError):
+            MaintenanceResult("stop", "refused", False, None, ActiveInventory())
+        with self.assertRaises(ValueError):
+            MaintenanceResult("stop", "completed", False, None, inventory)
+
+    def test_unavailable_maintenance_impact_is_explicit_and_has_no_counts_or_ids(self):
+        result = MaintenanceResult.unavailable(
+            "stop", "completed", True, None, "upstream_inventory_unavailable")
+        wire = result.to_dict()
+        self.assertEqual(wire["inventory"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertEqual(wire["workers"], {
+            "availability": "unavailable",
+            "reason": "upstream_inventory_unavailable",
+        })
+        self.assertNotIn("items", wire["inventory"])
+        self.assertNotIn("active_count", wire["workers"])
+        self.assertEqual(MaintenanceResult.from_dict(wire), result)
+        malformed = dict(wire)
+        malformed["durable_state"] = "discarded"
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(malformed)
+        malformed = dict(wire)
+        malformed["forced"] = False
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(malformed)
+        with self.assertRaises(ValueError):
+            MaintenanceResult.unavailable(
+                "stop", "completed", False, None,
+                "upstream_inventory_unavailable")
+
+    def test_inventory_malformed_cursor_loop_and_upstream_error_all_fail_closed(self):
+        for timeout in (0, -1, float("nan"), float("inf"), True):
+            with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                self.broker.list_active_threads(timeout=timeout)
+        failures = [
+            {None: {"data": "not-a-list", "nextCursor": None,
+                    "backwardsCursor": None}},
+            {None: {"data": [], "nextCursor": None}},
+            {None: {"data": [self.active_thread("tui-thread")],
+                    "nextCursor": "again", "backwardsCursor": None},
+             "again": {"data": [], "nextCursor": "again",
+                       "backwardsCursor": None}},
+            {None: CodexCallError("transport_error", "thread/list",
+                                  {"message": "disconnected"})},
+        ]
+        for pages in failures:
+            with self.subTest(pages=pages):
+                self.codex.calls = []
+                self.codex.thread_pages = pages
+                with self.assertRaises(RpcFault):
+                    self.broker.list_active_threads()
+
+    def test_every_worker_mutation_uses_shared_gate_and_drain_refuses_new_mutation(self):
+        from codex_worker.broker import SessionResumeSpec, SessionStartSpec, TurnStartSpec
+        from codex_worker.commands import AccessMode
+        started = self.start_session()
+        record = self.registry.resolve(started)
+        mutations = {
+            "start_session": lambda: self.broker.start_session(SessionStartSpec(
+                self.cwd, "blocked-a", "fake-model-a")),
+            "resume_session": lambda: self.broker.resume_session(SessionResumeSpec(
+                record.thread_id, AccessMode.FULL)),
+            "start_turn": lambda: self.broker.start_turn(TurnStartSpec(
+                record.session_id, "blocked", "fake-model-a", "medium")),
+            "session_start": lambda: self.broker.session_start(
+                self.cwd, name="blocked-b", model="fake-model-a"),
+            "session_resume": lambda: self.broker.session_resume(started),
+            "turn_start": lambda: self.broker.turn_start(
+                started, "blocked", model="fake-model-a", effort="medium"),
+            "turn_steer": lambda: self.broker.turn_steer(started, "blocked"),
+            "turn_interrupt": lambda: self.broker.turn_interrupt(started),
+            "shutdown": self.broker.shutdown,
+            "goal_set": lambda: self.broker.goal_set(record.thread_id, "blocked"),
+        }
+        with self.gate.drain():
+            for name, mutation in mutations.items():
+                with self.subTest(name=name), self.assertRaises(ServiceBusyError):
+                    mutation()
+        self.assertEqual(len(self.codex.start_calls), 1)
+        self.assertFalse(self.codex.shutdown_called)
+
+    def test_healthy_force_reports_complete_unmapped_inventory_before_termination(self):
+        self.registry.create_worker(
+            "idle-thread", self.cwd, "idle-worker", "medium",
+            "fake-model-a", "medium", "full")
+        self.codex.thread_pages = {None: {
+            "data": [self.active_thread("tui-thread")],
+            "nextCursor": None, "backwardsCursor": None,
+        }}
+        self.codex.thread_reads["tui-thread"] = {"thread": {
+            "id": "tui-thread", "status": {"type": "active"},
+            "turns": [{"id": "tui-turn", "status": "inProgress"}]}}
+
+        class Lifecycle:
+            def __init__(self, gate):
+                self.gate = gate
+                self.terminated = 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        coordinator = MaintenanceCoordinator(self.broker, lifecycle)
+        refused = coordinator.stop(force=False)
+        self.assertEqual(refused.status, "refused")
+        self.assertEqual(refused.inventory.items[0].origin, "unmapped_tui")
+        self.assertEqual(refused.workers.to_dict(), {
+            "active_names": [], "idle_names": ["idle-worker"],
+            "active_count": 0, "idle_count": 1, "total_count": 1})
+        self.assertEqual(lifecycle.terminated, 0)
+
+        self.codex.calls = []
+        self.codex.call_timeouts = []
+        forced = coordinator.stop(force=True)
+        self.assertEqual(forced.status, "completed")
+        self.assertTrue(forced.forced)
+        self.assertEqual(forced.inventory.items[0].thread_id, "tui-thread")
+        self.assertIsNone(forced.impact_unavailable_reason)
+        self.assertEqual(self.codex.calls[0],
+                         ("thread/list", {"sourceKinds": []}))
+        inventory_timeout = next(
+            timeout for method, timeout in self.codex.call_timeouts
+            if method == "thread/list")
+        self.assertGreater(inventory_timeout, 0)
+        self.assertLessEqual(inventory_timeout,
+                             FORCE_INVENTORY_TIMEOUT_SECONDS)
+        self.assertEqual(lifecycle.terminated, 1)
+        self.codex.calls = []
+        restarted = coordinator.restart("ws://127.0.0.1:4600", force=True)
+        self.assertEqual(restarted.inventory.items[0].thread_id, "tui-thread")
+        self.assertEqual(restarted.listener, "ws://127.0.0.1:4600")
+        self.assertIsNone(restarted.impact_unavailable_reason)
+        self.assertEqual(lifecycle.terminated, 2)
+        self.assertFalse(hasattr(coordinator, "gate"))
+        self.assertFalse(hasattr(coordinator, "terminate_owned"))
+
+    def test_restart_refuses_active_inventory_and_reports_validated_listener(self):
+        self.codex.thread_pages = {None: {
+            "data": [self.active_thread("tui-thread")],
+            "nextCursor": None, "backwardsCursor": None,
+        }}
+        self.codex.thread_reads["tui-thread"] = {"thread": {
+            "id": "tui-thread", "status": {"type": "active"},
+            "turns": [{"id": "tui-turn", "status": "inProgress"}]}}
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        coordinator = MaintenanceCoordinator(self.broker, lifecycle)
+        refused = coordinator.restart("ws://localhost:4600", force=False)
+        self.assertEqual(refused.status, "refused")
+        self.assertEqual(refused.listener, "ws://localhost:4600")
+        self.assertEqual(lifecycle.terminated, 0)
+
+    def test_nonforce_inventory_error_refuses_without_terminating_service(self):
+        self.codex.thread_pages = {None: CodexCallError(
+            "transport_error", "thread/list", {"message": "gone"})}
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease): self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        result = MaintenanceCoordinator(self.broker, lifecycle).stop(force=False)
+        self.assertEqual((result.status, result.forced), ("refused", False))
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(lifecycle.terminated, 0)
+
+    def test_force_skips_unavailable_inventory_and_terminates_owned_lifecycle(self):
+        self.codex.thread_pages = {None: CodexCallError(
+            "transport_error", "thread/list", {"message": "blocked"})}
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        result = MaintenanceCoordinator(self.broker, lifecycle).stop(force=True)
+        self.assertEqual((result.status, result.forced), ("completed", True))
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(self.codex.calls,
+                         [("thread/list", {"sourceKinds": []})])
+        self.assertEqual(lifecycle.terminated, 1)
+
+    def test_force_inventory_bounds_blocked_send_before_unavailable_fallback(self):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        original_call = self.codex.call
+
+        def blocked_call(method, params, timeout=120.0):
+            if method == "thread/list":
+                entered.set()
+                release.wait(timeout=1.0)
+                finished.set()
+            return original_call(method, params, timeout)
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        lifecycle = Lifecycle(self.gate)
+        self.codex.call = blocked_call
+        started = time.monotonic()
+        try:
+            with mock.patch("codex_worker.broker.FORCE_INVENTORY_TIMEOUT_SECONDS", 0.05):
+                result = MaintenanceCoordinator(
+                    self.broker, lifecycle).stop(force=True)
+        finally:
+            release.set()
+        self.assertTrue(entered.is_set())
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(lifecycle.terminated, 1)
+        self.assertTrue(finished.wait(timeout=1.0))
+
+    def test_force_with_unsettled_mutation_never_claims_measured_impact(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        def mutate():
+            with self.gate.mutation("thread/start"):
+                entered.set()
+                release.wait(timeout=1.0)
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate, self.terminated = gate, 0
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.terminated += 1
+            def stopping(self): return False
+
+        mutation = threading.Thread(target=mutate)
+        mutation.start()
+        self.assertTrue(entered.wait(timeout=1.0))
+        lifecycle = Lifecycle(self.gate)
+        try:
+            result = MaintenanceCoordinator(
+                self.broker, lifecycle).stop(force=True)
+        finally:
+            release.set()
+            mutation.join(timeout=1.0)
+
+        self.assertEqual(result.impact_unavailable_reason,
+                         "upstream_inventory_unavailable")
+        self.assertEqual(self.codex.calls, [])
+        self.assertEqual(lifecycle.terminated, 1)
+
+    def test_owned_teardown_error_is_a_typed_maintenance_failure(self):
+        from codex_worker.broker import MaintenanceTerminationError
+        from codex_worker.service import OwnedTeardownError
+
+        class Lifecycle:
+            def __init__(self, gate): self.gate = gate
+            def stopping(self): return False
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                raise OwnedTeardownError("OSError")
+
+        with self.assertRaises(MaintenanceTerminationError) as caught:
+            MaintenanceCoordinator(self.broker, Lifecycle(self.gate)).stop(force=True)
+        self.assertEqual(caught.exception.cause, "OSError")
+
+    def test_stop_queued_behind_force_converges_without_closed_transport_inventory(self):
+        self.registry.create_worker(
+            "idle-thread", self.cwd, "known-idle", "medium",
+            "fake-model-a", "medium", "full")
+        entered = threading.Event()
+        release = threading.Event()
+
+        class Lifecycle:
+            def __init__(self, gate):
+                self.gate = gate
+                self.is_stopping = False
+            def stopping(self):
+                return self.is_stopping
+            def terminate_owned(self, lease):
+                self.gate.authorize(lease)
+                self.is_stopping = True
+                entered.set()
+                release.wait(timeout=1.0)
+
+        lifecycle = Lifecycle(self.gate)
+        coordinator = MaintenanceCoordinator(self.broker, lifecycle)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            forced = pool.submit(coordinator.stop, True)
+            self.assertTrue(entered.wait(timeout=1.0))
+            self.codex.thread_pages = {None: CodexCallError(
+                "transport_error", "thread/list", {"message": "connection closed"})}
+            queued = pool.submit(coordinator.stop, False)
+            release.set()
+            first = forced.result(timeout=1.0)
+            second = queued.result(timeout=1.0)
+
+        self.assertEqual((first.status, first.forced), ("completed", True))
+        self.assertEqual((second.status, second.forced), ("completed", False))
+        self.assertEqual(second.inventory.to_dict(), {"items": []})
+        self.assertEqual(second.workers.to_dict(), {
+            "active_names": [], "idle_names": ["known-idle"],
+            "active_count": 0, "idle_count": 1, "total_count": 1,
+        })
 
     def test_typed_specs_use_provider_accurate_access_seams(self):
         from codex_worker.broker import SessionStartSpec, TurnStartSpec
@@ -145,6 +587,70 @@ class WorkerBrokerTests(unittest.TestCase):
         self.broker.start_turn(TurnStartSpec(read["session"]["session_id"], "go", "fake-model-a", "medium", AccessMode.READ_ONLY, {"type": "object"}))
         self.assertEqual(self.codex.turn_start_calls[-1]["sandboxPolicy"], {"type": "readOnly", "networkAccess": False})
         self.assertEqual(self.codex.turn_start_calls[-1]["outputSchema"], {"type": "object"})
+
+    def test_status_keeps_persisted_session_detached_until_explicit_resume(self):
+        selector = self.start_session()
+        detached = WorkerBroker(
+            self.registry, self.codex, RuntimeStore(event_limit=5),
+            socket_path=str(Path(self.cwd) / "replacement.sock"),
+            state_path=self.state_path, daemon_pid=5678,
+            gate=ServiceMaintenanceGate(), listener="ws://127.0.0.1:4500",
+        )
+        self.codex.calls = []
+        result = detached.turn_status(selector)
+        self.assertFalse(result["attached"])
+        self.assertEqual(self.codex.calls, [])
+
+    def test_status_reconciles_attached_thread_from_authoritative_tui_state(self):
+        selector = self.start_session()
+        self.codex.thread_reads["thr-start"] = {"thread": {
+            "id": "thr-start",
+            "status": {"type": "active", "activeFlags": []},
+            "turns": [{"id": "tui-turn", "status": "inProgress", "items": []}],
+        }}
+        self.codex.calls = []
+        active = self.broker.turn_status(selector)
+        self.assertEqual(active["active_turn_id"], "tui-turn")
+        self.assertEqual(self.codex.calls, [("thread/read", {
+            "threadId": "thr-start", "includeTurns": True,
+        })])
+
+        self.codex.thread_reads["thr-start"] = {"thread": {
+            "id": "thr-start",
+            "status": {"type": "idle"},
+            "turns": [{"id": "tui-turn", "status": "completed", "items": [{
+                "id": "upstream-message", "type": "agentMessage", "text": "done",
+            }]}],
+        }}
+        terminal = self.broker.turn_status(selector)
+        self.assertEqual(terminal["latest_turn"]["turn_id"], "tui-turn")
+        record = self.registry.resolve(selector)
+        messages, _, _ = self.runtime.agent_messages(record.session_id, 10)
+        self.assertEqual([item.item_id for item in messages], ["upstream-message"])
+        self.assertEqual(self.runtime.events(record.session_id, 0, 10).events, [])
+
+    def test_history_page_reconciles_attached_runtime_before_returning_provider_page(self):
+        selector = self.start_session()
+        self.codex.thread_reads["thr-start"] = {"thread": {
+            "id": "thr-start", "status": {"type": "idle"},
+            "turns": [{"id": "tui-terminal", "status": "completed", "items": []}],
+        }}
+        self.codex.turn_pages[None] = {
+            "data": [{"id": "tui-terminal", "status": "completed", "items": []}],
+            "nextCursor": "older", "backwardsCursor": None,
+        }
+        self.codex.calls = []
+        page = self.broker.turn_history(selector, limit=10)
+        self.assertEqual(page["turns"][0]["id"], "tui-terminal")
+        self.assertEqual(page["attach"]["thread_id"], "thr-start")
+        self.assertEqual(self.runtime.status(
+            self.registry.resolve(selector).session_id).latest_turn.turn_id,
+            "tui-terminal")
+        self.assertEqual(self.codex.calls, [
+            ("thread/read", {"threadId": "thr-start", "includeTurns": True}),
+            ("thread/turns/list", {"threadId": "thr-start", "sortDirection": "desc",
+                                   "itemsView": "full", "limit": 10}),
+        ])
 
     def test_preserved_common_start_persists_policy_in_one_registry_record(self):
         from codex_worker.broker import AnnotationPolicy, SessionStartSpec
@@ -164,6 +670,20 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(CodexCallError) as caught:
             NativeCodexProxy(Raw()).rate_limits_read()
         self.assertEqual(caught.exception.kind, "protocol_error")
+
+    def test_native_proxy_accepts_additive_rate_limit_envelope_fields(self):
+        from codex_worker.broker import NativeCodexProxy
+        class Raw:
+            def call(self, method, params):
+                return {
+                    "rateLimits": {"primary": {"usedPercent": 21}},
+                    "rateLimitsByLimitId": {"codex": {"primary": {"usedPercent": 21}}},
+                    "rateLimitResetCredits": {"availableCount": 0, "credits": []},
+                }
+
+        value = NativeCodexProxy(Raw()).rate_limits_read()
+
+        self.assertEqual(value["rateLimits"]["primary"]["usedPercent"], 21)
 
     def test_read_only_resume_has_no_creation_only_fallback_field(self):
         from codex_worker.broker import SessionResumeSpec
@@ -236,7 +756,8 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(status, {
             "ready": True, "daemon_pid": 1234, "codex_pid": 4321,
             "socket_path": str(Path(self.cwd) / "worker.sock"), "state_path": self.state_path,
-            "session_count": 0, "worker_version": distribution_version(),
+            "session_count": 0, "worker_names": [],
+            "worker_version": distribution_version(),
         })
         models = self.broker.model_list()
         self.assertEqual(models["models"], [
@@ -302,6 +823,18 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, -32015)
         self.assertEqual(caught.exception.kind, "codex_protocol_error")
 
+    def test_post_upstream_start_cwd_mismatch_preserves_created_thread_identity(self):
+        other = tempfile.TemporaryDirectory()
+        self.addCleanup(other.cleanup)
+        self.codex.start_result = {"thread": {"id": "thr-cwd-drift", "cwd": other.name}}
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.session_start(self.cwd)
+        fault = caught.exception
+        self.assertEqual(fault.kind, "session_cwd_mismatch")
+        self.assertEqual(fault.details["thread_id"], "thr-cwd-drift")
+        UUID(fault.details["session_id"])
+        self.assertEqual(fault.details["attach"]["thread_id"], "thr-cwd-drift")
+
     def test_existing_session_resume_rejects_upstream_cwd_drift_without_attaching(self):
         selector = self.start_session()
         other = tempfile.TemporaryDirectory()
@@ -317,6 +850,9 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(RpcFault) as caught:
             self.broker.session_resume(selector)
         self.assertEqual(caught.exception.kind, "session_cwd_mismatch")
+        self.assertEqual(caught.exception.details["session_id"], selector.session_id)
+        self.assertEqual(caught.exception.details["thread_id"], "thr-start")
+        self.assertEqual(caught.exception.details["attach"]["thread_id"], "thr-start")
         self.assertFalse(self.broker.session_show(selector)["attached"])
 
     def test_unknown_uuid_is_typed_and_unknown_thread_requires_explicit_resume(self):
@@ -325,8 +861,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(unknown_uuid.exception.kind, "unknown_session")
         self.assertEqual(
             unknown_uuid.exception.recovery,
-            "run session list to choose a known session, or recover a raw Codex thread with "
-            "session resume --thread <thread-id> --name <name>",
+            "codex-worker session list",
         )
         with self.assertRaisesRegex(RpcFault, "session resume --thread"):
             self.broker.turn_status(IdentifierSelector(thread_id="unknown"))
@@ -420,6 +955,10 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaises(RpcFault) as caught:
             self.broker.turn_start(session, "task", model="fake-model-a", effort="medium")
         self.assertEqual(caught.exception.kind, "codex_protocol_error")
+        self.assertEqual(caught.exception.details["session_id"], session.session_id)
+        self.assertEqual(caught.exception.details["thread_id"], "thr-start")
+        self.assertEqual(caught.exception.details["turn_id"], "turn-response")
+        self.assertEqual(caught.exception.details["attach"]["thread_id"], "thr-start")
         self.codex.emit_before_response = False
         self.codex.response_turn_id = None
         self.codex.notification_turn_id = None
@@ -435,6 +974,20 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertTrue(steered["accepted"])
         self.assertEqual(waiter.result()["turn"]["status"], "completed")
         self.assertEqual(self.codex.steer_calls[-1]["turn_id"], "turn-1")
+
+    def test_post_upstream_steer_identity_mismatch_preserves_worker_identity(self):
+        session = self.start_session()
+        self.broker.turn_start(session, "task", model="fake-model-a", effort="medium")
+        self.codex.steer_return_id = "different-turn"
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.turn_steer(session, "narrow")
+        fault = caught.exception
+        self.assertEqual(fault.kind, "codex_protocol_error")
+        self.assertEqual(fault.details["session_id"], session.session_id)
+        self.assertEqual(fault.details["thread_id"], "thr-start")
+        self.assertEqual(fault.details["turn_id"], "turn-1")
+        self.assertEqual(fault.details["returned_turn_id"], "different-turn")
+        self.assertEqual(fault.details["attach"]["thread_id"], "thr-start")
 
     def test_delayed_steer_error_after_replacement_turn_is_not_active_race(self):
         session = self.start_session()
@@ -580,6 +1133,11 @@ class WorkerBrokerTests(unittest.TestCase):
         UUID(fault.details["session_id"])
         self.assertEqual(fault.details["thread_id"], "thr-start")
         self.assertNotIn("turn_id", fault.details)
+        self.assertEqual(fault.details["attach"]["thread_id"], "thr-start")
+        self.assertEqual(
+            fault.details["attach"]["resume_command"],
+            "codex --remote ws://127.0.0.1:4500 resume thr-start",
+        )
         self.assertIn("session resume --thread thr-start", fault.recovery)
 
     def test_raw_resume_persistence_failure_exposes_unpersisted_upstream_identity(self):
@@ -611,9 +1169,15 @@ class WorkerBrokerTests(unittest.TestCase):
             "thread_id": "thr-start",
             "turn_id": "turn-1",
             "reason": "disk full",
+            "attach": {
+                "listener": "ws://127.0.0.1:4500",
+                "thread_id": "thr-start",
+                "attach_command": "codex --remote ws://127.0.0.1:4500",
+                "resume_command": "codex --remote ws://127.0.0.1:4500 resume thr-start",
+            },
         })
-        self.assertIn("turn status --session %s" % session.session_id, fault.recovery)
-        self.assertIn("turn events --session %s" % session.session_id, fault.recovery)
+        self.assertEqual(fault.recovery,
+                         "codex-worker turn status --session %s" % session.session_id)
         self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-1")
 
     def test_interrupt_completes_active_turn_and_idle_race_is_typed(self):
@@ -621,7 +1185,9 @@ class WorkerBrokerTests(unittest.TestCase):
         self.broker.turn_start(session, "task", model="fake-model-a", effort="medium")
         interrupted = self.broker.turn_interrupt(session)
         self.assertTrue(interrupted["accepted"])
-        self.assertEqual(self.broker.turn_wait(session, 0)["turn"]["status"], "interrupted")
+        waited = self.broker.turn_wait(session, 0)
+        self.assertEqual(waited["turn"]["status"], "interrupted")
+        self.assertEqual(waited["attach"]["thread_id"], waited["thread_id"])
         with self.assertRaises(RpcFault) as caught:
             self.broker.turn_interrupt(session)
         self.assertEqual(caught.exception.kind, "turn_not_active")
@@ -639,14 +1205,14 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertIn("work remains active", caught.exception.message)
         self.assertTrue(caught.exception.details["active"])
         self.assertEqual(caught.exception.details["next_actions"], [
-            "turn status --session %s" % session.session_id,
-            "turn wait --session %s --timeout <seconds>" % session.session_id,
-            "turn steer --session %s --prompt <text>" % session.session_id,
-            "turn interrupt --session %s" % session.session_id,
+            "codex-worker turn status --session %s" % session.session_id,
+            "codex-worker turn wait --session %s --timeout 30" % session.session_id,
+            "codex-worker turn interrupt --session %s" % session.session_id,
         ])
         page = self.broker.turn_events(session, after=0, limit=3)
         self.assertEqual(page["next_cursor"], 0)
         self.assertFalse(page["truncated"])
+        self.assertEqual(page["attach"]["thread_id"], "thr-start")
 
     def test_shutdown_delegates_without_deleting_registry(self):
         self.start_session()

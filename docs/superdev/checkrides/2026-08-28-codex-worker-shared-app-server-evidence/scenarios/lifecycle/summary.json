@@ -1,0 +1,193 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003508.066223Z-11981-lifecycle/fixture-lifecycle",
+    "expected_pid": 12016,
+    "observed_pid": null,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-lifecycle/fixture-owner.json": "af59bf4c8ca819ccd8452578870a50450f7b12aba485489ba89b074f0c212b83",
+    "fixture-lifecycle/home/Library/Application Support/chrome-devtools-mcp/telemetry_state.json": "7f63f63e8a4b275b33ecf2a0cc3e5c72ae73e3f9f677ac2a3cdd2f486d896d63",
+    "fixture-lifecycle/home/Library/Application Support/superdev/codex-worker/service/callbacks.json": "357bdcb46eee274aee26a5f832dde8e80f3b7591e012064a745520bcc879e867",
+    "fixture-lifecycle/home/Library/Application Support/superdev/codex-worker/service/daemon.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fixture-lifecycle/home/Library/Application Support/superdev/codex-worker/service/migration.json": "3a5f5e3f41b37a4ec8e39a4546107f701ba9458a2b0d54a9428e67e3e4cc08f2",
+    "fixture-lifecycle/home/Library/Application Support/superdev/codex-worker/service/registry.json": "d661adecd184447bb5d99afde9365764e7e86752d5d9d0a5a085c3b157dc68b4",
+    "fixture-lifecycle/home/Library/Application Support/superdev/codex-worker/service/service.json": "267556eca508eb07f6ae5a12d3a08cccedb8d03c781ea00dfffbe4b8c816769d",
+    "fixture-lifecycle/workspace/active-command.json": "0b709d2a40333df89e8cf42d755b9cc2f9c440d7fb050a48a2acdaed54a8e2c2",
+    "transcript.jsonl": "6b0db0bd5a47e822289e1bd09fcd4bc9517e22fb28ffc1fec156da2926f7e210"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003508.066223Z-11981-lifecycle",
+  "record_count": 16,
+  "result": {
+    "active command signal": {
+      "event": {
+        "emittedAtMs": 1787963725232,
+        "method": "item/started",
+        "params": {
+          "item": {
+            "aggregatedOutput": null,
+            "command": "/bin/zsh -lc '/bin/sleep 120'",
+            "commandActions": [
+              {
+                "command": "/bin/sleep 120",
+                "type": "unknown"
+              }
+            ],
+            "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003508.066223Z-11981-lifecycle/fixture-lifecycle/workspace",
+            "durationMs": null,
+            "exitCode": null,
+            "id": "exec-3987af22-718a-4343-b11b-f0b6b25aaeda",
+            "pluginId": null,
+            "processId": "17206",
+            "scriptPath": null,
+            "source": "unifiedExecStartup",
+            "status": "inProgress",
+            "type": "commandExecution"
+          },
+          "startedAtMs": 1787963725230,
+          "threadId": "01a04af1-2ac4-7b31-ae05-d1de85161302",
+          "turnId": "01a04af1-46cc-7b43-84b9-4074ff5f2f8e"
+        }
+      },
+      "turn_id": "01a04af1-46cc-7b43-84b9-4074ff5f2f8e"
+    },
+    "active worker refusal": {
+      "error": {
+        "code": -32040,
+        "data": {
+          "details": {
+            "action": "restart",
+            "active": [
+              {
+                "active_flags": [],
+                "origin": "worker",
+                "session_id": "11364466-7d6e-4c8e-8fff-51099c75871b",
+                "thread_id": "01a04af1-2ac4-7b31-ae05-d1de85161302",
+                "turn_id": "01a04af1-46cc-7b43-84b9-4074ff5f2f8e",
+                "worker": "lifecycle-c9eb946c"
+              }
+            ],
+            "durable_state": "preserved",
+            "workers": {
+              "active_count": 1,
+              "active_names": [
+                "lifecycle-c9eb946c"
+              ],
+              "idle_count": 0,
+              "idle_names": [],
+              "total_count": 1
+            }
+          },
+          "kind": "service_busy",
+          "known_ids": {
+            "name": null,
+            "session_id": null,
+            "thread_id": null,
+            "turn_id": null
+          },
+          "next_actions": [
+            {
+              "command": "codex-worker daemon status",
+              "reason": "Inspect every active global thread"
+            },
+            {
+              "command": "codex-worker status --name <worker>",
+              "reason": "Wait for named active work to finish"
+            }
+          ],
+          "retryable": false,
+          "source": "codex-worker"
+        },
+        "message": "Global service has active work"
+      },
+      "id": "cli",
+      "jsonrpc": "2.0"
+    },
+    "alternate": "ws://127.0.0.1:52351",
+    "connectable": true,
+    "forced_turn_terminal": {
+      "event_count": 15,
+      "turn_id": "01a04af1-46cc-7b43-84b9-4074ff5f2f8e"
+    },
+    "idle version replacement": "SIMULATED production fixture",
+    "occupied": {
+      "error": {
+        "code": -32039,
+        "data": {
+          "details": {
+            "durable_state": "preserved",
+            "listener": "ws://127.0.0.1:4500"
+          },
+          "kind": "address_in_use",
+          "known_ids": {
+            "name": null,
+            "session_id": null,
+            "thread_id": null,
+            "turn_id": null
+          },
+          "next_actions": [
+            {
+              "command": "codex-worker daemon status",
+              "reason": "Inspect the configured global listener without contacting its peer"
+            }
+          ],
+          "retryable": false,
+          "source": "codex-worker"
+        },
+        "message": "Configured app-server listener is already in use"
+      },
+      "id": "cli",
+      "jsonrpc": "2.0"
+    },
+    "occupied_by_fixture": true,
+    "source deletion": false,
+    "source_hash_preserved": true,
+    "supervised force": {
+      "id": "cli",
+      "jsonrpc": "2.0",
+      "result": {
+        "action": "stop",
+        "durable_state": "preserved",
+        "forced": true,
+        "inventory": {
+          "items": [
+            {
+              "active_flags": [],
+              "origin": "worker",
+              "session_id": "11364466-7d6e-4c8e-8fff-51099c75871b",
+              "thread_id": "01a04af1-2ac4-7b31-ae05-d1de85161302",
+              "turn_id": "01a04af1-46cc-7b43-84b9-4074ff5f2f8e",
+              "worker": "lifecycle-c9eb946c"
+            }
+          ]
+        },
+        "listener": null,
+        "status": "completed",
+        "workers": {
+          "active_count": 1,
+          "active_names": [
+            "lifecycle-c9eb946c"
+          ],
+          "idle_count": 0,
+          "idle_names": [],
+          "total_count": 1
+        }
+      }
+    },
+    "unmapped TUI refusal": "SIMULATED production fixture"
+  },
+  "scenario": "lifecycle",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/lifecycle/transcript.jsonl"
+}

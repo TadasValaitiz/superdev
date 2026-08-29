@@ -1,54 +1,33 @@
-"""Thread-safe stdio adapter for one shared Codex app-server subprocess."""
+"""Legacy stdio adapter and compatibility exports during WebSocket migration."""
 import itertools
 import json
-import os
 import queue
 import subprocess
 import threading
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from .models import JsonObject
+from .websocket_transport import (
+    APPROVAL_METHODS,
+    CodexCallError,
+    CodexConnection,
+    CodexMethodAdapter,
+    CodexTransportError,
+    default_approval_response,
+    codex_child_env,
+    is_decline,
+)
 
 
 def _codex_child_env():
     """Copy the ambient environment without product-managed Claude inbox secrets."""
-    child_env = dict(os.environ)
-    child_env.pop("CLAUDE_CODE_MESSAGING_SOCKET", None)
-    child_env.pop("CLAUDE_CODE_MESSAGING_TOKEN", None)
-    return child_env
+    return codex_child_env()
 
 
-class CodexCallError(RuntimeError):
-    def __init__(self, kind: str, method: str, details: Optional[JsonObject] = None):
-        self.kind = kind
-        self.method = method
-        self.details = details
-        message = "%s: %s" % (method, kind)
-        if details and isinstance(details.get("message"), str):
-            message += ": " + details["message"]
-        super().__init__(message)
-
-    @classmethod
-    def from_response(cls, method: str, error: Any):
-        details = dict(error) if isinstance(error, dict) else {"message": str(error)}
-        return cls("upstream_error", method, details)
-
-
-class CodexTransportError(CodexCallError):
-    def __init__(self, kind: str = "transport_error", method: str = "transport",
-                 details: Optional[JsonObject] = None):
-        super().__init__(kind, method, details)
-
-
-class CodexAppServer:
+class CodexAppServer(CodexMethodAdapter):
     """Newline-delimited JSON-RPC adapter with serialized writes and call routing."""
 
-    _APPROVAL_METHODS = {
-        "item/commandExecution/requestApproval",
-        "item/fileChange/requestApproval",
-        "item/tool/requestUserInput",
-        "item/permissions/requestApproval",
-    }
+    _APPROVAL_METHODS = APPROVAL_METHODS
 
     def __init__(
         self,
@@ -295,23 +274,11 @@ class CodexAppServer:
 
     @staticmethod
     def _default_approval_response(method: str) -> JsonObject:
-        if method in ("item/commandExecution/requestApproval", "item/fileChange/requestApproval"):
-            return {"decision": "decline"}
-        if method == "item/tool/requestUserInput":
-            return {"answers": {}}
-        if method == "item/permissions/requestApproval":
-            return {"permissions": {}}
-        return {}
+        return default_approval_response(method)
 
     @staticmethod
     def _is_decline(method: str, result: JsonObject) -> bool:
-        if method in ("item/commandExecution/requestApproval", "item/fileChange/requestApproval"):
-            return result.get("decision") in ("decline", "cancel")
-        if method == "item/tool/requestUserInput":
-            return not result.get("answers")
-        if method == "item/permissions/requestApproval":
-            return not result.get("permissions")
-        return True
+        return is_decline(method, result)
 
     def _handle_server_request(self, message: JsonObject) -> None:
         method = message.get("method")
@@ -338,69 +305,6 @@ class CodexAppServer:
                 "decision": "decline",
             }
             self._emit_notification({"method": "approval/declined", "params": safe_params})
-
-    def list_models(self) -> List[JsonObject]:
-        data = self.call("model/list", {}).get("data", [])
-        if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
-            raise CodexCallError("protocol_error", "model/list", {"message": "data must be a list"})
-        return data
-
-    def start_thread(self, cwd: str, model: Optional[str] = None,
-                     sandbox: str = "workspace-write", allow_provider_model_fallback: Optional[bool] = None) -> JsonObject:
-        params = {
-            "cwd": cwd,
-            "approvalPolicy": "never",
-            "sandbox": sandbox,
-            "serviceName": "superdev_codex_worker",
-        }  # type: Dict[str, Any]
-        if model is not None:
-            params["model"] = model
-        if allow_provider_model_fallback is not None:
-            params["allowProviderModelFallback"] = allow_provider_model_fallback
-        return self.call("thread/start", params)
-
-    def resume_thread(self, thread_id: str, approval_policy: str = "never",
-                      sandbox: str = "workspace-write") -> JsonObject:
-        return self.call("thread/resume", {
-            "threadId": thread_id,
-            "approvalPolicy": approval_policy,
-            "sandbox": sandbox,
-        })
-
-    def start_turn(self, thread_id: str, prompt: str, model: Optional[str] = None,
-                   effort: Optional[str] = None, sandbox_policy: Optional[JsonObject] = None,
-                   output_schema: Optional[JsonObject] = None) -> str:
-        params = {
-            "threadId": thread_id,
-            "input": [{"type": "text", "text": prompt}],
-        }  # type: Dict[str, Any]
-        if model is not None:
-            params["model"] = model
-        if effort is not None:
-            params["effort"] = effort
-        if sandbox_policy is not None:
-            params["sandboxPolicy"] = sandbox_policy
-        if output_schema is not None:
-            params["outputSchema"] = output_schema
-        result = self.call("turn/start", params)
-        turn = result.get("turn")
-        if not isinstance(turn, dict) or not isinstance(turn.get("id"), str):
-            raise CodexCallError("protocol_error", "turn/start", {"message": "missing turn id"})
-        return turn["id"]
-
-    def steer(self, thread_id: str, turn_id: str, prompt: str) -> str:
-        result = self.call("turn/steer", {
-            "threadId": thread_id,
-            "expectedTurnId": turn_id,
-            "input": [{"type": "text", "text": prompt}],
-        })
-        returned_id = result.get("turnId")
-        if not isinstance(returned_id, str):
-            raise CodexCallError("protocol_error", "turn/steer", {"message": "missing turn id"})
-        return returned_id
-
-    def interrupt(self, thread_id: str, turn_id: str) -> None:
-        self.call("turn/interrupt", {"threadId": thread_id, "turnId": turn_id})
 
     def shutdown(self) -> None:
         error = CodexTransportError(details={"message": "adapter shutdown"})

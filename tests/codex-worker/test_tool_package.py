@@ -43,11 +43,27 @@ class ToolPackageTests(unittest.TestCase):
         text = PYPROJECT.read_text(encoding="utf-8")
         self.assertIn('name = "codex-worker"', text)
         self.assertIn('requires-python = ">=3.9"', text)
-        self.assertIn('dependencies = []', text)
+        self.assertIn('dependencies = ["websockets>=15,<16"]', text)
         self.assertIn('codex-worker = "codex_worker.cli:main"', text)
         self.assertIn('requires = ["hatchling>=1.27,<2"]', text)
         self.assertIn('build-backend = "hatchling.build"', text)
         self.assertIn('packages = ["codex_worker"]', text)
+
+    def test_websocket_modules_import_without_eager_dependency_resolution(self):
+        completed = subprocess.run(
+            [sys.executable, "-c", (
+                "import codex_worker.websocket_transport; "
+                "import codex_worker.websocket_gateway; "
+                "import codex_worker.service"
+            )],
+            text=True,
+            capture_output=True,
+            check=False,
+            env={**os.environ, "PYTHONPATH": str(SCRIPTS)},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, "")
+        self.assertEqual(completed.stderr, "")
 
     def test_source_cli_version_matches_plugin_manifest(self):
         expected = json.loads(CLAUDE_MANIFEST.read_text(encoding="utf-8"))["version"]
