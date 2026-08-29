@@ -476,7 +476,7 @@ regressions that still govern the new topology.
 The first independent ride exposed five surface-law gaps. D24–D28 amend the implementation
 contract without changing the global topology or accepted shared-control mechanisms:
 
-- the public exit map is exactly 0 success / 1 uncaught internal bug / 2 local usage / 3
+- the public exit map is exactly 0 success / 1 uncaught or peer-reported internal bug / 2 local usage / 3
   typed operational refusal;
 - managed raw session/turn dispatch validates only the hidden strict readiness response and
   never enumerates unrelated global thread inventory before the selected RPC;

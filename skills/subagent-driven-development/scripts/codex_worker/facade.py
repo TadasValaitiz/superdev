@@ -8,6 +8,7 @@ from typing import Callable, Optional, Protocol, runtime_checkable
 
 from .broker import (AnnotationPolicy, ModelSelectionError, NativeCodexProxy,
                      SessionStartSpec, TurnStartSpec)
+from .app_server import CodexCallError
 from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatusView,
                        CompletionResponse, ControlResponse, FacadeFault,
                        FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
@@ -29,6 +30,7 @@ from .callback_dispatcher import TerminalProjectionContext
 from .models import MaintenanceResult
 from .service_domain import (MigrationResolveView, MigrationStatusView,
                              ServiceConfig, DEFAULT_PUBLIC_LISTENER)
+from .websocket_gateway import ServiceBusyError
 
 
 _TIER_MODELS = {Tier.MEDIUM: "gpt-5.6-terra", Tier.VERY_SMART: "gpt-5.6-sol"}
@@ -622,6 +624,15 @@ class WorkerFacade:
                 }],
             )
         if isinstance(exc, RpcFault):
+            if exc.kind in ("internal_error", "broker_error"):
+                raise exc
+            if limits:
+                return FacadeFault(
+                    FacadeFaultCode.LIMITS_UNAVAILABLE,
+                    "Codex limits are unavailable", "limits_unavailable",
+                    details={"reason": exc.message, "capacity": "unknown",
+                             "inference": "do_not_infer"},
+                    known_ids=self._known(record, name))
             try: code = FacadeFaultCode(exc.code)
             except ValueError:
                 code = FacadeFaultCode.DAEMON_STOPPED if exc.kind == "session_detached" else FacadeFaultCode.CODEX_FAILURE
@@ -646,13 +657,25 @@ class WorkerFacade:
             return FacadeFault(code, exc.message, self._kind(code),
                                details=self._details(exc.details, record, known["thread_id"]),
                                known_ids=known, next_actions=next_actions)
+        if isinstance(exc, CodexCallError):
+            code = (FacadeFaultCode.LIMITS_UNAVAILABLE if limits
+                    else FacadeFaultCode.CODEX_PROTOCOL_ERROR
+                    if exc.kind == "protocol_error" else FacadeFaultCode.CODEX_FAILURE)
+            details = self._details(
+                {"reason": str(exc), "method": exc.method, "provider_kind": exc.kind},
+                record)
+            if limits:
+                details.update({"capacity": "unknown", "inference": "do_not_infer"})
+            return FacadeFault(
+                code, "Codex limits are unavailable" if limits else "Codex operation failed",
+                self._kind(code), details=details, known_ids=self._known(record, name))
+        if isinstance(exc, ServiceBusyError):
+            return FacadeFault(
+                FacadeFaultCode.CODEX_FAILURE, "Codex operation failed", "codex_failure",
+                details=self._details({"reason": str(exc)}, record),
+                known_ids=self._known(record, name))
         if isinstance(exc, (RegistryError, OSError)): return self._registry_fault(exc, name, record)
-        code = FacadeFaultCode.LIMITS_UNAVAILABLE if limits else FacadeFaultCode.CODEX_FAILURE
-        details = self._details({"reason": str(exc)}, record)
-        if limits:
-            details.update({"capacity": "unknown", "inference": "do_not_infer"})
-        return FacadeFault(code, "Codex operation failed" if not limits else "Codex limits are unavailable",
-                           self._kind(code), details=details, known_ids=self._known(record, name))
+        raise exc
 
     @staticmethod
     def _kind(code):
@@ -727,7 +750,12 @@ class ServiceFacade:
         try:
             service = self.deps.service.status()
             if not service.ready:
-                raise RuntimeError("global service is not ready")
+                return Err(FacadeFault(
+                    FacadeFaultCode.DAEMON_STOPPED,
+                    "Global service is stopping", "daemon_stopped",
+                    details={"reason": "service_stopping"},
+                    next_actions=[{"command": "codex-worker daemon status",
+                                   "reason": "Inspect the global service state"}]))
             return Ok(ServiceReadinessResponse(
                 "ready", service.worker_version, os.getpid(), service.codex_pid,
                 service.listener, True))
@@ -800,12 +828,16 @@ class ServiceFacade:
                 "legacy_name_conflict", details={"candidates": exc.candidates},
                 next_actions=exc.next_actions)
         if isinstance(exc, RpcFault):
+            if exc.kind in ("internal_error", "broker_error"):
+                raise exc
             details = dict(exc.details) if isinstance(exc.details, dict) else {}
             details.setdefault("reason", reason)
             return FacadeFault(FacadeFaultCode.CODEX_FAILURE,
                                "Global service operation failed", "codex_failure",
                                details=details)
-        return FacadeFault(
-            FacadeFaultCode.CODEX_FAILURE,
-            "Global service operation failed", "codex_failure",
-            details={"reason": reason, "cause": type(exc).__name__})
+        if isinstance(exc, OSError):
+            return FacadeFault(
+                FacadeFaultCode.CODEX_FAILURE,
+                "Global service operation failed", "codex_failure",
+                details={"reason": reason, "cause": type(exc).__name__})
+        raise exc

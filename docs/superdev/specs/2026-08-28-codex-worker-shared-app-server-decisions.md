@@ -580,7 +580,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 
 - **Trigger:** handled operational states such as `timeout_active`, `service_busy`, and
   `address_in_use` exited 1, which the governing canon reserves for an internal bug.
-- **Decided:** 0 is success, 1 is an uncaught internal bug, 2 is local usage, and 3 is every
+- **Decided:** 0 is success, 1 is an uncaught or peer-reported internal bug, 2 is local usage, and 3 is every
   typed operational refusal returned by the local façade, RPC peer, managed supervisor, or
   endpoint safety boundary. One structured JSON object remains the refusal output.
 - **Not exit 2:** a syntactically valid request refused by current runtime state is operational,

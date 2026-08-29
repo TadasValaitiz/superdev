@@ -18,7 +18,7 @@ codex-worker [--pretty] [--socket ABSOLUTE_PATH] COMMAND ...
   It never selects or creates another public service and never implies an attach address.
 - Without `--socket`, every operational command addresses one machine-local global service.
 - Every client invocation emits exactly one JSON object on stdout. Success exits 0; an
-  uncaught internal bug exits 1; local usage errors exit 2; and every typed operational
+  uncaught or peer-reported internal bug exits 1; local usage errors exit 2; and every typed operational
   refusal exits 3 with a literal runnable remedy. `daemon serve` remains stdout-silent.
 - Local argument validation precedes service startup or network contact.
 

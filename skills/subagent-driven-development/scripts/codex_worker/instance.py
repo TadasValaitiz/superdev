@@ -703,7 +703,8 @@ class ServiceManager:
             response = self.deps.rpc_call(
                 str(self.deps.paths.rpc_socket), "service/status", {}, 30.0)
         except (OSError, RpcFault) as exc:
-            if isinstance(exc, RpcFault) and exc.kind not in ("daemon_unavailable",):
+            if isinstance(exc, RpcFault) and exc.kind not in (
+                    "daemon_unavailable", "daemon_stopped"):
                 raise
             return None
         try:
@@ -722,7 +723,8 @@ class ServiceManager:
             response = self.deps.rpc_call(
                 str(self.deps.paths.rpc_socket), "service/readiness", {}, 0.2)
         except (OSError, RpcFault) as exc:
-            if isinstance(exc, RpcFault) and exc.kind not in ("daemon_unavailable",):
+            if isinstance(exc, RpcFault) and exc.kind not in (
+                    "daemon_unavailable", "daemon_stopped"):
                 raise
             return None
         try:

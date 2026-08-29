@@ -278,12 +278,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_public_limits(parser: argparse.ArgumentParser) -> None:
     """Attach an explicit operational boundary to every public help surface."""
-    generic = ("Uses the one machine-wide service and global worker names. "
-               "Typed operational refusals exit 3; this command never stops the service.")
+    generic = ("Uses the one machine-wide service and global worker names. It may replace an "
+               "incompatible idle service, but never forces active work or performs cleanup stop.")
     danger = ("Machine-wide and human-supervised. Active work refuses unless --force is "
               "explicitly supplied; --force may interrupt every reported active turn.")
-    raw = ("Requires the existing strictly ready global service and never auto-starts it. "
-           "Exact session/thread selectors are preserved on typed operational refusal.")
+    raw = ("Without the expert global --socket bypass, requires the existing strictly ready "
+           "service and never auto-starts it. --socket targets only that exact Unix endpoint.")
 
     def visit(current: argparse.ArgumentParser, path: List[str]) -> None:
         if path == ["daemon", "serve"]:
@@ -495,7 +495,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except RpcFault as fault:
         response = rpc_response("cli", fault=fault)
         _print_json(response, args.pretty)
-        return 3
+        return _response_error_exit(response)
     except OSError:
         response = rpc_response("cli", fault=daemon_unavailable_fault(args.socket or default_socket_path()))
         _print_json(response, args.pretty)
@@ -509,8 +509,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _print_json(response, args.pretty)
     if "error" in response:
-        return 3
+        return _response_error_exit(response)
     return 0
+
+
+def _response_error_exit(response: JsonObject) -> int:
+    error = response.get("error")
+    data = error.get("data") if isinstance(error, dict) else None
+    kind = data.get("kind") if isinstance(data, dict) else None
+    return 1 if kind in ("internal_error", "broker_error") else 3
 
 
 def _serve(args: argparse.Namespace) -> int:
@@ -959,12 +966,18 @@ def _print_json(payload: JsonObject, pretty: bool) -> None:
 
 def _validate_wire_recovery_actions(payload: JsonObject) -> None:
     commands = []  # type: List[str]
+    command_fields = {"command", "attach_command", "resume_command"}
 
     def walk(value: Any) -> None:
         if isinstance(value, dict):
+            commands.extend(item for key, item in value.items()
+                            if key in command_fields and isinstance(item, str))
             recovery = value.get("recovery")
             if isinstance(recovery, str):
                 commands.append(recovery)
+            elif isinstance(recovery, dict):
+                commands.extend(command for command in recovery.values()
+                                if isinstance(command, str))
             actions = value.get("next_actions")
             if isinstance(actions, list):
                 for action in actions:
@@ -981,15 +994,25 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
     walk(payload)
     parser = build_parser()
     for command in commands:
+        if "\n" in command or "\r" in command:
+            raise ValueError("recovery action must be one direct argv")
         tokens = shlex.split(command)
+        shell_lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|`$()")
+        shell_lexer.whitespace_split = True
+        shell_tokens = list(shell_lexer)
         if not tokens or "<" in command or ">" in command:
             raise ValueError("recovery action is not literal")
+        if any(token and set(token) <= set(";&|`$()") for token in shell_tokens):
+            raise ValueError("recovery action must be one direct argv")
         if tokens[0] == "codex-worker":
             try:
                 with open(os.devnull, "w") as discard:
                     with contextlib.redirect_stdout(discard), \
                             contextlib.redirect_stderr(discard):
-                        parser.parse_args(tokens[1:])
+                        parsed = parser.parse_args(tokens[1:])
+                if (getattr(parsed, "family", None) == "daemon"
+                        and getattr(parsed, "action", None) == "serve"):
+                    raise ValueError("hidden daemon serve is not a public recovery action")
             except SystemExit as exc:
                 if exc.code != 0:
                     raise ValueError("recovery action does not parse: %s" % command)
@@ -999,5 +1022,7 @@ def _validate_wire_recovery_actions(payload: JsonObject) -> None:
             if len(tokens) not in (3, 5) or tokens[1] != "--remote" or (
                     len(tokens) == 5 and tokens[3] != "resume"):
                 raise ValueError("Codex recovery action does not match the public attach grammar")
-        elif not Path(tokens[0]).is_absolute() or not Path(tokens[0]).is_file():
+            validate_public_listener(tokens[2])
+        elif (not Path(tokens[0]).is_absolute() or not Path(tokens[0]).is_file()
+              or not os.access(tokens[0], os.X_OK)):
             raise ValueError("recovery action executable does not exist: %s" % tokens[0])

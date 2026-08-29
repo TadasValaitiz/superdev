@@ -20,6 +20,8 @@ from codex_worker.instance import (InstanceDeps, InstanceManager, derive_instanc
 from codex_worker.service_domain import DEFAULT_PUBLIC_LISTENER
 import codex_worker.instance as instance_module
 from codex_worker.rpc import rpc_call as production_rpc_call
+from codex_worker.models import RpcFault
+from codex_worker.commands import FacadeFaultCode
 
 
 @dataclass
@@ -722,6 +724,24 @@ class GlobalServiceManagerTests(unittest.TestCase):
         manager = ServiceManager(replace(self.manager.deps, rpc_call=rpc))
         self.assertEqual(manager.status().status, "ready")
         self.assertEqual(observed, [("service/status", 30.0)])
+
+    def test_shutdown_poll_treats_typed_stopping_readiness_as_not_ready(self):
+        before = type("Before", (), {"pid": 1234, "app_server_pid": 5678})()
+        observations = iter([True, False])
+        self.paths.rpc_socket.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.rpc_socket.touch()
+
+        def rpc(unused_socket, method, unused_params, unused_timeout):
+            self.assertEqual(method, "service/readiness")
+            if next(observations):
+                self.paths.rpc_socket.unlink()
+                raise RpcFault(FacadeFaultCode.DAEMON_STOPPED.value,
+                               "Global service is stopping", "daemon_stopped")
+            raise OSError("stopped")
+
+        manager = ServiceManager(replace(
+            self.manager.deps, rpc_call=rpc, pid_alive=lambda unused_pid: False))
+        manager._await_stopped(before)
 
     def test_stopped_status_corrupt_durable_files_fail_as_closed_operational_faults(self):
         self.paths.durable_dir.mkdir(parents=True, mode=0o700)

@@ -215,11 +215,38 @@ class RecoveryActionTests(unittest.TestCase):
              "reason": "attach"},
         ]}}}
         cli._validate_wire_recovery_actions(valid)
-        for command in ("codex-worker daemon serve --bad", "missing-tool status"):
+        for command in ("codex-worker daemon serve", "codex-worker daemon serve --bad",
+                        "missing-tool status", "/etc/hosts",
+                        "/bin/ls /tmp; /usr/bin/false",
+                        "/bin/ls /tmp\n/usr/bin/false",
+                        "/bin/ls /tmp # comment\n/usr/bin/false"):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, "recovery"):
                 cli._validate_wire_recovery_actions({
                     "error": {"data": {"next_actions": [
                         {"command": command, "reason": "bad"}]}}})
+
+    def test_completion_recovery_commands_are_inside_the_exhaustive_guard(self):
+        for command in ("missing-tool status", "codex-worker daemon serve --bad",
+                        "codex-worker status --name <worker>", "codex --remote wrong"):
+            with self.subTest(command=command), self.assertRaises(ValueError):
+                cli._validate_wire_recovery_actions({
+                    "result": {"recovery": {
+                        "status": command, "messages": "codex-worker messages --name worker-a",
+                        "interrupt": "codex-worker interrupt --name worker-a",
+                        "raw_resume": None,
+                    }}})
+
+    def test_attach_resume_and_resolution_commands_are_inside_the_exhaustive_guard(self):
+        payloads = [
+            {"result": {"attach": {
+                "attach_command": "codex-worker daemon serve",
+                "resume_command": "missing-tool go"}}},
+            {"result": {"resolution_actions": [{
+                "command": "codex-worker daemon serve", "reason": "bad"}]}},
+        ]
+        for payload in payloads:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                cli._validate_wire_recovery_actions(payload)
 
 
 class PublicHelpLimitsTests(unittest.TestCase):
@@ -259,7 +286,7 @@ class PublicHelpLimitsTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(SystemExit):
                 with contextlib.redirect_stdout(io.StringIO()) as output:
                     parser.parse_args(path + ["--help"])
-            for fragment in ("strictly ready", "never auto-starts"):
+            for fragment in ("strictly ready", "never auto-starts", "--socket bypass"):
                 self.assertIn(fragment, output.getvalue())
 
 
@@ -1337,6 +1364,17 @@ class CliTests(unittest.TestCase):
                                   "--prompt", "try anyway"], fake_rpc=fake_rpc_error)
         self.assertEqual(completed.returncode, 3)
         self.assertEqual(json.loads(completed.stdout)["error"]["data"]["kind"], "turn_not_active")
+
+    def test_rpc_internal_error_is_the_only_typed_exit_one(self):
+        def fake_internal(socket_path, method, params, timeout):
+            return {"jsonrpc": "2.0", "id": "cli",
+                    "error": {"code": -32603, "message": "Internal error",
+                              "data": {"kind": "internal_error"}}}
+
+        completed = self.run_cli(
+            ["--socket", self.socket_path, "model", "list"],
+            fake_rpc=fake_internal, include_socket=False)
+        self.assert_json_error(completed, 1, "internal_error")
 
     def test_daemon_absent_is_structured_and_exits_three(self):
         completed = self.run_cli(["daemon", "status"], fake_rpc=None)

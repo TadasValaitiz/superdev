@@ -971,7 +971,8 @@ class FacadeTests(unittest.TestCase):
 
     def test_limits_unavailable_marks_capacity_unknown_without_fake_action(self):
         self.native.call = lambda method, params: (_ for _ in ()).throw(
-            RuntimeError("authentication does not expose limits"))
+            RpcFault(FacadeFaultCode.LIMITS_UNAVAILABLE.value,
+                     "authentication does not expose limits", "limits_unavailable"))
 
         result = self._facade().limits(LimitsRequest())
 
@@ -983,6 +984,14 @@ class FacadeTests(unittest.TestCase):
             "inference": "do_not_infer",
         })
         self.assertEqual(result.error.next_actions, [])
+
+    def test_unexpected_worker_dependency_bug_escapes_for_rpc_internal_error(self):
+        self.broker.model_list = lambda: (_ for _ in ()).throw(
+            RuntimeError("programming defect"))
+
+        with self.assertRaisesRegex(RuntimeError, "programming defect"):
+            self._facade().start(StartWorkerRequest(
+                "internal-bug", "prompt", self.cwd))
 
     def test_unknown_name_and_incomplete_legacy_are_closed_actionable_faults(self):
         facade = self._facade()
@@ -1329,6 +1338,36 @@ class GlobalServiceFacadeTests(unittest.TestCase):
         resolved = facade.migration_resolve(
             ResolveLegacyConflictRequest("legacy-a", "thread-a", None)).value
         self.assertEqual(resolved.attach.thread_id, "thread-a")
+
+    def test_stopping_readiness_is_typed_and_unexpected_service_bug_escapes(self):
+        from codex_worker.facade import ServiceFacade, ServiceFacadeDeps
+        from codex_worker.commands import StatusServiceRequest
+        from codex_worker.service import (GatewayAuthentication, GlobalWorkerServiceStatus,
+                                          ListenerExposure)
+        from codex_worker.service_domain import ServiceConfig
+
+        class Service:
+            def __init__(self): self.failure = None
+            def status(self):
+                if self.failure is not None: raise self.failure
+                return GlobalWorkerServiceStatus(
+                    False, "ws://127.0.0.1:4500", "8.1.0", 22,
+                    "/tmp/private.sock", ListenerExposure.LOOPBACK,
+                    GatewayAuthentication.NONE)
+        class NeverUsed:
+            def __getattr__(self, name): raise AssertionError(name)
+        service = Service()
+        facade = ServiceFacade(ServiceFacadeDeps(
+            service, NeverUsed(), NeverUsed(), NeverUsed(),
+            ServiceConfig("ws://127.0.0.1:4500", "8.1.0",
+                          "00000000-0000-0000-0000-000000000002")))
+
+        stopped = facade.readiness(StatusServiceRequest())
+        self.assertIsInstance(stopped, Err)
+        self.assertEqual(stopped.error.kind, "daemon_stopped")
+        service.failure = RuntimeError("programming defect")
+        with self.assertRaisesRegex(RuntimeError, "programming defect"):
+            facade.readiness(StatusServiceRequest())
 
 if __name__ == "__main__":
     unittest.main()
