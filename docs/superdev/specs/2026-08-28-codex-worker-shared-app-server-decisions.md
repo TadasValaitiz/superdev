@@ -645,3 +645,16 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 - **Affects:** recorder/harness contracts, real-Claude tracked evidence, affected-row reride.
 - **Revisit-when:** the evidence format moves to a content-addressed artifact store that remains
   available from a fresh checkout.
+
+## D29 — Preserve unavailable historical cleanup fields and require the reride to measure them
+**When:** 2026-08-29 · **Phase:** checkride correction · **Status:** locked
+**Decided by:** implementation erratum under D28's no-invention rule
+
+- **Decided:** a historical cleanup row may label timing unavailable when the original measured
+  harness did not retain it; it may not synthesize a duration. Such a row does not satisfy the
+  final D28 gate. The same-executor reride must replace it with measured timing, substrate,
+  stderr, environment-name allowlist, and literal pre-stop owner/path/PID assertions.
+- **Future harness:** verifies owner markers and exact live PIDs before stop, removes its pinned
+  isolated credential copy independently, and emits every D28 field for commands and assertions.
+- **Affects:** historical real-Claude cleanup erratum and affected cleanup reride rows.
+- **Revisit-when:** the required reride has produced a fully measured tracked cleanup record.

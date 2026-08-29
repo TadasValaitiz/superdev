@@ -7,9 +7,10 @@
   },
   "checkride_verdict": "PENDING controller executor/evaluator",
   "cleanup": {
-    "claude_config_copied": false,
+    "external_side_effect": "/Users/tadas/.claude/.claude.json observed after run without pre-run ownership proof; preserved for operator disposition",
+    "historical_auth_isolation": "external HOME used; superseded by isolated runtime copy",
     "literal_record": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/real-claude-cleanup.json",
-    "literal_record_sha256": "dd79412a24a98d9f6d61aeee6557e1de297bd3269f259c54f3eb99a1b78160d6",
+    "literal_record_sha256": "13305201c77ec3402902dee03fb5c3ec923ddf1ea8cd9373de9762e3bf111c37",
     "processes_remaining": 0,
     "runtime_deleted": true,
     "service_status": "stopped",

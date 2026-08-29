@@ -17,6 +17,8 @@ REAL_HOME=$HOME
 REAL_CODEX_HOME=${CODEX_HOME:-$REAL_HOME/.codex}
 REAL_CLAUDE_CONFIG_ROOT=${CLAUDE_CONFIG_DIR:-$REAL_HOME/.claude}
 CLAUDE_CALLER_HOME="$RUNTIME/claude-caller-home"
+AUTH_PARENT_DEV_INO=""
+AUTH_FILE_DEV_INO=""
 ISOLATED_CLI="$FIXTURE/uv-bin/codex-worker"
 export CODEX_WORKER_UV_EXECUTABLE="$FIXTURE/uv-bin/codex-worker.uv-real"
 export CODEX_WORKER_ISOLATED_HOME="$FIXTURE/home"
@@ -27,6 +29,7 @@ export CODEX_WORKER_CLAUDE_CONFIG_ROOT="$REAL_CLAUDE_CONFIG_ROOT"
 mkdir -p "$RUN_DIR" "$REPO" "$FIXTURE/home" "$FIXTURE/state" \
   "$FIXTURE/uv-tools" "$FIXTURE/uv-bin" "$FIXTURE/uv-cache" "$CLAUDE_CALLER_HOME"
 chmod 700 "$RUN_DIR" "$FIXTURE" "$RUNTIME"
+AUTH_PARENT_DEV_INO=$(stat -f '%d:%i' "$CLAUDE_CALLER_HOME")
 python3 - "$RUN_DIR/fixture-owner.json" "$RUNTIME/fixture-owner.json" \
   "$OWNER_TOKEN" "$RUN_DIR" "$RUNTIME" <<'PY'
 import json, os, sys
@@ -57,15 +60,78 @@ cleanup() {
   local stop_rc=0
   local after_rc=0
   local cli_available=0
-  if [[ -x "$ISOLATED_CLI" && -x "$CODEX_WORKER_UV_EXECUTABLE" ]]; then
+  local auth_rc=0
+  local pid_rc=0
+  local owner_elapsed=0 before_elapsed=0 pid_elapsed=0 stop_elapsed=0 after_elapsed=0
+  local started=$SECONDS
+  python3 - "$CLAUDE_CALLER_HOME" "$AUTH_PARENT_DEV_INO" \
+    "$AUTH_FILE_DEV_INO" <<'PY' || auth_rc=$?
+import os, pathlib, stat, sys
+parent=pathlib.Path(sys.argv[1]); expected_parent=sys.argv[2]; expected_file=sys.argv[3]
+if expected_file:
+    parent_stat=os.lstat(str(parent))
+    assert stat.S_ISDIR(parent_stat.st_mode)
+    assert "%d:%d" % (parent_stat.st_dev, parent_stat.st_ino) == expected_parent
+    auth=parent/".claude.json"; auth_stat=os.lstat(str(auth))
+    assert stat.S_ISREG(auth_stat.st_mode)
+    assert "%d:%d" % (auth_stat.st_dev, auth_stat.st_ino) == expected_file
+    os.unlink(str(auth))
+PY
+  [[ $auth_rc -eq 0 ]] || rc=$auth_rc
+  started=$SECONDS
+  python3 - "$RUN_DIR/fixture-owner.json" "$RUNTIME/fixture-owner.json" \
+    "$OWNER_TOKEN" "$RUN_DIR" "$RUNTIME" "$RUN_DIR/cleanup-owner-before.json" <<'PY' || owner_rc=$?
+import json, pathlib, sys
+for path, expected in ((sys.argv[1], sys.argv[4]), (sys.argv[2], sys.argv[5])):
+    value=json.load(open(path, encoding="utf-8"))
+    assert value == {"owner_token": sys.argv[3], "owner_pid": value["owner_pid"],
+                     "expected_path": expected}
+pathlib.Path(sys.argv[6]).write_text(json.dumps({
+    "assertion":"run and runtime owner tokens and exact paths match",
+    "output":{"token_verified":True,"path_verified":True},"exit":0,
+    "substrate":"MEASURED Python 3.9 owner assertion"},sort_keys=True)+"\n")
+PY
+  owner_elapsed=$((SECONDS-started))
+  [[ $owner_rc -eq 0 ]] || rc=$owner_rc
+  if [[ $owner_rc -eq 0 && -x "$ISOLATED_CLI" && -x "$CODEX_WORKER_UV_EXECUTABLE" ]]; then
     cli_available=1
+    started=$SECONDS
     "$ISOLATED_CLI" daemon status >"$RUN_DIR/cleanup-status-before.json" \
       2>"$RUN_DIR/cleanup-status-before.stderr" || before_rc=$?
-    "$ISOLATED_CLI" daemon stop >"$RUN_DIR/cleanup-stop.json" \
-      2>"$RUN_DIR/cleanup-stop.stderr" || stop_rc=$?
+    before_elapsed=$((SECONDS-started))
+    started=$SECONDS
+    python3 - "$RUN_DIR/cleanup-status-before.json" "$RUNTIME_REAL" \
+      "$RUN_DIR/cleanup-pid-binding.json" <<'PY' || pid_rc=$?
+import hashlib, json, os, pathlib, subprocess, sys
+status=json.load(open(sys.argv[1],encoding="utf-8"))["result"]
+runtime=sys.argv[2]; daemon_pid=status["pid"]; app_pid=status["app_server_pid"]
+assert type(daemon_pid) is int and type(app_pid) is int
+def owned(pid, needles):
+    row=subprocess.check_output(["ps","-p",str(pid),"-o","uid=,command="],text=True).strip()
+    uid, command=row.split(None,1); assert int(uid)==os.getuid()
+    assert all(needle in command for needle in needles), command
+    return hashlib.sha256(command.encode()).hexdigest()
+output={"daemon_pid":daemon_pid,"app_server_pid":app_pid,
+        "daemon_command_sha256":owned(daemon_pid,(runtime,"daemon","serve")),
+        "app_server_command_sha256":owned(app_pid,(runtime,"codex","app-server"))}
+pathlib.Path(sys.argv[3]).write_text(json.dumps({"assertion":"status PIDs are exact owned runtime processes",
+ "output":output,"exit":0,"substrate":"MEASURED ps process binding"},sort_keys=True)+"\n")
+PY
+    pid_elapsed=$((SECONDS-started))
+    if [[ $before_rc -eq 0 && $pid_rc -eq 0 ]]; then
+      started=$SECONDS
+      "$ISOLATED_CLI" daemon stop >"$RUN_DIR/cleanup-stop.json" \
+        2>"$RUN_DIR/cleanup-stop.stderr" || stop_rc=$?
+      stop_elapsed=$((SECONDS-started))
+    else
+      stop_rc=125
+    fi
+    started=$SECONDS
     "$ISOLATED_CLI" daemon status >"$RUN_DIR/cleanup-status-after.json" \
       2>"$RUN_DIR/cleanup-status-after.stderr" || after_rc=$?
+    after_elapsed=$((SECONDS-started))
     [[ $before_rc -eq 0 ]] || rc=$before_rc
+    [[ $pid_rc -eq 0 ]] || rc=$pid_rc
     [[ $stop_rc -eq 0 ]] || rc=$stop_rc
     [[ $after_rc -eq 0 ]] || rc=$after_rc
   else
@@ -89,25 +155,48 @@ PY
     rc=$owner_rc
   fi
   python3 - "$RUN_DIR/sanitized-cleanup.json" "$RUN_DIR" "$RUNTIME_REAL" \
-    "$before_rc" "$stop_rc" "$after_rc" "$owner_rc" <<'PY'
+    "$before_rc" "$stop_rc" "$after_rc" "$owner_rc" "$AUTH_FILE_DEV_INO" \
+    "$auth_rc" "$owner_elapsed" "$before_elapsed" "$stop_elapsed" \
+    "$after_elapsed" "$pid_elapsed" <<'PY'
 import json, pathlib, sys
 output, run, runtime = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
 names=("cleanup-status-before.json", "cleanup-stop.json", "cleanup-status-after.json")
 rows=[]
-for argv, name, exit_code in zip(
+elapsed_values=list(map(int,sys.argv[11:14]))
+for argv, name, exit_code, elapsed_seconds in zip(
         (("codex-worker","daemon","status"), ("codex-worker","daemon","stop"),
-         ("codex-worker","daemon","status")), names, map(int, sys.argv[4:7])):
+         ("codex-worker","daemon","status")), names, map(int, sys.argv[4:7]),
+         elapsed_values):
     path=run/name
+    stderr=path.with_suffix(".stderr")
     rows.append({"argv":list(argv), "exit":exit_code,
-                 "output":json.load(open(path, encoding="utf-8")) if path.exists() else None})
+                 "output":json.load(open(path, encoding="utf-8")) if path.exists() else None,
+                 "stderr":stderr.read_text(encoding="utf-8") if stderr.exists() else "",
+                 "environment_names":["CODEX_HOME","HOME","PATH","TMPDIR","XDG_STATE_HOME"],
+                 "elapsed_seconds":elapsed_seconds,
+                 "substrate":"MEASURED isolated UV/tool subprocess"})
+owner_assertion=(json.load(open(run/"cleanup-owner-before.json",encoding="utf-8"))
+                 if (run/"cleanup-owner-before.json").exists() else None)
+if owner_assertion is not None:
+    owner_assertion.update({"argv":["python3","-","fixture-owner.json",
+        "runtime/fixture-owner.json","[REDACTED]","RUN_DIR","RUNTIME"],
+        "stderr":"","environment_names":[],"elapsed_seconds":int(sys.argv[10])})
+pid_assertion=(json.load(open(run/"cleanup-pid-binding.json",encoding="utf-8"))
+               if (run/"cleanup-pid-binding.json").exists() else None)
+if pid_assertion is not None:
+    pid_assertion.update({"argv":["python3","-","cleanup-status-before.json",
+        "RUNTIME","cleanup-pid-binding.json"],"stderr":"","environment_names":[],
+        "elapsed_seconds":int(sys.argv[14])})
 value={"status":"MEASURED cleanup", "commands":rows,
+       "owner_assertion":owner_assertion,
+       "pid_binding_assertion":pid_assertion,
        "owner_token_verified":int(sys.argv[7]) == 0,
+       "isolated_auth_copy_created":bool(sys.argv[8]),
+       "isolated_auth_copy_removed":bool(sys.argv[8]) and int(sys.argv[9]) == 0,
+       "external_claude_config_modified":False,
        "runtime_path":runtime, "runtime_deleted":False}
 output.write_text(json.dumps(value,indent=2,sort_keys=True)+"\n", encoding="utf-8")
 PY
-  if [[ $owner_rc -eq 0 ]]; then
-    rm -f "$CLAUDE_CALLER_HOME/.claude.json"
-  fi
   if [[ $owner_rc -eq 0 && ( $rc -eq 0 || $cli_available -eq 0 ) \
         && "$RUNTIME_REAL" == /private/tmp/cw5-claude.* ]]; then
     rm -r "$RUNTIME_REAL"
@@ -123,6 +212,7 @@ PY
 trap cleanup EXIT INT TERM
 
 install -m 600 "$REAL_HOME/.claude.json" "$CLAUDE_CALLER_HOME/.claude.json"
+AUTH_FILE_DEV_INO=$(stat -f '%d:%i' "$CLAUDE_CALLER_HOME/.claude.json")
 
 uv tool install --reinstall --python 3.9 \
   "$ROOT/skills/subagent-driven-development/scripts" \

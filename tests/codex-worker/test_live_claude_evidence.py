@@ -20,7 +20,15 @@ class ClaudeEvidenceTests(unittest.TestCase):
         wrapper = WRAPPER.read_text(encoding="utf-8")
         self.assertIn('env -u CLAUDE_CONFIG_DIR HOME="$CLAUDE_CALLER_HOME" claude -p', source)
         self.assertIn('install -m 600 "$REAL_HOME/.claude.json"', source)
-        self.assertIn('rm -f "$CLAUDE_CALLER_HOME/.claude.json"', source)
+        self.assertIn('AUTH_FILE_DEV_INO=$(stat', source)
+        self.assertIn('os.unlink(str(auth))', source)
+        self.assertIn('"external_claude_config_modified":False', source)
+        self.assertLess(source.index('cleanup-owner-before.json'),
+                        source.index('daemon stop >"$RUN_DIR/cleanup-stop.json"'))
+        self.assertIn('cleanup-pid-binding.json', source)
+        for field in ('"stderr"', '"environment_names"', '"elapsed_seconds"',
+                      '"substrate"', '"owner_assertion"', '"pid_binding_assertion"'):
+            self.assertIn(field, source)
         self.assertNotIn('HOME="$REAL_HOME" claude', source)
         self.assertIn('codex_worker_isolation_wrapper.sh', source)
         self.assertIn('codex-worker.uv-real', source)
@@ -55,9 +63,10 @@ class ClaudeEvidenceTests(unittest.TestCase):
         self.assertEqual(receipt["tracked_literal_transcript"]["line_count"], 26)
         cleanup = receipt["cleanup"]
         self.assertEqual({key: cleanup[key] for key in (
-            "claude_config_copied", "processes_remaining", "runtime_deleted",
+            "historical_auth_isolation", "processes_remaining", "runtime_deleted",
             "service_status", "socket_listeners_remaining")}, {
-                "claude_config_copied": False, "processes_remaining": 0,
+                "historical_auth_isolation": "external HOME used; superseded by isolated runtime copy",
+                "processes_remaining": 0,
                 "runtime_deleted": True, "service_status": "stopped",
                 "socket_listeners_remaining": 0,
             })
@@ -67,9 +76,15 @@ class ClaudeEvidenceTests(unittest.TestCase):
         literal_cleanup = json.loads(cleanup_record.read_text(encoding="utf-8"))
         self.assertEqual([row["exit"] for row in literal_cleanup["cleanup_commands"]],
                          [0, 0, 0])
+        self.assertTrue(all(set(("argv", "exit", "elapsed_seconds", "environment_names",
+                                     "result", "stderr", "substrate")) <= set(row)
+                            for row in literal_cleanup["cleanup_commands"]))
         self.assertEqual(literal_cleanup["cleanup_commands"][-1]["result"]["status"],
                          "stopped")
         self.assertEqual(literal_cleanup["owner_verification"]["token"], "[REDACTED]")
+        self.assertTrue(set(("argv", "assertion", "output", "exit", "elapsed_seconds",
+                                 "environment_names", "stderr", "substrate")) <=
+                        set(literal_cleanup["owner_verification"]))
 
     def test_validates_path_only_complete_family_coverage(self):
         with tempfile.TemporaryDirectory() as td:
