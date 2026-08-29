@@ -1822,8 +1822,16 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             workdir = self.root / ("work-%d" % index)
             workdir.mkdir()
             self.workdirs.append(workdir)
+        self.app_server_pid = None
+        self.private_codex_socket = derive_service_paths(
+            "darwin", Path(self.env["XDG_STATE_HOME"]), runtime_dir,
+            os.getuid()).private_codex_socket
         self.addCleanup(self._stop_daemon)
         self._json(self._run("daemon", "start", "--app-server-listen", self.listener))
+        status = self._json(self._run("daemon", "status"))["result"]
+        self.app_server_pid = status["app_server_pid"]
+        self.assertTrue(_pid_exists(self.app_server_pid))
+        self.assertTrue(self.private_codex_socket.exists())
 
     def _run(self, *argv, cwd=None, timeout=10):
         return subprocess.run(
@@ -1858,8 +1866,28 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.fail("worker %s did not reach %s; last=%r" % (name, expected, last))
 
     def _stop_daemon(self):
+        before = self._json(self._run("daemon", "status"))["result"]
+        current_app_server_pid = before["app_server_pid"]
+        if current_app_server_pid is not None:
+            self.app_server_pid = current_app_server_pid
         stopped = self._run("daemon", "stop", "--force", timeout=5)
         self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
+        if current_app_server_pid is not None:
+            self.assertFalse(
+                _pid_exists(current_app_server_pid),
+                "owned app-server pid %d survived daemon stop" % current_app_server_pid,
+            )
+        self.assertFalse(
+            self.private_codex_socket.exists(),
+            "private app-server listener survived daemon stop",
+        )
+
+    def test_force_stop_reaps_exact_app_server_and_private_listener(self):
+        app_server_pid = self.app_server_pid
+        private_socket = self.private_codex_socket
+        self._stop_daemon()
+        self.assertFalse(_pid_exists(app_server_pid))
+        self.assertFalse(private_socket.exists())
 
     def test_concurrent_clients_share_one_daemon_without_crossing_results(self):
         self.env["FAKE_CODEX_DELAY"] = "1.0"
