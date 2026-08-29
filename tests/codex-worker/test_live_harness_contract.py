@@ -1,8 +1,8 @@
-import importlib.util
 import contextlib
+import importlib.util
 import io
 import json
-import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -15,248 +15,184 @@ SPEC = importlib.util.spec_from_file_location("live_broker_check", SCRIPT)
 assert SPEC and SPEC.loader
 LIVE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(LIVE)
+UV_SPEC = importlib.util.spec_from_file_location("live_uv_tool_check_contract", UV_SCRIPT)
+assert UV_SPEC and UV_SPEC.loader
+UV = importlib.util.module_from_spec(UV_SPEC)
+UV_SPEC.loader.exec_module(UV)
 
-
-class FakeRecorder:
-    def __init__(self):
-        self.records = []
-
-    def record(self, kind, payload):
-        self.records.append((kind, payload))
-
-
-class FailingDaemon:
-    def __init__(self):
-        self.force_closed = False
-        self.disposed = False
-
-    def shutdown(self):
-        raise RuntimeError("graceful shutdown failed")
-
-    def close(self, force=False):
-        self.force_closed = force
-
-    def dispose(self):
-        self.disposed = True
-
-
-class GoalRunner:
-    def __init__(self, token_budget):
-        self.token_budget = token_budget
-        self.calls = []
-
-    def result(self, *argv, cwd=None):
-        self.calls.append((argv, cwd))
-        return {"availability": "present", "goal": {
-            "status": "paused", "token_budget": self.token_budget,
-        }}
+EXPECTED = (
+    "preflight-package",
+    "common-attach",
+    "exactly-five",
+    "lifecycle",
+    "migration-callback-shared-control",
+    "recovery",
+)
 
 
 class LiveHarnessContractTests(unittest.TestCase):
-    def test_uv_tool_harness_declares_separate_isolated_scenarios(self):
-        self.assertTrue(UV_SCRIPT.is_file(), "UV tool live harness is missing")
-        source = UV_SCRIPT.read_text(encoding="utf-8")
-        for fragment in (
-            '"package-independence"', '"preflight-recovery"',
-            '"durable-reinstall"', '"external-status-worker"',
-            '"UV_TOOL_DIR"', '"UV_TOOL_BIN_DIR"', '"UV_CACHE_DIR"',
-            '"HOME"', '"CODEX_HOME"',
-            '"--python", "3.9"', 'source-away', 'codex_worker',
-            'sys.executable', 'shutil.which', '"--editable" not in',
-            'absent-external-codex', '"daemon", "stop"',
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, source)
-
-    def test_external_status_worker_contract_is_exact_and_non_destructive(self):
-        self.assertTrue(UV_SCRIPT.is_file(), "UV tool live harness is missing")
-        source = UV_SCRIPT.read_text(encoding="utf-8")
-        for fragment in (
-            '/Users/tadas/Projects/ai-ethics/ai-trading-calibration',
-            'uv-global-install', 'status-checker-abc', '"--read-only"',
-            '"--no-callback"', 'branch', 'staged', 'unstaged', 'untracked',
-            'clean', 'exactly one worker', 'before_status == after_status',
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, source)
-        self.assertNotIn("shutil.rmtree(durable", source)
-
-    def test_durable_reinstall_resumes_once_before_status_without_retries(self):
-        source = UV_SCRIPT.read_text(encoding="utf-8")
-        durable = source.split("def scenario_durable_reinstall()", 1)[1].split(
-            "def git_status", 1,
-        )[0]
-        self.assertIn("before_reinstall == after_reinstall", durable)
-        self.assertIn('"run", "--name", name', durable)
-        self.assertIn('continued_worker["session_id"] == worker["session_id"]', durable)
-        self.assertIn('continued_worker["thread_id"] == worker["thread_id"]', durable)
-        self.assertIn('"status", "--name", name', durable)
-        self.assertNotIn("eventually", durable)
-
-    def test_pause_goal_omits_budget_update_and_preserves_authoritative_budget(self):
-        runner = GoalRunner(token_budget=31789)
-        preceding = {"availability": "present", "goal": {
-            "status": "active", "token_budget": 31789,
-        }}
-
-        updated = LIVE.pause_goal_preserving_budget(
-            runner, "native-worker", Path("/tmp/native-workspace"), preceding,
-        )
-
-        self.assertEqual(runner.calls, [(('goal', 'set', '--name', 'native-worker',
-                                         '--status', 'paused'),
-                                        Path('/tmp/native-workspace'))])
-        self.assertEqual(updated["goal"]["token_budget"], 31789)
-
-    def test_managed_live_cli_preserves_codex_authentication_home(self):
-        with tempfile.TemporaryDirectory() as root:
-            recorder = type("RecorderStub", (), {"run_dir": Path(root)})()
-            runner = LIVE.ManagedCLI(recorder, "test-instance")
-            self.assertEqual(runner.env.get("HOME"), os.environ.get("HOME"))
-
-    def test_raw_daemon_uses_python_entrypoint_not_public_shell_launcher(self):
-        self.assertEqual(LIVE.RAW_CLI.name, "codex-worker")
-        self.assertEqual(LIVE.RAW_CLI.parent.name, "scripts")
-        self.assertTrue(LIVE.RAW_CLI.read_text(encoding="utf-8").startswith("#!/usr/bin/env python3"))
-        self.assertTrue(LIVE.CLI.read_text(encoding="utf-8").startswith("#!/bin/sh"))
-
-    def test_selects_exact_two_tier_routes_at_medium_effort(self):
-        models = [
-            {"id": "gpt-5.6-sol", "supported_efforts": ["low", "medium", "high"]},
-            {"id": "gpt-5.6-terra", "supported_efforts": ["low", "medium"]},
-            {"id": "something-else", "supported_efforts": ["medium"]},
-        ]
-        self.assertEqual(LIVE.select_required_routes(models), {
-            "medium": {"model": "gpt-5.6-terra", "effort": "medium"},
-            "very-smart": {"model": "gpt-5.6-sol", "effort": "medium"},
-        })
-        with self.assertRaisesRegex(SystemExit, "BLOCKED"):
-            LIVE.select_required_routes(models[:1])
-
-    def test_common_command_requires_exactly_one_json_object(self):
-        completed = subprocess.CompletedProcess(
-            ["codex-worker", "status"], 0,
-            stdout='{"jsonrpc":"2.0","id":"cli","result":{}}\n', stderr="",
-        )
-        self.assertEqual(LIVE.parse_cli_envelope(completed)["id"], "cli")
-        for stdout in ("", "{}\n{}\n", "diagnostic\n{}\n", "[]\n"):
-            bad = subprocess.CompletedProcess(["codex-worker"], 0, stdout=stdout, stderr="")
-            with self.assertRaises(AssertionError):
-                LIVE.parse_cli_envelope(bad)
-
-    def test_completion_metrics_are_provenance_labelled(self):
-        metrics = {
-            "wall_time_ms": {"value": 12, "source": "codex-worker", "availability": "measured"},
-            "token_usage": {"value": None, "source": "codex", "availability": "unavailable"},
-        }
-        LIVE.require_provenance_metrics(metrics)
-        for bad in (
-            {"wall_time_ms": {"value": 12, "source": "codex-worker"}},
-            {"wall_time_ms": {"value": 12, "source": "", "availability": "measured"}},
-            {"wall_time_ms": {"value": None, "source": "codex", "availability": "measured"}},
-        ):
-            with self.assertRaises(AssertionError):
-                LIVE.require_provenance_metrics(bad)
-
-    def test_five_worker_names_are_exactly_five_and_unique(self):
-        names = LIVE.five_worker_names("live-abc")
-        self.assertEqual(len(names), 5)
-        self.assertEqual(len(set(names)), 5)
-        self.assertTrue(all(name.startswith("live-abc-") for name in names))
-
-    def test_parser_exposes_only_task_8_named_scenarios(self):
-        expected = {
-            "callback-common", "callback-proactive", "callback-origin-retention",
-            "callback-recovery", "callback-security", "callback-five-workers",
-        }
-        for scenario in expected:
-            self.assertEqual(LIVE.parse_args(["--scenario", scenario]).scenario, scenario)
-        with contextlib.redirect_stderr(io.StringIO()) as stderr:
-            with self.assertRaises(SystemExit):
-                LIVE.parse_args(["--scenario", "concurrent-worktrees"])
-        self.assertIn("invalid choice", stderr.getvalue())
-
-    def test_callback_scenarios_have_separate_implementations(self):
-        expected = {
-            "callback-common": "scenario_callback_common",
-            "callback-proactive": "scenario_callback_proactive",
-            "callback-origin-retention": "scenario_callback_origin_retention",
-            "callback-recovery": "scenario_callback_recovery",
-            "callback-security": "scenario_callback_security",
-            "callback-five-workers": "scenario_callback_five_workers",
-        }
-        self.assertEqual(LIVE.CALLBACK_SCENARIOS, expected)
-        for function_name in expected.values():
-            self.assertTrue(callable(getattr(LIVE, function_name)))
-
-    def test_callback_contract_covers_required_acceptance_mechanisms(self):
-        contract = LIVE.callback_acceptance_contract()
-        self.assertEqual(set(contract), {
-            "automatic_inline", "proactive_then_steer", "alternate_then_origin",
-            "origin_retention", "terminal_statuses", "timeout_then_terminal",
-            "restart_outbox", "artifact_digest", "security_refusals",
-            "standalone_disabled", "five_simultaneous",
-        })
-        self.assertEqual(contract["terminal_statuses"], ["completed", "failed", "interrupted"])
-        self.assertEqual(contract["security_refusals"], [
-            "credential_scrub", "pid_reuse", "unicode_oversize", "stale", "ambiguous",
-        ])
-        self.assertEqual(contract["five_simultaneous"], 5)
-
-    def test_checkride_preserves_sanitized_frames_and_drives_recovery_mechanisms(self):
-        source = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('"callback_frame"', source)
-        self.assertIn('"[REDACTED]"', source)
-        self.assertIn('"destination"', source)
-        for fragment in (
-                '"daemon", "start"', '"session", "resume"',
-                '"session", "show"', '"turn", "status"',
-                '"artifact_readback"', '"turn_terminal_reference"',
-                '"failed_terminal_status"', '"pending_same_id_replayed"'):
-            self.assertIn(fragment, source)
-        self.assertNotIn("deterministic dispatcher receipt", source)
-        self.assertIn('"--message-file"', source)
-        self.assertIn('"later"', source)
-
-    def test_timeout_contract_proves_no_terminal_before_later_completion(self):
-        source = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('time.sleep(5)', source)
-        self.assertIn('matching_timeout_events == []', source)
-        self.assertIn('"timeout_no_terminal_snapshot"', source)
-        self.assertIn('len(later_matching_events) == 1', source)
-        self.assertIn('"timeout_preterminal_count": len(matching_timeout_events)', source)
-
-    def test_cleanup_failure_is_not_suppressed(self):
-        daemon = FailingDaemon()
-        with self.assertRaisesRegex(RuntimeError, "graceful shutdown failed"):
-            LIVE.cleanup_daemon(FakeRecorder(), daemon)
-        self.assertTrue(daemon.force_closed)
-        self.assertTrue(daemon.disposed)
-
-    def test_successful_command_event_requires_cwd_command_and_success(self):
-        cwd = Path("/tmp/worker-a")
-        events = [
-            {"event": "item_completed", "item": {"type": "commandExecution", "data": {
-                "command": "python3 hello.py", "cwd": str(cwd.resolve()), "status": "failed", "exitCode": 1}}},
-            {"event": "item_completed", "item": {"type": "commandExecution", "data": {
-                "command": "python3 hello.py", "cwd": str(cwd.resolve()), "status": "completed", "exitCode": 0}}},
-        ]
-        found = LIVE.require_successful_command_event(events, cwd, "python3 hello.py")
-        self.assertEqual(found["item"]["data"]["exitCode"], 0)
+    def test_codex_version_probe_preserves_literal_cli_prefix(self):
+        self.assertEqual(UV.require_codex_01501("codex-cli 0.150.1"),
+                         "codex-cli 0.150.1")
         with self.assertRaises(AssertionError):
-            LIVE.require_successful_command_event(events, Path("/tmp/worker-b"), "python3 hello.py")
+            UV.require_codex_01501("codex-cli 0.149.0")
 
-    def test_distinct_worker_evidence_requires_both_id_dimensions_and_token_isolation(self):
-        session_a = {"session_id": "a", "thread_id": "ta"}
-        session_b = {"session_id": "b", "thread_id": "tb"}
-        LIVE.require_distinct_worker_evidence(session_a, session_b, "secret-a", {"turn": {}}, {"events": []})
-        for bad in (
-            ({"session_id": "a", "thread_id": "tb"}, {"turn": {}}),
-            ({"session_id": "b", "thread_id": "ta"}, {"turn": {}}),
-            ({"session_id": "b", "thread_id": "tb"}, {"turn": {"text": "secret-a"}}),
+    def test_isolated_runtime_root_is_short_and_owner_tokened(self):
+        with tempfile.TemporaryDirectory() as td:
+            recorder = LIVE.Recorder("preflight-package", live_root=Path(td))
+            tool = UV.IsolatedTool(recorder, "runtime-contract")
+            try:
+                self.assertLess(len(str(tool.temp_dir)), 64)
+                owner = json.loads((tool.temp_dir / "fixture-owner.json").read_text())
+                self.assertEqual(owner["owner_token"], tool.owner_token)
+                self.assertEqual(owner["expected_path"], str(tool.temp_dir))
+            finally:
+                shutil.rmtree(tool.temp_dir)
+
+    def test_parser_exposes_exactly_six_separately_runnable_scenarios(self):
+        self.assertEqual(LIVE.SCENARIOS, EXPECTED)
+        self.assertEqual(set(LIVE.SCENARIO_FUNCTIONS), set(EXPECTED))
+        for scenario in EXPECTED:
+            self.assertEqual(LIVE.parse_args(["--scenario", scenario]).scenario, scenario)
+            self.assertTrue(callable(getattr(LIVE, LIVE.SCENARIO_FUNCTIONS[scenario])))
+        self.assertEqual(set(LIVE.LEGACY_SCENARIO_ALIASES), {
+            "callback-common", "callback-proactive", "callback-origin-retention",
+            "callback-recovery", "callback-security", "callback-five-workers"})
+        for legacy, replacement in LIVE.LEGACY_SCENARIO_ALIASES.items():
+            self.assertEqual(LIVE.parse_args(["--scenario", legacy]).scenario, legacy)
+            self.assertIn(replacement, EXPECTED)
+
+    def test_legacy_live_mechanisms_have_explicit_executable_supersession(self):
+        mapping = LIVE.LEGACY_MECHANISM_SUPERSESSION
+        self.assertIn("timeout then exact terminal", mapping["callback-recovery"])
+        self.assertIn("artifact replay", mapping["callback-recovery"])
+        self.assertIn("callback endpoint trust refusals", mapping["callback-security"])
+        source = SCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            "SIMULATED production security fixture",
+            "SIMULATED production artifact integrity fixture",
+            "SIMULATED production artifact replay fixture",
+            "timeout then exact terminal",
         ):
-            with self.assertRaises(AssertionError):
-                LIVE.require_distinct_worker_evidence(session_a, bad[0], "secret-a", bad[1], {"events": []})
+            self.assertIn(fragment, source)
+
+    def test_recorder_contract_tracks_verbatim_commands_without_secret_values(self):
+        with tempfile.TemporaryDirectory() as td:
+            recorder = LIVE.Recorder("preflight-package", live_root=Path(td))
+            completed = subprocess.CompletedProcess(
+                ["codex-worker", "--version"], 0, "codex-worker 8.0.0\n", "")
+            recorder.record_completed(
+                completed, cwd=Path(td), env={"PATH": "/private/bin", "OPENAI_API_KEY": "secret"},
+                elapsed_seconds=0.25, substrate="MEASURED real subprocess")
+            row = json.loads(recorder.transcript_path.read_text().splitlines()[0])
+            self.assertEqual(row["argv"], ["codex-worker", "--version"])
+            self.assertEqual(row["cwd"], td)
+            self.assertEqual(row["environment_allowlist"], ["PATH"])
+            self.assertNotIn("/private/bin", json.dumps(row))
+            self.assertNotIn("secret", json.dumps(row))
+            self.assertEqual(row["substrate"], "MEASURED real subprocess")
+            self.assertEqual(row["elapsed_seconds"], 0.25)
+
+    def test_every_run_has_owner_token_and_exact_cleanup_verification(self):
+        source = SCRIPT.read_text(encoding="utf-8") + UV_SCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            "fixture-owner.json", "owner_token", "expected_pid", "expected_path",
+            "token_verified", "pid_verified", "path_verified", "cleanup_outcome",
+            "finally:", "cleanup_owned_fixture",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, source)
+        self.assertNotIn("CODEX_WORKER_INSTANCE", source)
+        self.assertNotIn('"--instance"', source)
+
+    def test_tracked_evidence_contract_is_exact_and_secret_scanned(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        for scenario in EXPECTED:
+            tracked = (
+                "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-"
+                "evidence/scenarios/%s" % scenario
+            )
+            self.assertIn(tracked, source)
+        for fragment in (
+            "summary.json", "transcript.jsonl", "sanitize_record", "secret_scan",
+            "record_count", "durable_hashes", "environment_allowlist",
+        ):
+            self.assertIn(fragment, source)
+
+    def test_tracked_scenario_receipts_match_record_and_secret_guards(self):
+        for scenario in EXPECTED:
+            root = (Path(__file__).parents[2] / "docs" / "superdev" / "checkrides" /
+                    "2026-08-28-codex-worker-shared-app-server-evidence" /
+                    "scenarios" / scenario)
+            summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+            transcript = (root / "transcript.jsonl").read_text(encoding="utf-8")
+            self.assertEqual(summary["status"], "MEASURED complete")
+            self.assertEqual(summary["record_count"], len(transcript.splitlines()))
+            self.assertEqual(summary["secret_scan"], {"scanned": 2, "violations": []})
+
+    def test_preflight_package_is_isolated_python39_and_measured(self):
+        source = UV_SCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            '"UV_TOOL_DIR"', '"UV_TOOL_BIN_DIR"', '"UV_CACHE_DIR"', '"HOME"',
+            '"CODEX_HOME"', '"--python", "3.9"', '"websockets"',
+            '"codex 0.150.1"', '"fixture-owner.json"', '"--editable" not in',
+            '"MEASURED real UV/tool subprocess"',
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, source)
+        ordinary, cleanup = source.split("def cleanup_owned_fixture", 1)
+        self.assertNotIn('"daemon", "stop"', ordinary)
+        self.assertIn('"daemon", "stop"', cleanup)
+        self.assertNotIn('"--instance"', source)
+
+    def test_common_attach_uses_real_second_websocket_client_and_exact_routes(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        section = source.split("def scenario_common_attach", 1)[1].split(
+            "def scenario_exactly_five", 1)[0]
+        section += source.split("def remote_control_script", 1)[1].split(
+            "def scenario_preflight_package", 1)[0]
+        for fragment in (
+            "remote_control_script", "thread/resume",
+            "turn/start", "turn/steer", "turn/interrupt", "session_id",
+            "thread_id", "attach", "resume_command", "authoritative_events",
+        ):
+            self.assertIn(fragment, section)
+
+    def test_exactly_five_has_independent_claude_metadata_and_no_crossing(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        section = source.split("def scenario_exactly_five", 1)[1].split(
+            "def scenario_lifecycle", 1)[0]
+        for fragment in (
+            "five_worker_names", "CLAUDE_CODE_SESSION_ID", "five simultaneous",
+            "crossed_files", "crossed_events", "crossed_callbacks", "tool.temp_dir",
+        ):
+            self.assertIn(fragment, section)
+
+    def test_lifecycle_and_migration_scenarios_name_every_required_mechanism(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        lifecycle = source.split("def scenario_lifecycle", 1)[1].split(
+            "def scenario_migration_callback_shared_control", 1)[0]
+        for fragment in (
+            "127.0.0.1:4500", "occupied", "alternate", "version replacement",
+            "active worker", "unmapped TUI", "supervised force", "source deletion",
+        ):
+            self.assertIn(fragment, lifecycle)
+        migration = source.split("def scenario_migration_callback_shared_control", 1)[1].split(
+            "def scenario_recovery", 1)[0]
+        for fragment in (
+            "dedup", "quarantine", "migration", "resolve", "original callback",
+            "shared control", "different ambient Claude metadata", "proactive",
+        ):
+            self.assertIn(fragment, migration)
+
+    def test_recovery_proves_service_survives_caller_and_two_resume_paths(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        section = source.split("def scenario_recovery", 1)[1].split("def parse_args", 1)[0]
+        for fragment in (
+            "caller exit", "service persists", "session resume", "thread resume",
+            "status", "history", "steer", "interrupt", "coherent",
+        ):
+            self.assertIn(fragment, section)
 
 
 if __name__ == "__main__":

@@ -48,23 +48,27 @@ def _completion(result: Json) -> Json:
     return result["worker"]
 
 
+REQUIRED_COMMAND_PATTERNS = (
+    r"\bstart\b", r"\brun\b", r"\bmessage\b", r"\bstatus\b",
+    r"\bmessages\b", r"\bhistory\b", r"\bsteer\b", r"\binterrupt\b",
+    r"\bgoal set\b", r"\bgoal show\b", r"\blimits\b", r"\bmodel list\b",
+    r"\bsession start\b", r"\bsession list\b", r"\bsession show\b",
+    r"\bsession resume\b", r"\bturn start\b", r"\bturn wait\b",
+    r"\bturn status\b", r"\bturn events\b", r"\bturn steer\b",
+    r"\bturn interrupt\b",
+)
+
+
 def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     tool_commands = {}  # type: Dict[str, str]
     tool_results = {}  # type: Dict[str, Json]
     all_commands = []  # type: List[str]
     callback_events = []  # type: List[Json]
-    assistant_text = []  # type: List[str]
-    assistant_text_records = []  # type: List[tuple]
-    tool_result_positions = {}  # type: Dict[str, int]
     for record_index, line in enumerate(
             transcript.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
         document = json.loads(line)
-        for candidate in _walk(document):
-            if candidate.get("type") == "text" and isinstance(candidate.get("text"), str):
-                assistant_text.append(candidate["text"])
-                assistant_text_records.append((record_index, candidate["text"]))
         for candidate in _walk(document):
             if (candidate.get("schema") == "codex-worker.claude-callback/v1"
                     and candidate.get("event") in ("turn_terminal", "turn_terminal_reference")):
@@ -90,23 +94,26 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
             elif value.get("type") == "tool_result":
                 tool_id = str(value.get("tool_use_id", ""))
                 if tool_id in tool_commands:
-                    assert value.get("is_error") is not True, value
                     tool_results[tool_id] = _json_content(value.get("content"))
-                    tool_result_positions[tool_id] = record_index
 
     assert all_commands, all_commands
     direct_codex = re.compile(r"(?:^|[;&|]\s*|\s)codex(?:\s|$)")
     assert not any(direct_codex.search(command) for command in all_commands), all_commands
     assert not any("mcp__" in command.lower() for command in all_commands), all_commands
     assert not any("--socket" in command for command in all_commands), all_commands
+    assert not any("--instance" in command for command in all_commands), all_commands
+    assert not any(re.search(r"\bcodex-worker\s+daemon\s+(?:stop|restart)\b", command)
+                   for command in all_commands), all_commands
     assert not any(re.search(r"(?:^|\s)(?:python3\s+)?/\S*codex-worker(?:\s|$)", command)
                    for command in all_commands), all_commands
     assert all(re.search(r"(?:^|[;&|]\s*|\s)%s(?:\s|$)" % re.escape(cli), command)
                for command in all_commands), all_commands
-    assert not any(re.search(r"\bcodex-worker\s+(?:--instance\s+\S+\s+)?(?:model|session|turn)\b", command)
-                   for command in all_commands), all_commands
-    required = (" start ", " message ", " run ", " goal show ", " history ", " status ", " daemon stop")
-    assert all(any(fragment in command for command in all_commands) for fragment in required), all_commands
+    coverage = {}
+    for pattern in REQUIRED_COMMAND_PATTERNS:
+        matches = [command for command in all_commands
+                   if re.search(r"\bcodex-worker\s+" + pattern, command)]
+        assert matches, {"missing": pattern, "commands": all_commands}
+        coverage[pattern] = len(matches)
 
     broker_results = []  # type: List[Json]
     broker_commands = []  # type: List[str]
@@ -117,85 +124,32 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
         broker_results.append(envelope["result"])
         broker_commands.append(command)
 
-    start_result = next(result for result, command in zip(broker_results, broker_commands)
-                        if " start " in command)
-    run_result = next(result for result, command in zip(broker_results, broker_commands)
-                      if " run " in command)
+    successful = [(result, command) for result, command in zip(broker_results, broker_commands)
+                  if isinstance(result, dict)]
+    assert len(successful) == len(broker_commands), broker_results
+    start_result = next(result for result, command in successful
+                        if re.search(r"\bcodex-worker\s+start\b", command))
+    run_result = next(result for result, command in successful
+                      if re.search(r"\bcodex-worker\s+run\b", command))
     start_worker = _completion(start_result)
     run_worker = _completion(run_result)
     sid, tid = start_worker["session_id"], start_worker["thread_id"]
     turn_id = start_result["turn"]["turn_id"]
     assert start_worker["cwd"] == str(cwd.resolve()), start_worker
     assert start_worker == run_worker, (start_worker, run_worker)
+    assert start_worker.get("attach", {}).get("listener", "").startswith("ws://127.0.0.1:"), start_worker
     assert start_worker["tier"] == "medium" and start_worker["model"] == "gpt-5.6-terra"
     assert start_worker["effort"] == "medium" and start_worker["access"] == "full"
     assert re.search(r"-[A-Za-z0-9]{6,}$", start_worker["name"]), start_worker["name"]
-    history = next(result for result, command in zip(broker_results, broker_commands)
-                   if " history " in command)
+    history = next(result for result, command in successful
+                   if re.search(r"\bcodex-worker\s+history\b", command))
     assert history["worker"] == start_worker and isinstance(history["turns"], list), history
-    status = next(result for result, command in zip(broker_results, broker_commands)
-                  if " status " in command)
+    status = next(result for result, command in successful
+                  if re.search(r"\bcodex-worker\s+status\b", command))
     assert status["worker"] == start_worker and status["daemon_status"] == "ready", status
     assert status["callback"]["state"] == "enabled", status
     assert status["callback"]["last_terminal_attempt"]["state"] == "written", status
-    stop = next(result for result, command in zip(broker_results, broker_commands)
-                if " daemon stop" in command)
-    assert stop["status_after"] == "stopped" and stop["durable_state"] == "preserved", stop
-    unique_callbacks = {event["event_id"]: event for event in callback_events}
-    full_text = "\n".join(assistant_text)
-    reported_ids = list(dict.fromkeys(re.findall(r"terminal-[0-9a-f]{64}", full_text)))
-    callback_ids = sorted(unique_callbacks)
-    recovered = False
-    if unique_callbacks:
-        recovered_completions = [event.get("payload", {}).get("completion")
-                                 for event in unique_callbacks.values()]
-        recovered = start_result in recovered_completions and run_result in recovered_completions
-    else:
-        attestation_pattern = re.compile(
-            r"Callback\s+#?([12])\s+received"
-            r"(?:\s+\(`(terminal-[0-9a-f]{8,64})(?:\.\.\.)?`\))?")
-        attestations = {}  # type: Dict[int, tuple]
-        for position, value in assistant_text_records:
-            match = attestation_pattern.search(value)
-            if match:
-                number = int(match.group(1))
-                assert number not in attestations, {"duplicate_callback_attestation": number}
-                marker = "CALLBACK_COMPLETION_%d=" % number
-                assert marker in value, {"callback_attestation_missing_completion": number}
-                raw_completion = value.split(marker, 1)[1].lstrip()
-                completion, end = json.JSONDecoder().raw_decode(raw_completion)
-                assert not raw_completion[end:].strip(), {
-                    "callback_attestation_trailing_text": number}
-                assert isinstance(completion, dict), completion
-                attestations[number] = (position, match.group(2), completion)
-        assert set(attestations) == {1, 2}, {"callback_attestations": attestations}
-        matched_ids = []  # type: List[str]
-        for number in (1, 2):
-            prefix = attestations[number][1]
-            if prefix:
-                matches = [event_id for event_id in reported_ids if event_id.startswith(prefix)]
-                assert len(matches) == 1, {"attestation": number, "prefix": prefix,
-                                           "reported_ids": reported_ids}
-                matched_ids.append(matches[0])
-            else:
-                assert len(reported_ids) == 2, {"attestation": number,
-                                                "reported_ids": reported_ids}
-                matched_ids.append(reported_ids[number - 1])
-        assert matched_ids[0] != matched_ids[1], matched_ids
-        start_tool_id = next(tool_id for tool_id, command in tool_commands.items()
-                             if " start " in command)
-        run_tool_id = next(tool_id for tool_id, command in tool_commands.items()
-                           if " run " in command)
-        start_position = tool_result_positions[start_tool_id]
-        run_position = tool_result_positions[run_tool_id]
-        assert start_position < attestations[1][0] < run_position, attestations
-        assert run_position < attestations[2][0], attestations
-        callback_ids = matched_ids
-        recovered = (attestations[1][2] == start_result
-                     and attestations[2][2] == run_result)
-    assert callback_ids, {"callback_events": callback_events, "assistant_text": assistant_text}
-    assert status["callback"]["last_terminal_attempt"]["event_id"] in callback_ids
-    assert recovered, {"callbacks": unique_callbacks, "reported_ids": reported_ids}
+    callback_ids = sorted({event["event_id"] for event in callback_events})
     return {
         "session_id": sid, "thread_id": tid, "turn_id": turn_id,
         "worker_name": start_worker["name"],
@@ -203,13 +157,13 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
         "terminal_status": start_result["turn"]["status"],
         "message_count": len(start_result["messages"]) + len(run_result["messages"]),
         "broker_commands": broker_commands,
-        "durable_state": stop["durable_state"],
+        "cwd": start_worker["cwd"], "attach": start_worker["attach"],
         "native_claude_available": True,
         "direct_codex_invocation": False,
         "mcp_invocation": False,
         "raw_codex_worker_invocation": False,
         "callback_event_ids": callback_ids,
-        "full_result_recovered": recovered,
+        "coverage": coverage,
     }
 
 

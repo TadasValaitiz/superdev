@@ -1,0 +1,196 @@
+{
+  "checkride_verdict": "PENDING controller executor/evaluator",
+  "cleanup": {
+    "cleanup_outcome": "verified isolated fixture retained as ignored raw evidence",
+    "expected_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control",
+    "expected_pid": 12976,
+    "observed_pid": 12976,
+    "owner_token": "[REDACTED]",
+    "path_verified": true,
+    "pid_verified": true,
+    "runtime_deleted": true,
+    "service_stopped": true,
+    "token_verified": true
+  },
+  "durable_hashes": {
+    "fixture-migration-callback-shared-control/fixture-owner.json": "61db12895ce10ec42813922c37c130a5f20b97715b8a5e4ec82cdff2ad090d8e",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/chrome-devtools-mcp/telemetry_state.json": "6b96563a6924d5b89dfcb9d0602ece6a354ca6c588bf3e3f68b3d9a20ffcd8ac",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/001b36d15dfbb79f79b5e662d0efd1748228e8a6ed42e93e16734393f6a88df8/instance.json": "df1dd80c5d2c9c3620cd6f713474f0f90fd16ab008bed9f11a088eb15decf229",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/001b36d15dfbb79f79b5e662d0efd1748228e8a6ed42e93e16734393f6a88df8/registry.json": "ef6830852fdfb2c7388e1e16e4dc94028304a5554c91f1f4a8c6f3e9f9c2c679",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/0a12a7718f49d4e39b57bbfefe41930bd28a9cbfaa4ae910296f3eab4d97a87d/instance.json": "c620ae9e3ae2b710b8d586e4bb9397f60b3e08e5893a3fdd2e480052fc6fb30f",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/0a12a7718f49d4e39b57bbfefe41930bd28a9cbfaa4ae910296f3eab4d97a87d/registry.json": "ef6830852fdfb2c7388e1e16e4dc94028304a5554c91f1f4a8c6f3e9f9c2c679",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c2720445a45267813688ff73fa188aa060c1b661aefaf1650d42f690697b5ab3/instance.json": "0c4a18b8ea773796afb2a0b8abbf31919c709075d8b99febbebfc31b6f31cc4a",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c2720445a45267813688ff73fa188aa060c1b661aefaf1650d42f690697b5ab3/registry.json": "615c7e62adae9797bcd56bdc882b4a36d5e434d322bd64483458d41a917f3263",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c40257a2d5b37381ba95cc900dc07defce0d853e64187df58e61a536b3610cc1/instance.json": "513234625daed0a729ab6d3e56fd0d341fa9a8fa6e820c04f6e961029bebf8cb",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c40257a2d5b37381ba95cc900dc07defce0d853e64187df58e61a536b3610cc1/registry.json": "a3370c4b92ebe463d883ecec3de853a428386e924f839a38d6ea7659ec5c4f05",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/f76840f2f2d32cf4b613759b4264b2b4ee2523235b8a2a291e95e28687cdf6da/instance.json": "0773881ee8524a5abafccd2d7e9b697f095f7ef8058908f5ba33d6b603e5dd50",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/f76840f2f2d32cf4b613759b4264b2b4ee2523235b8a2a291e95e28687cdf6da/registry.json": "89fcc98b6f1ee0e566f0a6ccc259779e33df76391af8067c89375192b544d8f1",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/service/callbacks.json": "dbf9c5c6da5d5bf915f308681c15908af26ed9ccdcf0b06a2c1a760d23000f9a",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/service/daemon.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/service/migration.json": "b7cdd5bf747b1ae4b138227b7023cd49340c7acd11d0439b0fca4ca730f6f3e4",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/service/registry.json": "2f77bf3d0c59d0712dcf26859ecdc87c34ab745c4c0f3012b2b29a19fef6e11f",
+    "fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/service/service.json": "86af642a40a527b310f4a180c8455f1ba0fd261af471555b069af6bb62e6a5c4",
+    "transcript.jsonl": "e9e5c330a1dd480abb90f0b22e5228f814c9b38cc650f595447b0e5a2a7063ae"
+  },
+  "raw_run_dir": ".superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control",
+  "record_count": 21,
+  "result": {
+    "artifact integrity and replay": "SIMULATED production fixture",
+    "dedup": 1,
+    "different ambient Claude metadata": "shared-6b5891ed",
+    "migration": {
+      "conflict_count": 1,
+      "conflicts": [
+        {
+          "candidates": [
+            {
+              "access": "full",
+              "created_at": "2026-08-28T00:00:00Z",
+              "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/workspace",
+              "effort": "medium",
+              "model": "gpt-5.6-terra",
+              "name": "collision-live",
+              "session_id": "00000000-0000-0000-0000-000000000003",
+              "source_digest": "a3370c4b92ebe463d883ecec3de853a428386e924f839a38d6ea7659ec5c4f05",
+              "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c40257a2d5b37381ba95cc900dc07defce0d853e64187df58e61a536b3610cc1/registry.json",
+              "thread_id": "legacy-thread-a",
+              "tier": "medium",
+              "updated_at": "2026-08-28T00:00:00Z"
+            },
+            {
+              "access": "full",
+              "created_at": "2026-08-28T00:00:00Z",
+              "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/workspace",
+              "effort": "medium",
+              "model": "gpt-5.6-terra",
+              "name": "collision-live",
+              "session_id": "00000000-0000-0000-0000-000000000004",
+              "source_digest": "89fcc98b6f1ee0e566f0a6ccc259779e33df76391af8067c89375192b544d8f1",
+              "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/f76840f2f2d32cf4b613759b4264b2b4ee2523235b8a2a291e95e28687cdf6da/registry.json",
+              "thread_id": "legacy-thread-b",
+              "tier": "medium",
+              "updated_at": "2026-08-28T00:00:00Z"
+            }
+          ],
+          "name": "collision-live",
+          "source_digests": [
+            "89fcc98b6f1ee0e566f0a6ccc259779e33df76391af8067c89375192b544d8f1",
+            "a3370c4b92ebe463d883ecec3de853a428386e924f839a38d6ea7659ec5c4f05"
+          ]
+        }
+      ],
+      "deduplicated_count": 1,
+      "imported_count": 2,
+      "ready": true,
+      "resolution_actions": [
+        {
+          "command": "codex-worker migration resolve --name collision-live --thread legacy-thread-a",
+          "reason": "Select this preserved legacy thread for the global name"
+        },
+        {
+          "command": "codex-worker migration resolve --name collision-live --thread legacy-thread-b",
+          "reason": "Select this preserved legacy thread for the global name"
+        }
+      ],
+      "sources": [
+        {
+          "name": "duplicate-live",
+          "outcome": "imported",
+          "session_id": "00000000-0000-0000-0000-000000000002",
+          "source_digest": "ef6830852fdfb2c7388e1e16e4dc94028304a5554c91f1f4a8c6f3e9f9c2c679",
+          "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/001b36d15dfbb79f79b5e662d0efd1748228e8a6ed42e93e16734393f6a88df8/registry.json",
+          "thread_id": "legacy-duplicate"
+        },
+        {
+          "name": "duplicate-live",
+          "outcome": "deduplicated",
+          "session_id": "00000000-0000-0000-0000-000000000002",
+          "source_digest": "ef6830852fdfb2c7388e1e16e4dc94028304a5554c91f1f4a8c6f3e9f9c2c679",
+          "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/0a12a7718f49d4e39b57bbfefe41930bd28a9cbfaa4ae910296f3eab4d97a87d/registry.json",
+          "thread_id": "legacy-duplicate"
+        },
+        {
+          "name": "unique-live",
+          "outcome": "imported",
+          "session_id": "00000000-0000-0000-0000-000000000001",
+          "source_digest": "615c7e62adae9797bcd56bdc882b4a36d5e434d322bd64483458d41a917f3263",
+          "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c2720445a45267813688ff73fa188aa060c1b661aefaf1650d42f690697b5ab3/registry.json",
+          "thread_id": "legacy-unique"
+        },
+        {
+          "name": "collision-live",
+          "outcome": "conflicted",
+          "session_id": "00000000-0000-0000-0000-000000000003",
+          "source_digest": "a3370c4b92ebe463d883ecec3de853a428386e924f839a38d6ea7659ec5c4f05",
+          "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/c40257a2d5b37381ba95cc900dc07defce0d853e64187df58e61a536b3610cc1/registry.json",
+          "thread_id": "legacy-thread-a"
+        },
+        {
+          "name": "collision-live",
+          "outcome": "conflicted",
+          "session_id": "00000000-0000-0000-0000-000000000004",
+          "source_digest": "89fcc98b6f1ee0e566f0a6ccc259779e33df76391af8067c89375192b544d8f1",
+          "source_path": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/home/Library/Application Support/superdev/codex-worker/instances/f76840f2f2d32cf4b613759b4264b2b4ee2523235b8a2a291e95e28687cdf6da/registry.json",
+          "thread_id": "legacy-thread-b"
+        }
+      ],
+      "status": "complete"
+    },
+    "original callback": [
+      "terminal-a0dfdd8c6d0724faaf186a1fe34b2575078760b0bb7cff24daea9efa1416318c",
+      "0e357e48-0a5a-4e4a-80f2-2ff851751f24"
+    ],
+    "proactive": {
+      "attempt": {
+        "attempt_count": 1,
+        "attempted_at": "2026-08-29T00:35:52.383959Z",
+        "event_id": "0e357e48-0a5a-4e4a-80f2-2ff851751f24",
+        "reason": null,
+        "state": "written",
+        "turn_id": null
+      },
+      "event_id": "0e357e48-0a5a-4e4a-80f2-2ff851751f24",
+      "worker": {
+        "access": "full",
+        "attach": {
+          "attach_command": "codex --remote ws://127.0.0.1:52408",
+          "listener": "ws://127.0.0.1:52408",
+          "resume_command": "codex --remote ws://127.0.0.1:52408 resume 01a04af1-9ec3-7b21-8ad7-abcf8ed8d767",
+          "thread_id": "01a04af1-9ec3-7b21-8ad7-abcf8ed8d767"
+        },
+        "cwd": "/Users/tadas/Projects/superdev/.worktrees/codex-worker-shared-app-server/.superdev/codex-worker-live/20260829T003541.298313Z-12900-migration-callback-shared-control/fixture-migration-callback-shared-control/workspace",
+        "effort": "medium",
+        "model": "gpt-5.6-terra",
+        "name": "shared-6b5891ed",
+        "session_id": "a61f2da3-384f-432f-9651-45e7b6087f93",
+        "thread_id": "01a04af1-9ec3-7b21-8ad7-abcf8ed8d767",
+        "tier": "medium"
+      }
+    },
+    "quarantine": 1,
+    "resolve": {
+      "attach": {
+        "attach_command": "codex --remote ws://127.0.0.1:52408",
+        "listener": "ws://127.0.0.1:52408",
+        "resume_command": "codex --remote ws://127.0.0.1:52408 resume legacy-thread-a",
+        "thread_id": "legacy-thread-a"
+      },
+      "name": "collision-resolved",
+      "session_id": "00000000-0000-0000-0000-000000000003",
+      "thread_id": "legacy-thread-a"
+    },
+    "security refusals": "SIMULATED production fixture",
+    "shared control": {
+      "interrupt": "accepted",
+      "steer": "01a04af1-c010-71f3-8b46-6066be8061f8",
+      "turn_id": "01a04af1-c010-71f3-8b46-6066be8061f8"
+    }
+  },
+  "scenario": "migration-callback-shared-control",
+  "secret_scan": {
+    "scanned": 2,
+    "violations": []
+  },
+  "status": "MEASURED complete",
+  "tracked_transcript": "docs/superdev/checkrides/2026-08-28-codex-worker-shared-app-server-evidence/scenarios/migration-callback-shared-control/transcript.jsonl"
+}
