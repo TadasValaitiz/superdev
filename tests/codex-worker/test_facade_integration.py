@@ -150,7 +150,9 @@ class FacadeIntegrationTests(unittest.TestCase):
         status = self.command(["daemon", "status"])
         self.assertEqual(status.returncode, 0, status.stderr)
         managed = json.loads(status.stdout)["result"]
-        self.assertEqual(managed["worker_count"], 5)
+        self.assertEqual(managed["worker_count"]["value"], 5)
+        self.assertEqual(sorted(managed["worker_count"]["basis"]["idle_names"]),
+                         sorted("worker-%d" % index for index in range(5)))
         self.assertEqual(managed["pid"], daemon_pid)
         self.assertEqual(managed["app_server_pid"], codex_pid)
         captures = [json.loads(line) for line in self.capture.read_text(encoding="utf-8").splitlines()]
@@ -225,7 +227,7 @@ class FacadeIntegrationTests(unittest.TestCase):
         for argv, code, kind in cases:
             with self.subTest(kind=kind):
                 result = self.command(argv)
-                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(result.returncode, 3, result.stderr)
                 error = json.loads(result.stdout)["error"]
                 self.assertEqual((error["code"], error["data"]["kind"]), (code, kind))
                 self.assertEqual(registry.read_bytes(), preserved)
@@ -234,7 +236,7 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.set_scenario({"goal_set_failure": True})
         result = self.command(["start", "--name", "goal-fails", "--prompt", "never-send",
                                "--cwd", str(ROOT), "--model", "fake-model-a", "--goal", "finish"])
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertEqual(json.loads(result.stdout)["error"]["data"]["kind"], "codex_failure")
         captures = self.captures()
         self.assertEqual(len([row for row in captures if row.get("method") == "thread/goal/set"]), 1)
@@ -248,7 +250,7 @@ class FacadeIntegrationTests(unittest.TestCase):
         goal = self.command(["goal", "show", "--name", "proxies"])
         limits = self.command(["limits"])
         self.assertEqual(json.loads(goal.stdout)["result"]["availability"], "absent")
-        self.assertEqual(limits.returncode, 1)
+        self.assertEqual(limits.returncode, 3)
         self.assertEqual(json.loads(limits.stdout)["error"]["data"]["kind"], "limits_unavailable")
         captures = self.captures()
         thread_id = json.loads(created.stdout)["result"]["worker"]["thread_id"]
@@ -308,7 +310,7 @@ class FacadeIntegrationTests(unittest.TestCase):
         schema.write_text('{"type":"object"}', encoding="utf-8")
         result = self.command(["start", "--name", "schema", "--prompt", "schema", "--cwd", str(ROOT),
                                "--model", "fake-model-a", "--output-schema", str(schema)])
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         error = json.loads(result.stdout)["error"]
         self.assertEqual(error["data"]["kind"], "incomplete_completion")
         self.assertEqual(error["data"]["details"]["messages"][-1]["text"], "not-json")
@@ -367,7 +369,7 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.set_scenario({"no_agent_messages": True})
         result = self.command(["start", "--name", "empty", "--prompt", "empty", "--cwd", str(ROOT),
                                "--model", "fake-model-a"])
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertEqual(json.loads(result.stdout)["error"]["data"]["kind"], "incomplete_completion")
 
     def set_scenario(self, value):
@@ -445,7 +447,7 @@ class FacadeIntegrationTests(unittest.TestCase):
             "--thread", records[0].thread_id])
 
         conflicted = self.command(["status", "--name", "legacy-collision"])
-        self.assertEqual(conflicted.returncode, 1, conflicted.stdout + conflicted.stderr)
+        self.assertEqual(conflicted.returncode, 3, conflicted.stdout + conflicted.stderr)
         self.assertEqual(json.loads(conflicted.stdout)["error"]["data"]["kind"],
                          "legacy_name_conflict")
         fault_actions = json.loads(conflicted.stdout)["error"]["data"]["next_actions"]
@@ -465,6 +467,35 @@ class FacadeIntegrationTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(json.loads(run.stdout)["result"]["worker"]["name"],
                          "legacy-collision")
+
+    def test_exact_session_resume_ignores_unrelated_ambiguous_active_inventory(self):
+        self.set_scenario({
+            "ambiguous_inventory_thread": "unrelated-active",
+            "ambiguous_inventory_reads": 1,
+        })
+        cwd = Path(self.tempdir.name) / "selected-cwd"
+        cwd.mkdir()
+        started = self.command([
+            "start", "--name", "selected-worker", "--cwd", str(cwd),
+            "--prompt", "create selected", "--model", "fake-model-a",
+            "--timeout", "5",
+        ])
+        self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+        worker = json.loads(started.stdout)["result"]["worker"]
+
+        resumed = self.command([
+            "session", "resume", "--session", worker["session_id"],
+        ])
+        self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+        result = json.loads(resumed.stdout)["result"]
+        self.assertEqual(result["session"]["session_id"], worker["session_id"])
+        self.assertEqual(result["session"]["thread_id"], worker["thread_id"])
+        self.assertEqual(result["attach"]["thread_id"], worker["thread_id"])
+
+        ambiguous_status = self.command(["daemon", "status"])
+        self.assertEqual(ambiguous_status.returncode, 3, ambiguous_status.stdout)
+        self.assertEqual(json.loads(ambiguous_status.stdout)["error"]["data"]["kind"],
+                         "codex_failure")
 
     def cleanup_process(self, process):
         if process.poll() is None:

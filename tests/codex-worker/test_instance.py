@@ -84,10 +84,9 @@ class LifecycleTests(unittest.TestCase):
             "name": None, "session_id": None,
             "thread_id": None, "turn_id": None,
         })
-        self.assertEqual(len(fault.next_actions), 3)
-        self.assertIn("daemon status", fault.next_actions[0]["command"])
-        self.assertIn(str(path), fault.next_actions[1]["command"])
-        self.assertIn(str(self.paths.log_path), fault.next_actions[2]["command"])
+        self.assertEqual(len(fault.next_actions), 2)
+        self.assertIn(str(path), fault.next_actions[0]["command"])
+        self.assertIn(str(self.paths.log_path), fault.next_actions[1]["command"])
 
     def test_concurrent_start_spawns_once_and_writes_verified_metadata(self):
         results = []
@@ -281,7 +280,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["reason"], "socket_changed")
         self.assertTrue(self.paths.socket_path.exists())
 
-    def test_stop_timeout_recovery_commands_keep_selected_instance(self):
+    def test_stop_timeout_recovery_commands_inspect_exact_owned_process(self):
         self._leave_stale_socket()
 
         def rpc(socket_path, method, params, timeout):
@@ -303,8 +302,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("instance", caught.exception.known_ids)
         self.assertEqual(
             [action["command"] for action in caught.exception.next_actions],
-            ["codex-worker --instance session-alpha daemon status",
-             "codex-worker --instance session-alpha daemon stop"],
+            ["/bin/ps -p 11",
+             "/usr/bin/tail -n 100 %s" % self.paths.log_path],
         )
 
     def test_stale_pid_metadata_does_not_block_safe_socket_repair(self):
@@ -595,7 +594,12 @@ class GlobalServiceManagerTests(unittest.TestCase):
         return {"status": "ready", "service_version": version, "pid": 1234,
                 "app_server_pid": 5678, "listener": listener, "exposure": "loopback",
                 "auth": "none", "attach_command": "codex --remote %s" % listener,
-                "worker_count": 0, "active_turn_count": 0,
+                "worker_count": {"value": 0, "source": "codex-worker registry",
+                                 "availability": "derived", "basis": {
+                                     "active_names": [], "idle_names": [],
+                                     "active_count": 0, "idle_count": 0, "total_count": 0}},
+                "active_turn_count": {"value": 0, "source": "codex app-server inventory",
+                                      "availability": "derived", "basis": {"items": []}},
                 "migration": {"status": "complete", "ready": True, "imported_count": 0,
                               "deduplicated_count": 0, "conflict_count": 0,
                               "sources": [], "conflicts": []}, "durable_state": "preserved"}
@@ -749,6 +753,11 @@ class GlobalServiceManagerTests(unittest.TestCase):
                          instance_module.FacadeFaultCode.ADDRESS_IN_USE)
         self.assertEqual(caught.exception.details["listener"],
                          "ws://127.0.0.1:4777")
+        self.assertEqual(caught.exception.next_actions, [{
+            "command": ("codex-worker daemon start --app-server-listen "
+                        "ws://127.0.0.1:4778"),
+            "reason": "Retry explicitly on the deterministic alternate listener",
+        }])
         self.assertNotIn("--force", json.dumps(caught.exception.to_dict()))
         self.assertEqual(self.spawns, [])
         self.assertFalse(self.paths.config_path.exists())

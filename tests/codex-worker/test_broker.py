@@ -557,7 +557,8 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(status, {
             "ready": True, "daemon_pid": 1234, "codex_pid": 4321,
             "socket_path": str(Path(self.cwd) / "worker.sock"), "state_path": self.state_path,
-            "session_count": 0, "worker_version": distribution_version(),
+            "session_count": 0, "worker_names": [],
+            "worker_version": distribution_version(),
         })
         models = self.broker.model_list()
         self.assertEqual(models["models"], [
@@ -661,8 +662,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(unknown_uuid.exception.kind, "unknown_session")
         self.assertEqual(
             unknown_uuid.exception.recovery,
-            "run session list to choose a known session, or recover a raw Codex thread with "
-            "session resume --thread <thread-id> --name <name>",
+            "codex-worker session list",
         )
         with self.assertRaisesRegex(RpcFault, "session resume --thread"):
             self.broker.turn_status(IdentifierSelector(thread_id="unknown"))
@@ -977,8 +977,8 @@ class WorkerBrokerTests(unittest.TestCase):
                 "resume_command": "codex --remote ws://127.0.0.1:4500 resume thr-start",
             },
         })
-        self.assertIn("turn status --session %s" % session.session_id, fault.recovery)
-        self.assertIn("turn events --session %s" % session.session_id, fault.recovery)
+        self.assertEqual(fault.recovery,
+                         "codex-worker turn status --session %s" % session.session_id)
         self.assertEqual(self.broker.turn_status(session)["active_turn_id"], "turn-1")
 
     def test_interrupt_completes_active_turn_and_idle_race_is_typed(self):
@@ -1006,10 +1006,9 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertIn("work remains active", caught.exception.message)
         self.assertTrue(caught.exception.details["active"])
         self.assertEqual(caught.exception.details["next_actions"], [
-            "turn status --session %s" % session.session_id,
-            "turn wait --session %s --timeout <seconds>" % session.session_id,
-            "turn steer --session %s --prompt <text>" % session.session_id,
-            "turn interrupt --session %s" % session.session_id,
+            "codex-worker turn status --session %s" % session.session_id,
+            "codex-worker turn wait --session %s --timeout 30" % session.session_id,
+            "codex-worker turn interrupt --session %s" % session.session_id,
         ])
         page = self.broker.turn_events(session, after=0, limit=3)
         self.assertEqual(page["next_cursor"], 0)

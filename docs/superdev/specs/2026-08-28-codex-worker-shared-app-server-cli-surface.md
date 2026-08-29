@@ -175,7 +175,10 @@ The status result includes:
     "value": 2,
     "source": "codex-worker registry",
     "availability": "derived",
-    "basis": {"active_names": [], "idle_names": ["build-a", "review-a"]}
+    "basis": {
+      "active_names": [], "idle_names": ["build-a", "review-a"],
+      "active_count": 0, "idle_count": 2, "total_count": 2
+    }
   },
   "active_turn_count": {
     "value": 0,

@@ -36,6 +36,8 @@ class FakeCodex:
             "cursor-old": ([{"id": "turn-old", "status": "completed", "items": []}], None),
         }
         self.turn_list_requests = []
+        self.inventory_reads = 0
+        self.ambiguous_inventory_active = False
         self.websocket = None
 
     def option(self, key, default=None):
@@ -231,16 +233,32 @@ class FakeCodex:
                                                             "FAKE_CODEX_RESUME_CWD",
                                                             os.getcwd()))}})
         elif method == "thread/list":
+            self.inventory_reads += 1
             data = []
             for thread_id in sorted(self.thread_cwds):
                 status = ({"type": "active", "activeFlags": []}
                           if thread_id in self.active_turns else {"type": "idle"})
                 data.append({"id": thread_id, "status": status})
+            ambiguous = self.option("ambiguous_inventory_thread")
+            read_limit = self.option("ambiguous_inventory_reads", 0)
+            self.ambiguous_inventory_active = (
+                isinstance(ambiguous, str) and ambiguous
+                and type(read_limit) is int and self.inventory_reads <= read_limit)
+            if self.ambiguous_inventory_active:
+                data.append({"id": ambiguous,
+                             "status": {"type": "active", "activeFlags": []}})
             self.response(request_id, {
                 "data": data, "nextCursor": None, "backwardsCursor": None,
             })
         elif method == "thread/read":
             thread_id = message["params"]["threadId"]
+            if (self.ambiguous_inventory_active
+                    and thread_id == self.option("ambiguous_inventory_thread")):
+                self.response(request_id, {"thread": {
+                    "id": thread_id, "status": {"type": "active", "activeFlags": []},
+                    "turns": [],
+                }})
+                return
             turns = []
             if thread_id in self.active_turns:
                 turns.append({"id": self.active_turns[thread_id],

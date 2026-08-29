@@ -1,5 +1,6 @@
 """High-level durable session and turn contract for the Codex worker daemon."""
 import os
+import shlex
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -176,13 +177,16 @@ class WorkerBroker:
         ready = True
         if callable(poll):
             ready = poll() is None
+        records = self.registry.list()
         return {
             "ready": ready,
             "daemon_pid": self.daemon_pid,
             "codex_pid": getattr(proc, "pid", None),
             "socket_path": self.socket_path,
             "state_path": self.state_path,
-            "session_count": len(self.registry.list()),
+            "session_count": len(records),
+            "worker_names": sorted(record.name for record in records
+                                   if record.name is not None),
             "worker_version": self.worker_version,
         }
 
@@ -780,7 +784,8 @@ class WorkerBroker:
             if not status.attached:
                 raise _fault(
                     -32003, "session is detached", "session_detached",
-                    recovery="run session resume --session %s" % record.session_id,
+                    recovery="codex-worker session resume --session %s" % shlex.quote(
+                        record.session_id),
                     details=self._known_identity_details(
                         record.session_id, record.thread_id, None),
                 )
@@ -790,15 +795,13 @@ class WorkerBroker:
         if selector.thread_id is not None:
             return _fault(
                 -32001, "unknown raw thread; recover it with session resume --thread %s" % selector.thread_id,
-                "unknown_session", recovery="run session resume --thread %s" % selector.thread_id,
+                "unknown_session", recovery="codex-worker session resume --thread %s" % shlex.quote(
+                    selector.thread_id),
                 details={"thread_id": selector.thread_id},
             )
         return _fault(
             -32001, "unknown session", "unknown_session",
-            recovery=(
-                "run session list to choose a known session, or recover a raw Codex thread with "
-                "session resume --thread <thread-id> --name <name>"
-            ),
+            recovery="codex-worker session list",
             details={"session_id": selector.session_id},
         )
 
@@ -817,7 +820,8 @@ class WorkerBroker:
         if not status.attached:
             raise _fault(
                 -32003, "session is detached", "session_detached",
-                recovery="run session resume --session %s" % record.session_id,
+                recovery="codex-worker session resume --session %s" % shlex.quote(
+                    record.session_id),
                 details=self._known_identity_details(
                     record.session_id, record.thread_id, expected_turn_id),
             )
@@ -876,14 +880,11 @@ class WorkerBroker:
             "attach": self.attach_view(thread_id).to_dict(),
         }  # type: JsonObject
         if turn_id is None:
-            recovery = "run session resume --thread %s" % thread_id
+            recovery = "codex-worker session resume --thread %s" % shlex.quote(thread_id)
             message = "Codex thread exists but its session identity was not persisted"
         else:
             details["turn_id"] = turn_id
-            recovery = (
-                "inspect the upstream-started turn with turn status --session %s, "
-                "then turn events --session %s" % (session_id, session_id)
-            )
+            recovery = "codex-worker turn status --session %s" % shlex.quote(session_id)
             message = "Codex turn started but its session annotations were not persisted"
         return _fault(-32011, message, "registry_error", recovery=recovery, details=details)
 
@@ -937,23 +938,22 @@ class WorkerBroker:
             return (fault if record is None
                     else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, SessionDetached):
+            recovery = ("codex-worker session resume --session %s" % shlex.quote(record.session_id)
+                        if record else None)
             fault = _fault(
-                -32003, "session is detached", "session_detached",
-                recovery="run session resume --session %s" % (
-                    record.session_id if record else "<id>"))
+                -32003, "session is detached", "session_detached", recovery=recovery)
             return (fault if record is None
                     else self._with_record_identity(fault, record, turn_id))
         if isinstance(exc, WaitTimeout):
             session_id = record.session_id if record else exc.session_id
             next_actions = [
-                "turn status --session %s" % session_id,
-                "turn wait --session %s --timeout <seconds>" % session_id,
-                "turn steer --session %s --prompt <text>" % session_id,
-                "turn interrupt --session %s" % session_id,
+                "codex-worker turn status --session %s" % shlex.quote(session_id),
+                "codex-worker turn wait --session %s --timeout 30" % shlex.quote(session_id),
+                "codex-worker turn interrupt --session %s" % shlex.quote(session_id),
             ]
             fault = _fault(
                 -32006, "timed out waiting for turn; work remains active", "wait_timeout",
-                recovery="work remains active; run turn status/wait/steer/interrupt for session %s" % session_id,
+                recovery="codex-worker turn status --session %s" % shlex.quote(session_id),
                 details={
                     "session_id": exc.session_id,
                     "turn_id": exc.turn_id,

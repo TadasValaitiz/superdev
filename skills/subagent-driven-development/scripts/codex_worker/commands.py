@@ -595,6 +595,26 @@ class DaemonStopResponse(StrictModel): instance: InstanceView; status_before: st
 
 
 @dataclass(frozen=True)
+class CountEvidence(StrictModel):
+    value: int
+    source: str
+    availability: MetricAvailability
+    basis: JsonObject
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from .models import ActiveInventory, WorkerImpact
+        if self.source == "codex-worker registry":
+            expected = WorkerImpact.from_dict(self.basis).to_dict()["total_count"]
+        elif self.source == "codex app-server inventory":
+            expected = ActiveInventory.from_dict(self.basis).active_count
+        else:
+            raise ValueError("unsupported count evidence source")
+        if self.availability != MetricAvailability.DERIVED or self.value != expected:
+            raise ValueError("count evidence does not match its reconstructable basis")
+
+
+@dataclass(frozen=True)
 class ServiceStatusResponse(StrictModel):
     status: str
     service_version: str
@@ -604,8 +624,8 @@ class ServiceStatusResponse(StrictModel):
     exposure: str
     auth: str
     attach_command: str
-    worker_count: int
-    active_turn_count: int
+    worker_count: CountEvidence
+    active_turn_count: CountEvidence
     migration: JsonObject
     durable_state: str
 
@@ -618,9 +638,9 @@ class ServiceStatusResponse(StrictModel):
         for value in (self.pid, self.app_server_pid):
             if value is not None and (type(value) is not int or value <= 0):
                 raise ValueError("service pids must be positive when present")
-        for value in (self.worker_count, self.active_turn_count):
-            if type(value) is not int or value < 0:
-                raise ValueError("service counts must be non-negative")
+        if (self.worker_count.source != "codex-worker registry"
+                or self.active_turn_count.source != "codex app-server inventory"):
+            raise ValueError("service count sources are invalid")
         migration = MigrationStatusView.from_dict(self.migration)
         if self.status not in ("ready", "stopping", "stopped"):
             raise ValueError("invalid service status")
@@ -635,10 +655,10 @@ class ServiceStatusResponse(StrictModel):
             raise ValueError("ready service requires processes and complete migration")
         if self.status == "stopped" and (
                 self.pid is not None or self.app_server_pid is not None
-                or self.active_turn_count != 0):
+                or self.active_turn_count.value != 0):
             raise ValueError("stopped service cannot report live processes or activity")
         if self.status == "stopping" and (
-                self.pid is None or self.active_turn_count != 0):
+                self.pid is None or self.active_turn_count.value != 0):
             raise ValueError("stopping service requires daemon identity and no activity")
 
 
@@ -757,6 +777,8 @@ class FacadeFault(Exception):
         for action in next_actions:
             if not isinstance(action, dict) or set(action) != {"command", "reason"} or not all(isinstance(value, str) and value for value in action.values()):
                 raise ValueError("invalid next action")
+            if "<" in action["command"] or ">" in action["command"]:
+                raise ValueError("next action command must be literal")
         object.__setattr__(self, "code", code)
         object.__setattr__(self, "details", dict(details))
         object.__setattr__(self, "known_ids", dict(known_ids))
@@ -775,4 +797,4 @@ class FacadeFault(Exception):
     def worker_not_found(cls, name: str, instance: Optional[str] = None):
         del instance
         validate_worker_name(name)
-        return cls(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found", known_ids={"name": name, "session_id": None, "thread_id": None, "turn_id": None}, next_actions=[{"command": "codex-worker start --name %s" % name, "reason": "Create this worker in the global service"}])
+        return cls(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found", known_ids={"name": name, "session_id": None, "thread_id": None, "turn_id": None}, next_actions=[{"command": "codex-worker start --help", "reason": "Review required creation inputs for this absent worker"}])

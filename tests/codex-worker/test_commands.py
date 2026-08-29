@@ -44,9 +44,19 @@ class CommandModelTests(unittest.TestCase):
             "source": "codex-worker", "details": {},
             "known_ids": {"name": "review-a31",
                           "session_id": None, "thread_id": None, "turn_id": None},
-            "next_actions": [{"command": "codex-worker start --name review-a31",
-                              "reason": "Create this worker in the global service"}],
+            "next_actions": [{"command": "codex-worker start --help",
+                              "reason": "Review required creation inputs for this absent worker"}],
         })
+
+    def test_facade_fault_rejects_placeholder_recovery_commands(self):
+        with self.assertRaisesRegex(ValueError, "literal"):
+            FacadeFault(
+                FacadeFaultCode.DAEMON_STOPPED, "stopped", "daemon_stopped",
+                next_actions=[{
+                    "command": "codex-worker run --name worker-a --prompt <text>",
+                    "reason": "not runnable",
+                }],
+            )
 
     def test_global_service_command_models_and_fault_codes_are_strict(self):
         from codex_worker.commands import (
@@ -76,15 +86,22 @@ class CommandModelTests(unittest.TestCase):
                 type(model).from_dict(wire)
 
     def test_service_status_projects_listener_attach_counts_and_migration(self):
-        from codex_worker.commands import ServiceStatusResponse
+        from codex_worker.commands import CountEvidence, MetricAvailability, ServiceStatusResponse
+        from codex_worker.models import ActiveInventory, WorkerImpact
         migration = MigrationStatusView(MigrationState.COMPLETE, True, 0, 0, 0, [], [])
+        workers = WorkerImpact(["active-a"], ["idle-b"])
+        inventory = ActiveInventory()
         status = ServiceStatusResponse(
             "ready", "8.1.0", 10, 11, "ws://127.0.0.1:4500",
             "loopback", "none", "codex --remote ws://127.0.0.1:4500",
-            2, 1, migration.to_dict(), "preserved",
+            CountEvidence(2, "codex-worker registry", MetricAvailability.DERIVED,
+                          workers.to_dict()),
+            CountEvidence(0, "codex app-server inventory", MetricAvailability.DERIVED,
+                          inventory.to_dict()), migration.to_dict(), "preserved",
         )
         self.assertEqual(ServiceStatusResponse.from_dict(status.to_dict()), status)
-        self.assertEqual(status.active_turn_count, 1)
+        self.assertEqual(status.worker_count.value, 2)
+        self.assertEqual(status.worker_count.basis["active_names"], ["active-a"])
         invalid = status.to_dict()
         for key, value in (
                 ("status", "starting"), ("exposure", "unknown"),

@@ -272,7 +272,36 @@ def build_parser() -> argparse.ArgumentParser:
     turn_interrupt.set_defaults(method="turn/interrupt")
     _add_selector_group(turn_interrupt)
 
+    _add_public_limits(parser)
     return parser
+
+
+def _add_public_limits(parser: argparse.ArgumentParser) -> None:
+    """Attach an explicit operational boundary to every public help surface."""
+    generic = ("Uses the one machine-wide service and global worker names. "
+               "Typed operational refusals exit 3; this command never stops the service.")
+    danger = ("Machine-wide and human-supervised. Active work refuses unless --force is "
+              "explicitly supplied; --force may interrupt every reported active turn.")
+    raw = ("Requires the existing strictly ready global service and never auto-starts it. "
+           "Exact session/thread selectors are preserved on typed operational refusal.")
+
+    def visit(current: argparse.ArgumentParser, path: List[str]) -> None:
+        if path == ["daemon", "serve"]:
+            return
+        current.formatter_class = argparse.RawDescriptionHelpFormatter
+        if path in (["daemon", "stop"], ["daemon", "restart"]):
+            boundary = danger
+        elif path and path[0] in ("model", "session", "turn"):
+            boundary = raw
+        else:
+            boundary = generic
+        current.epilog = "Limits:\n  %s" % boundary
+        for action in current._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for name, child in action.choices.items():
+                    visit(child, path + [name])
+
+    visit(parser, [])
 
 
 def _add_common_commands(families) -> None:
@@ -404,7 +433,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         except FacadeFault as fault:
             response = rpc_response("cli", fault=FacadeRpcFault(fault))
             _print_json(response, False)
-            return 1
+            return 3
 
     try:
         params = _params_for(args)
@@ -462,15 +491,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     except FacadeFault as fault:
         response = rpc_response("cli", fault=FacadeRpcFault(fault))
         _print_json(response, args.pretty)
-        return 1
+        return 3
     except RpcFault as fault:
         response = rpc_response("cli", fault=fault)
         _print_json(response, args.pretty)
-        return 1
+        return 3
     except OSError:
         response = rpc_response("cli", fault=daemon_unavailable_fault(args.socket or default_socket_path()))
         _print_json(response, args.pretty)
-        return 1
+        return 3
     except ValueError as exc:
         response = rpc_response("cli", fault=RpcFault(
             -32602, "Invalid params", "invalid_params", details={"reason": str(exc)}
@@ -480,7 +509,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _print_json(response, args.pretty)
     if "error" in response:
-        return 1
+        return 3
     return 0
 
 
@@ -755,9 +784,9 @@ def _managed_raw_endpoint(unused=None):
     """Require exact-ready singleton state without starting or replacing it."""
     del unused
     manager = _service_manager()
-    status = manager.status()
+    status = manager.readiness()
     socket_path = str(manager.deps.paths.rpc_socket)
-    if getattr(status, "status", None) == "stopped":
+    if status is None:
         raise daemon_unavailable_fault(socket_path)
     if status.service_version != distribution_version():
         raise FacadeFault(
@@ -827,6 +856,15 @@ def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
     if loaded_version == installed_version:
         return
     installer = root / "skills" / "subagent-driven-development" / "scripts" / "install-codex-worker"
+    next_actions = [{
+        "command": "codex-worker --version",
+        "reason": "Inspect the installed command version without runtime contact",
+    }]
+    if installer.is_file():
+        next_actions.append({
+            "command": shlex.quote(str(installer)),
+            "reason": "After coordinating other rooms, repair from this loaded plugin root",
+        })
     raise FacadeFault(
         FacadeFaultCode.TOOL_VERSION_MISMATCH,
         "Installed codex-worker does not match the loaded Superdev plugin",
@@ -843,12 +881,7 @@ def _require_loaded_plugin_version(args: argparse.Namespace) -> None:
         },
         known_ids={"name": None, "session_id": None,
                    "thread_id": None, "turn_id": None},
-        next_actions=[
-            {"command": "codex-worker --version",
-             "reason": "Inspect the installed command version without runtime contact"},
-            {"command": shlex.quote(str(installer)),
-             "reason": "After coordinating other rooms, repair from this loaded plugin root"},
-        ],
+        next_actions=next_actions,
     )
 
 
@@ -917,7 +950,54 @@ def _managed_facade(broker, runtime, registry, state_path):
 
 
 def _print_json(payload: JsonObject, pretty: bool) -> None:
+    _validate_wire_recovery_actions(payload)
     if pretty:
         print(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False))
     else:
         print(json.dumps(payload, separators=(",", ":"), allow_nan=False))
+
+
+def _validate_wire_recovery_actions(payload: JsonObject) -> None:
+    commands = []  # type: List[str]
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            recovery = value.get("recovery")
+            if isinstance(recovery, str):
+                commands.append(recovery)
+            actions = value.get("next_actions")
+            if isinstance(actions, list):
+                for action in actions:
+                    if isinstance(action, str):
+                        commands.append(action)
+                    elif isinstance(action, dict) and isinstance(action.get("command"), str):
+                        commands.append(action["command"])
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+
+    walk(payload)
+    parser = build_parser()
+    for command in commands:
+        tokens = shlex.split(command)
+        if not tokens or "<" in command or ">" in command:
+            raise ValueError("recovery action is not literal")
+        if tokens[0] == "codex-worker":
+            try:
+                with open(os.devnull, "w") as discard:
+                    with contextlib.redirect_stdout(discard), \
+                            contextlib.redirect_stderr(discard):
+                        parser.parse_args(tokens[1:])
+            except SystemExit as exc:
+                if exc.code != 0:
+                    raise ValueError("recovery action does not parse: %s" % command)
+            except CliUsageError as exc:
+                raise ValueError("recovery action does not parse: %s" % command) from exc
+        elif tokens[0] == "codex":
+            if len(tokens) not in (3, 5) or tokens[1] != "--remote" or (
+                    len(tokens) == 5 and tokens[3] != "resume"):
+                raise ValueError("Codex recovery action does not match the public attach grammar")
+        elif not Path(tokens[0]).is_absolute() or not Path(tokens[0]).is_file():
+            raise ValueError("recovery action executable does not exist: %s" % tokens[0])

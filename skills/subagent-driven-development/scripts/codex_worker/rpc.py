@@ -59,7 +59,7 @@ def daemon_unavailable_fault(socket_path: str) -> RpcFault:
         -32000,
         "Codex worker daemon is not available",
         "daemon_unavailable",
-        recovery="run codex-worker --socket %s daemon serve" % socket_path,
+        recovery="codex-worker daemon start",
         details={"socket_path": socket_path},
     )
 
@@ -69,7 +69,7 @@ def socket_endpoint_unsafe_fault(socket_path: str, reason: str) -> RpcFault:
         -32017,
         "Codex worker socket endpoint is unsafe",
         "socket_endpoint_unsafe",
-        recovery="remove the unsafe endpoint and restart codex-worker daemon serve",
+        recovery="codex-worker daemon status",
         details={"socket_path": socket_path, "reason": reason},
     )
 

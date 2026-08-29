@@ -4,6 +4,7 @@ import io
 import json
 import os
 import socket
+import shlex
 import stat
 import subprocess
 import sys
@@ -181,6 +182,85 @@ def _unused_loopback_listener():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind(("127.0.0.1", 0))
         return "ws://127.0.0.1:%d" % probe.getsockname()[1]
+
+
+class RecoveryActionTests(unittest.TestCase):
+    def test_raw_fault_rejects_prose_and_placeholder_recovery_actions(self):
+        for recovery in ("run session list", "codex-worker turn wait --timeout <seconds>"):
+            with self.subTest(recovery=recovery), self.assertRaisesRegex(ValueError, "literal"):
+                RpcFault(-32000, "refused", "daemon_unavailable", recovery=recovery)
+
+    def test_managed_daemon_unavailable_recovery_is_public_start(self):
+        fault = rpc_module.daemon_unavailable_fault("/tmp/private.sock")
+        self.assertEqual(fault.recovery, "codex-worker daemon start")
+
+    def test_literal_codex_worker_actions_parse_on_the_public_surface(self):
+        actions = [
+            "codex-worker daemon start",
+            "codex-worker daemon status",
+            "codex-worker status --name worker-a",
+            "codex-worker session show --session 12345678-1234-5678-1234-567812345678",
+        ]
+        parser = cli.build_parser()
+        for command in actions:
+            with self.subTest(command=command):
+                tokens = shlex.split(command)
+                parsed = parser.parse_args(tokens[1:])
+                self.assertIsNotNone(parsed.family)
+
+    def test_emitted_next_actions_are_exhaustively_parser_checked(self):
+        valid = {"error": {"data": {"next_actions": [
+            {"command": "codex-worker daemon start", "reason": "start"},
+            {"command": "codex --remote ws://127.0.0.1:4500 resume thread-a",
+             "reason": "attach"},
+        ]}}}
+        cli._validate_wire_recovery_actions(valid)
+        for command in ("codex-worker daemon serve --bad", "missing-tool status"):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, "recovery"):
+                cli._validate_wire_recovery_actions({
+                    "error": {"data": {"next_actions": [
+                        {"command": command, "reason": "bad"}]}}})
+
+
+class PublicHelpLimitsTests(unittest.TestCase):
+    def test_every_public_leaf_help_states_limits(self):
+        leaves = [
+            ["start"], ["run"], ["message"], ["status"], ["messages"],
+            ["history"], ["steer"], ["interrupt"], ["goal", "set"],
+            ["goal", "show"], ["limits"], ["daemon", "start"],
+            ["daemon", "status"], ["daemon", "stop"], ["daemon", "restart"],
+            ["migration", "status"], ["migration", "resolve"], ["model", "list"],
+            ["session", "start"], ["session", "resume"], ["session", "list"],
+            ["session", "show"], ["turn", "start"], ["turn", "status"],
+            ["turn", "wait"], ["turn", "events"], ["turn", "steer"],
+            ["turn", "interrupt"],
+        ]
+        parser = cli.build_parser()
+        for path in leaves:
+            with self.subTest(path=path), self.assertRaises(SystemExit) as caught:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    parser.parse_args(path + ["--help"])
+            self.assertEqual(caught.exception.code, 0)
+            self.assertIn("Limits:", output.getvalue())
+
+    def test_global_maintenance_help_names_force_impact(self):
+        parser = cli.build_parser()
+        for action in ("stop", "restart"):
+            with self.subTest(action=action), self.assertRaises(SystemExit):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    parser.parse_args(["daemon", action, "--help"])
+            help_text = output.getvalue()
+            for fragment in ("Machine-wide", "Active work", "--force", "every reported"):
+                self.assertIn(fragment, help_text)
+
+    def test_managed_raw_help_states_no_autostart_boundary(self):
+        parser = cli.build_parser()
+        for path in (["model", "list"], ["session", "resume"], ["turn", "status"]):
+            with self.subTest(path=path), self.assertRaises(SystemExit):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    parser.parse_args(path + ["--help"])
+            for fragment in ("strictly ready", "never auto-starts"):
+                self.assertIn(fragment, output.getvalue())
 
 
 class RpcServerTests(unittest.TestCase):
@@ -907,7 +987,7 @@ class CliTests(unittest.TestCase):
             completed = self.run_cli(
                 ["model", "list"], fake_rpc=self.fake_rpc_success, include_socket=True,
             )
-        self.assert_json_error(completed, 1, "tool_version_mismatch")
+            self.assert_json_error(completed, 3, "tool_version_mismatch")
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["error"]["data"]["details"]["loaded_version"], "0.0.1")
         self.assertEqual(payload["error"]["data"]["details"]["installed_version"],
@@ -936,7 +1016,7 @@ class CliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": str(plugin)}), \
                 mock.patch.object(cli, "_serve") as serve:
             completed = self.run_cli(["daemon", "serve"])
-        self.assert_json_error(completed, 1, "tool_version_mismatch")
+            self.assert_json_error(completed, 3, "tool_version_mismatch")
         serve.assert_not_called()
 
     def test_managed_raw_families_refuse_old_daemon_before_requested_rpc(self):
@@ -948,13 +1028,13 @@ class CliTests(unittest.TestCase):
                 manager = type("Manager", (), {
                     "deps": type("Deps", (), {"paths": type("Paths", (), {
                         "rpc_socket": Path(self.socket_path)})()})(),
-                    "status": lambda self: type("Status", (), {
+                    "readiness": lambda self: type("Status", (), {
                         "status": "ready", "service_version": "0.0.1"})(),
                 })()
                 with mock.patch.object(cli, "_service_manager", return_value=manager):
                     completed = self.run_cli(command, fake_rpc=self.fake_rpc_success,
                                              include_socket=False)
-                payload = self.assert_json_error(completed, 1, "tool_version_mismatch")
+                payload = self.assert_json_error(completed, 3, "tool_version_mismatch")
                 details = payload["error"]["data"]["details"]
                 self.assertEqual(details["actual_version"], "0.0.1")
                 self.assertEqual(details["expected_version"], cli.distribution_version())
@@ -968,8 +1048,7 @@ class CliTests(unittest.TestCase):
         manager = type("Manager", (), {
             "deps": type("Deps", (), {"paths": type("Paths", (), {
                 "rpc_socket": Path(self.socket_path)})()})(),
-            "status": lambda self: type("Status", (), {
-                "status": "stopped", "service_version": None})(),
+            "readiness": lambda self: None,
         })()
         with mock.patch.object(cli, "_spawn_daemon") as spawn, \
                 mock.patch.object(cli, "_service_manager", return_value=manager):
@@ -978,7 +1057,7 @@ class CliTests(unittest.TestCase):
                 fake_rpc=self.fake_rpc_success,
                 include_socket=False,
             )
-        self.assert_json_error(completed, 1, "daemon_unavailable")
+        self.assert_json_error(completed, 3, "daemon_unavailable")
         self.assertEqual(self.rpc_calls, [])
         spawn.assert_not_called()
 
@@ -986,14 +1065,13 @@ class CliTests(unittest.TestCase):
         manager = type("Manager", (), {
             "deps": type("Deps", (), {"paths": type("Paths", (), {
                 "rpc_socket": Path(self.socket_path)})()})(),
-            "status": lambda self: type("Status", (), {
-                "status": "error", "service_version": cli.distribution_version()})(),
+            "readiness": lambda self: None,
         })()
         with mock.patch.object(cli, "_service_manager", return_value=manager):
             completed = self.run_cli(["session", "list"],
                                      fake_rpc=self.fake_rpc_success,
                                      include_socket=False)
-        self.assert_json_error(completed, 1, "daemon_unavailable")
+        self.assert_json_error(completed, 3, "daemon_unavailable")
         self.assertEqual(self.rpc_calls, [])
 
     def test_message_parser_maps_strict_prose_file_surface(self):
@@ -1082,7 +1160,7 @@ class CliTests(unittest.TestCase):
                                    include_socket=False)
         finally:
             cli._common_endpoint = original_endpoint
-        self.assert_json_error(stopped, 1, "daemon_stopped")
+        self.assert_json_error(stopped, 3, "daemon_stopped")
         self.assertEqual(calls, [True])
 
     def fake_codex_bin(self):
@@ -1170,10 +1248,11 @@ class CliTests(unittest.TestCase):
             "deps": type("Deps", (), {
                 "paths": type("Paths", (), {"rpc_socket": Path(self.socket_path)})(),
             })(),
-            "status": lambda self: type("Status", (), {
-                "status": "ready", "last_error": None,
-                "service_version": cli.distribution_version(),
+            "readiness": lambda self: type("Readiness", (), {
+                "status": "ready", "service_version": cli.distribution_version(),
             })(),
+            "status": lambda self: (_ for _ in ()).throw(
+                AssertionError("managed raw dispatch must not enumerate inventory")),
         })()
         cli._service_manager = lambda: manager
         try:
@@ -1248,7 +1327,7 @@ class CliTests(unittest.TestCase):
         finally:
             cli._service_manager = original
 
-    def test_rpc_error_is_structured_and_exit_one(self):
+    def test_typed_rpc_error_is_structured_and_exits_three(self):
         def fake_rpc_error(socket_path, method, params, timeout):
             return {"jsonrpc": "2.0", "id": "cli",
                     "error": {"code": -32005, "message": "turn is not active",
@@ -1256,12 +1335,12 @@ class CliTests(unittest.TestCase):
 
         completed = self.run_cli(["turn", "steer", "--session", self.session_id,
                                   "--prompt", "try anyway"], fake_rpc=fake_rpc_error)
-        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.returncode, 3)
         self.assertEqual(json.loads(completed.stdout)["error"]["data"]["kind"], "turn_not_active")
 
-    def test_daemon_absent_is_structured_and_exit_one(self):
+    def test_daemon_absent_is_structured_and_exits_three(self):
         completed = self.run_cli(["daemon", "status"], fake_rpc=None)
-        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.returncode, 3)
         lines = completed.stdout.splitlines()
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0])["error"]["data"]["kind"], "daemon_unavailable")
@@ -1277,7 +1356,7 @@ class CliTests(unittest.TestCase):
                                      include_socket=False)
         finally:
             cli._common_endpoint = original
-        payload = self.assert_json_error(completed, 1, "daemon_stopped")
+        payload = self.assert_json_error(completed, 3, "daemon_stopped")
         self.assertEqual(payload["error"]["code"], -32023)
         self.assertEqual(set(payload["error"]["data"]), {
             "kind", "retryable", "source", "details", "known_ids", "next_actions",
@@ -1535,6 +1614,10 @@ class CliTests(unittest.TestCase):
                 })()
             def ensure_running(inner, listener=None):
                 return inner.status()
+            def readiness(inner):
+                return type("Response", (), {
+                    "status": "ready", "service_version": cli.distribution_version(),
+                })()
             def stop(inner, force=False):
                 return {"status_after": "stopped", "force": force}
 
@@ -1746,7 +1829,7 @@ class PublicLauncherTests(unittest.TestCase):
                 cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, check=False,
             )
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertEqual(len(result.stdout.splitlines()), 1)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["error"]["data"]["kind"], "daemon_start_failed")
@@ -1773,7 +1856,7 @@ class PublicLauncherTests(unittest.TestCase):
                 cwd=directory, env=env, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, check=False,
             )
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertEqual(len(result.stdout.splitlines()), 1)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["error"]["data"]["kind"], "daemon_start_failed")
@@ -1928,7 +2011,7 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
         self.assertIsInstance(status["pid"], int)
         self.assertTrue(_pid_exists(status["pid"]))
         self.assertEqual({item["pid"] for item in statuses}, {status["pid"]})
-        self.assertEqual(status["worker_count"], 5)
+        self.assertEqual(status["worker_count"]["value"], 5)
         names, threads, sessions, finals = set(), set(), set(), set()
         for index, payload in results:
             result = payload["result"]
@@ -1975,7 +2058,7 @@ class ManagedProcessLifecycleTests(unittest.TestCase):
             "start", "--name", "timed", "--prompt", "slow", "--model", "fake-model-a",
             "--cwd", str(self.workdirs[6]), "--timeout", "0", cwd=self.workdirs[6], timeout=5,
         )
-        timeout_payload = self._json(timed, expected_exit=1)
+        timeout_payload = self._json(timed, expected_exit=3)
         self.assertEqual(timeout_payload["error"]["code"], -32025)
         self.assertEqual(timeout_payload["error"]["data"]["kind"], "timeout_active")
         timed_status = self._status_until("timed", "in_progress")

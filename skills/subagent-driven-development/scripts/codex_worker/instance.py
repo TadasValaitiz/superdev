@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
-from .commands import (DaemonStatusResponse, DaemonStopResponse, FacadeFault,
+from .commands import (CountEvidence, DaemonStatusResponse, DaemonStopResponse, FacadeFault,
                        FacadeFaultCode, InstanceSource, InstanceView,
-                       RestartServiceResponse, ServiceReadinessResponse,
+                       MetricAvailability, RestartServiceResponse, ServiceReadinessResponse,
                        ServiceStatusResponse)
 from .models import (ActiveInventory, MaintenanceResult, RpcFault, WorkerImpact)
 from .path_security import unsafe_ancestor
@@ -362,7 +362,6 @@ class InstanceManager:
                      cause: Optional[dict] = None, retryable: bool = False) -> FacadeFault:
         paths = self.deps.paths
         path = paths.socket_path if offending_path is None else Path(offending_path)
-        selected = shlex.quote(self.identity.value)
         return FacadeFault(
             FacadeFaultCode.DAEMON_START_FAILED,
             "Codex worker daemon could not be started safely",
@@ -379,8 +378,6 @@ class InstanceManager:
             known_ids={"name": None, "session_id": None,
                        "thread_id": None, "turn_id": None},
             next_actions=[
-                {"command": "codex-worker --instance %s daemon status" % selected,
-                 "reason": "Inspect the selected managed instance"},
                 {"command": "/bin/ls -ld %s" % shlex.quote(str(path)),
                  "reason": "Inspect the runtime path without changing it"},
                 {"command": "/usr/bin/tail -n 100 %s" % shlex.quote(str(paths.log_path)),
@@ -476,7 +473,8 @@ class InstanceManager:
         deadline = self.deps.monotonic() + 2.0
         while any(_pid_alive(pid) for pid in (before.get("daemon_pid"), before.get("codex_pid"))):
             if self.deps.monotonic() >= deadline:
-                selected = shlex.quote(self.identity.value)
+                remaining_pid = next(pid for pid in (
+                    before.get("daemon_pid"), before.get("codex_pid")) if _pid_alive(pid))
                 raise FacadeFault(FacadeFaultCode.DAEMON_STOP_FAILED, "Codex worker daemon did not stop",
                                   "daemon_stop_failed", True, details={"reason": "stop_timeout",
                                   "deadline_seconds": 2.0, "daemon_pid": before.get("daemon_pid"),
@@ -486,11 +484,12 @@ class InstanceManager:
                                              "thread_id": None,
                                              "turn_id": None},
                                   next_actions=[{
-                                      "command": "codex-worker --instance %s daemon status" % selected,
-                                      "reason": "Inspect the remaining daemon state",
+                                      "command": "/bin/ps -p %d" % remaining_pid,
+                                      "reason": "Inspect the exact remaining owned process",
                                   }, {
-                                      "command": "codex-worker --instance %s daemon stop" % selected,
-                                      "reason": "Retry graceful shutdown",
+                                      "command": "/usr/bin/tail -n 100 %s" % shlex.quote(
+                                          str(self.deps.paths.log_path)),
+                                      "reason": "Inspect the exact daemon log before retrying",
                                   }])
             self.deps.wait(0.01)
         if observed_socket is not None:
@@ -601,11 +600,16 @@ def _service_exposure(listener: str) -> str:
         return "non_loopback"
 
 
-def _stopped_service_status(listener: str, version: str, worker_count: int,
+def _stopped_service_status(listener: str, version: str, workers: WorkerImpact,
                             migration: dict) -> ServiceStatusResponse:
+    inventory = ActiveInventory()
     return ServiceStatusResponse(
         "stopped", version, None, None, listener, _service_exposure(listener), "none",
-        "codex --remote %s" % shlex.quote(listener), worker_count, 0,
+        "codex --remote %s" % shlex.quote(listener),
+        CountEvidence(workers.to_dict()["total_count"], "codex-worker registry",
+                      MetricAvailability.DERIVED, workers.to_dict()),
+        CountEvidence(0, "codex app-server inventory", MetricAvailability.DERIVED,
+                      inventory.to_dict()),
         migration, "preserved")
 
 
@@ -743,7 +747,11 @@ class ServiceManager:
         migration = self._durable_migration()
         return _stopped_service_status(
             listener, config.worker_version if config is not None else self.expected_version,
-            len(workers.idle_names), migration)
+            workers, migration)
+
+    def readiness(self) -> Optional[ServiceReadinessResponse]:
+        """Probe strict managed liveness without enumerating worker inventory."""
+        return self._probe_readiness()
 
     def _durable_migration(self) -> dict:
         path = self.deps.paths.migration_path
@@ -829,12 +837,21 @@ class ServiceManager:
         return self._launch_locked(config, previous)
 
     def _address_in_use(self, listener: str) -> FacadeFault:
+        parsed = urlsplit(listener)
+        port = parsed.port
+        alternate_port = port + 1 if port is not None and port < 65535 else 4501
+        host = ("[%s]" % parsed.hostname
+                if parsed.hostname and ":" in parsed.hostname else parsed.hostname)
+        alternate = "ws://%s:%d" % (host, alternate_port)
         return FacadeFault(
             FacadeFaultCode.ADDRESS_IN_USE,
             "Configured app-server listener is already in use", "address_in_use",
             details={"listener": listener, "durable_state": "preserved"},
-            next_actions=[{"command": "codex-worker daemon status",
-                           "reason": "Inspect the configured global listener without contacting its peer"}])
+            next_actions=[{
+                "command": "codex-worker daemon start --app-server-listen %s" %
+                           shlex.quote(alternate),
+                "reason": "Retry explicitly on the deterministic alternate listener",
+            }])
 
     def _launch_locked(self, config: ServiceConfig,
                        previous: Optional[ServiceConfig]) -> ServiceStatusResponse:

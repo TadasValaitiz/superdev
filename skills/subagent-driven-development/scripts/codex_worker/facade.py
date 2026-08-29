@@ -19,9 +19,9 @@ from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatu
                        FACADE_FAULT_KINDS, MigrationStatusRequest,
                        MigrationStatusResponse,
                        ResolveLegacyConflictRequest, RestartServiceRequest,
-                       ServiceReadinessResponse, ServiceStatusResponse,
+                       CountEvidence, MetricAvailability, ServiceReadinessResponse, ServiceStatusResponse,
                        StatusServiceRequest, StopServiceRequest)
-from .models import ActiveInventory, IdentifierSelector, RpcFault, SessionRecord
+from .models import ActiveInventory, IdentifierSelector, RpcFault, SessionRecord, WorkerImpact
 from .registry import LegacyNameConflict, RegistryError
 from .runtime import SessionDetached, UnknownSession, WaitTimeout
 from .callback_store import CallbackBinding
@@ -480,16 +480,10 @@ class WorkerFacade:
         status = {"command": self._command("status --name %s" % name),
                   "reason": "Inspect callback and worker state before continuing"}
         if code == FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE:
-            return [{
-                "command": self._command(
-                    "message --name %s --message-file <shorter-path>" % name),
-                "reason": "Retry with a shorter proactive message",
-            }]
+            status["reason"] = "Inspect state before retrying with a shorter message"
+            return [status]
         if code == FacadeFaultCode.CALLBACK_SEND_FAILED:
-            return [status, {
-                "command": self._command("message --name %s --message-file <path>" % name),
-                "reason": "Retry deliberately with a new proactive event if still useful",
-            }]
+            return [status]
         reasons = {
             FacadeFaultCode.CALLBACK_UNAVAILABLE:
                 "Inspect callback state; continue work without assuming a callback",
@@ -525,8 +519,8 @@ class WorkerFacade:
     def _not_found_fault(self, name):
         return FacadeFault(FacadeFaultCode.WORKER_NOT_FOUND, "Worker not found", "worker_not_found",
                            known_ids=self._known(name=name), next_actions=[{
-                               "command": self._command("start --name %s" % name),
-                               "reason": "Create this worker in the global service"}])
+                               "command": self._command("start --help"),
+                               "reason": "Review required creation inputs for this absent worker"}])
 
     def _known(self, record=None, name=None, turn_id=None):
         return {"name": name or (record.name if record else None),
@@ -538,18 +532,20 @@ class WorkerFacade:
             actions = self._legacy_actions(record)
         else:
             actions = [
-                {"command": self._command("run --name %s" % record.name), "reason": "Continue the existing worker"},
-                {"command": self._command("start --name <different-name>"), "reason": "Create an independent worker"}]
+                {"command": self._command("status --name %s" % shlex.quote(record.name)),
+                 "reason": "Inspect the existing worker before continuing"},
+                self._raw_resume_action(record.thread_id)]
         return FacadeFault(FacadeFaultCode.WORKER_NAME_EXISTS, "Worker name already exists", "worker_name_exists",
                            details=self._details({}, record),
                            known_ids=self._known(record), next_actions=actions)
 
     def _legacy_actions(self, record):
         return [self._raw_resume_action(record.thread_id),
-                {"command": self._command("turn start --session %s --prompt <text>" % record.session_id),
-                 "reason": "Use the advanced raw turn path without inventing policy"},
-                {"command": self._command("start --name <different-name>"),
-                 "reason": "Create a common worker with explicit policy"}]
+                {"command": self._command("session show --session %s" %
+                                           shlex.quote(record.session_id)),
+                 "reason": "Inspect the preserved raw session without inventing policy"},
+                {"command": self._command("start --help"),
+                 "reason": "Review required creation inputs for an independent worker"}]
 
     def _legacy_fault(self, record):
         return FacadeFault(FacadeFaultCode.REGISTRY_ERROR, "Worker policy is incomplete in legacy state", "registry_error",
@@ -574,14 +570,16 @@ class WorkerFacade:
         if name is None:
             return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
                                known_ids=self._known(), next_actions=[
-                                   {"command": self._command("daemon status"),
-                                    "reason": "Inspect the global service"},
-                                   {"command": self._command("start --name <name> --prompt <text>"),
-                                    "reason": "Start a named worker to launch the global service"}])
+                                   {"command": self._command("daemon start"),
+                                    "reason": "Start the global service without creating a worker"}])
         return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
                            details=self._details({}, record),
                            known_ids=self._known(record, name), next_actions=[
-                               {"command": self._command("run --name %s --prompt <text>" % name), "reason": "Resume deliberately"}])
+                               {"command": self._command("daemon start"),
+                                "reason": "Start the global service without creating a turn"},
+                               {"command": self._command("status --name %s" % shlex.quote(name)),
+                                "reason": "Inspect the exact durable worker after service start"},
+                               self._raw_resume_action(record.thread_id)])
 
     def _turn_not_active(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TURN_NOT_ACTIVE, "Turn is not active", "turn_not_active",
@@ -595,8 +593,6 @@ class WorkerFacade:
              "reason": "Inspect the active turn"},
             {"command": self._command("messages --name %s" % name),
              "reason": "Read retained narration"},
-            {"command": self._command("steer --name %s --prompt <text>" % name),
-             "reason": "Append an instruction to the active turn"},
             {"command": self._command("interrupt --name %s" % name),
              "reason": "Cancel only if deliberate"},
         ]
@@ -704,6 +700,10 @@ class ServiceFacade:
             daemon = self.deps.broker.daemon_status()
             inventory = (self.deps.broker.list_active_threads()
                          if service.ready else ActiveInventory())
+            all_names = set(daemon.get("worker_names", []))
+            active_names = {item.worker for item in inventory.items
+                            if item.worker is not None}
+            workers = WorkerImpact(sorted(active_names), sorted(all_names - active_names))
             migration = self.deps.migrator.scan_and_apply()
             status = "ready" if service.ready else "stopping"
             return Ok(ServiceStatusResponse(
@@ -711,7 +711,12 @@ class ServiceFacade:
                 service.codex_pid, service.listener, service.exposure.value,
                 service.authentication.value,
                 "codex --remote %s" % shlex.quote(service.listener),
-                daemon.get("session_count", 0), inventory.active_count,
+                CountEvidence(workers.to_dict()["total_count"],
+                              "codex-worker registry", MetricAvailability.DERIVED,
+                              workers.to_dict()),
+                CountEvidence(inventory.active_count,
+                              "codex app-server inventory", MetricAvailability.DERIVED,
+                              inventory.to_dict()),
                 migration.to_dict(), "preserved"))
         except BaseException as exc:
             return Err(self._fault(exc, "service_status_failed"))
@@ -775,12 +780,13 @@ class ServiceFacade:
                 details={"action": result.action, "active": active,
                          "workers": result.workers.to_dict(),
                          "durable_state": result.durable_state},
-                next_actions=[
-                    {"command": "codex-worker daemon status",
-                     "reason": "Inspect every active global thread"},
-                    {"command": "codex-worker status --name <worker>",
-                     "reason": "Wait for named active work to finish"},
-                ]))
+                next_actions=([{
+                    "command": "codex-worker daemon status",
+                    "reason": "Inspect every active global thread",
+                }] + [{
+                    "command": "codex-worker status --name %s" % shlex.quote(name),
+                    "reason": "Inspect this exact active worker before retrying maintenance",
+                } for name in result.workers.active_names])))
         return Ok(result)
 
     @staticmethod

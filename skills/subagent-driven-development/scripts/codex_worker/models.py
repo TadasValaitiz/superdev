@@ -9,6 +9,13 @@ _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _ACTIVE_ORIGINS = frozenset(("worker", "unmapped_tui"))
 
 
+def _validate_recovery_command(command: str) -> None:
+    if (not isinstance(command, str) or not command.strip()
+            or "<" in command or ">" in command
+            or not command.startswith(("codex-worker ", "codex "))):
+        raise ValueError("recovery action must be a literal public command")
+
+
 @dataclass(frozen=True)
 class IdentifierSelector:
     session_id: Optional[str] = None
@@ -28,6 +35,17 @@ class ErrorDetail:
     kind: str
     recovery: Optional[str] = None
     details: Optional[JsonObject] = None
+
+    def __post_init__(self) -> None:
+        if self.recovery is not None:
+            _validate_recovery_command(self.recovery)
+        if self.details is not None and "next_actions" in self.details:
+            actions = self.details["next_actions"]
+            if (not isinstance(actions, list)
+                    or any(not isinstance(action, str) for action in actions)):
+                raise ValueError("next_actions must contain literal public commands")
+            for action in actions:
+                _validate_recovery_command(action)
 
     def to_dict(self) -> JsonObject:
         result = {"kind": self.kind}
@@ -383,6 +401,7 @@ class RpcFault(Exception):
         # representation and the exception contract in one type prevents a
         # second, drifting hierarchy of RPC errors.
         Exception.__init__(self, self.message)
+        ErrorDetail(self.kind, self.recovery, self.details)
 
     def to_dict(self) -> JsonObject:
         data = ErrorDetail(self.kind, self.recovery, self.details).to_dict()

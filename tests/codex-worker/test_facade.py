@@ -81,7 +81,8 @@ class _Broker:
                              "supported_efforts": ["medium"]}]}
 
     def daemon_status(self):
-        return {"ready": True}
+        return {"ready": True, "worker_names": sorted(
+            record.name for record in self.registry.list() if record.name is not None)}
 
     def goal_set(self, thread_id, objective=None, status=None, token_budget=None):
         return self.codex.goal_set(thread_id, objective, status, token_budget)
@@ -282,12 +283,10 @@ class FacadeTests(unittest.TestCase):
                 commands = [shlex.split(action["command"])
                             for action in result.error.next_actions]
                 if code == FacadeFaultCode.CALLBACK_PAYLOAD_TOO_LARGE:
-                    self.assertEqual(commands[0][1:4],
-                                     ["message", "--name", "faults-a"])
-                    self.assertIn("shorter", result.error.next_actions[0]["reason"].lower())
+                    self.assertEqual(commands[0][1:], ["status", "--name", "faults-a"])
                 elif code == FacadeFaultCode.CALLBACK_SEND_FAILED:
                     self.assertEqual([command[1] for command in commands],
-                                     ["status", "message"])
+                                     ["status"])
                 else:
                     self.assertEqual(commands[0][1:], ["status", "--name", "faults-a"])
                     self.assertNotEqual(commands[0][1], "message")
@@ -844,7 +843,7 @@ class FacadeTests(unittest.TestCase):
         })
         self.assertEqual(
             [shlex.split(action["command"])[1] for action in result.error.next_actions],
-            ["status", "messages", "steer", "interrupt"],
+            ["status", "messages", "interrupt"],
         )
 
     def test_status_response_asserts_every_field(self):
@@ -1158,10 +1157,10 @@ class FacadeTests(unittest.TestCase):
             "codex", "--remote", "ws://127.0.0.1:4500", "resume", hostile_thread,
         ])
         self.assertEqual(result.error.next_actions[1:], [
-            {"command": "codex-worker turn start --session %s --prompt <text>" % record.session_id,
-             "reason": "Use the advanced raw turn path without inventing policy"},
-            {"command": "codex-worker start --name <different-name>",
-             "reason": "Create a common worker with explicit policy"},
+            {"command": "codex-worker session show --session %s" % record.session_id,
+             "reason": "Inspect the preserved raw session without inventing policy"},
+            {"command": "codex-worker start --help",
+             "reason": "Review required creation inputs for an independent worker"},
         ])
 
     def test_existing_incomplete_legacy_name_uses_legacy_aware_actions(self):
@@ -1173,9 +1172,9 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(shlex.split(result.error.next_actions[0]["command"])[-2:-1],
                          ["resume"])
         self.assertEqual(shlex.split(result.error.next_actions[1]["command"])[1:3],
-                         ["turn", "start"])
+                         ["session", "show"])
         self.assertEqual(result.error.next_actions[-1]["command"],
-                         "codex-worker start --name <different-name>")
+                         "codex-worker start --help")
 
     def test_non_progressing_history_page_maps_protocol_error(self):
         self._record("history-stuck")
@@ -1239,14 +1238,20 @@ class FacadeTests(unittest.TestCase):
         })
         self.assertEqual(refused.error.next_actions, [
             {
-                "command": "codex-worker daemon status",
-                "reason": "Inspect the global service",
-            },
-            {
-                "command": "codex-worker start --name <name> --prompt <text>",
-                "reason": "Start a named worker to launch the global service",
+                "command": "codex-worker daemon start",
+                "reason": "Start the global service without creating a worker",
             },
         ])
+
+    def test_stopped_known_worker_uses_exact_start_status_and_attach_actions(self):
+        record = self._record("stopped-exact")
+        fault = self._facade()._stopped_fault(record.name, record)
+        self.assertEqual([shlex.split(action["command"]) for action in fault.next_actions], [
+            ["codex-worker", "daemon", "start"],
+            ["codex-worker", "status", "--name", "stopped-exact"],
+            ["codex", "--remote", "ws://127.0.0.1:4500", "resume", record.thread_id],
+        ])
+        self.assertNotIn("<", json.dumps(fault.next_actions))
 
     def test_recovery_commands_ignore_legacy_instance_identity(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
@@ -1255,8 +1260,8 @@ class FacadeTests(unittest.TestCase):
         missing = facade.status(WorkerStatusRequest("absent"))
         self.assertIsInstance(missing, Err)
         self.assertEqual(missing.error.next_actions, [{
-            "command": "codex-worker start --name absent",
-            "reason": "Create this worker in the global service"}])
+            "command": "codex-worker start --help",
+            "reason": "Review required creation inputs for this absent worker"}])
 
 
 class GlobalServiceFacadeTests(unittest.TestCase):
