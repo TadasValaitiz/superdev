@@ -19,7 +19,7 @@ All types: merges · worktree retired · tests per disposition · residue filed.
 | type | is | done-bar addition |
 |---|---|---|
 | **foundation item** | the base others build on — usually an unblocking kernel; often no user-facing surface | conformance-relevant rows claimed; **no checkride/scenario**, but the charter NAMES which downstream item will exercise it live — nothing ships forever unexercised |
-| **surface item** | changes what the operator sees/touches | + checkride + date-stamped scenario capture |
+| **surface item** | changes what the operator sees/touches | + a checkride plan in its plan · checkride PASS on ACTUAL DATA (the substrate law — a ride paused on missing data is a DECIDE, not a close) · date-stamped scenario written before the ride, refreshed after |
 | **ad-hoc room** | probe · spike · sweep — knowledge, not product code | findings filed (census/residue/report); probe-gate exempt; never silently becomes an item |
 | **quick fix** | post-shape detail | never its own room — quick-fix lanes / follow-up seats inside an existing room |
 | **backlog item** | parked question | not work until ruled into a milestone boundary at the co-plan |

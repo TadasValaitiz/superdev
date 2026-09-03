@@ -34,10 +34,12 @@ One table, one meaning per word, across every skill that touches the development
 | **quick-fix lane** | a small parallel write scope in the SAME worktree, post-shape: disjoint files, serial commits, follow-up seats |
 | **test disposition** | {keep · regenerate · archive-then-rewrite · fix-in-place} — set at brainstorm, refined (never reversed) by the plan |
 | **harvest file** | the business requirements extracted from tests BEFORE archiving; reviewer-signed; the source for rewrite-territory requirement tests |
-| **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like) in `docs/superdev/scenarios/` — distilled from a checkride, re-driven by the battery; never a replayable script |
-| **battery** | the milestone-close ad-hoc room that walks every scenario intent against the current surface |
+| **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like · the actual data it needs · the operator's starting point) in `docs/superdev/scenarios/` — written BEFORE the checkride from the plan's checkride plan and the design's use cases, refreshed after with criteria born from findings, re-driven by the battery; never a replayable script, never carries an expected result number |
+| **battery** | the milestone-close ad-hoc room that walks every scenario intent against the current surface, on actual data under the substrate law, in the checkride's one-step loop |
 | **foundation item** | an item building the base others consume (often an unblocking kernel); testable and mergeable but usually surface-less — no checkride, but its charter names the downstream item that will exercise it live |
-| **surface item** | an item changing what the operator sees/touches — checkride + scenario capture in its done-bar |
+| **surface item** | an item changing what the operator sees/touches — a checkride plan in its plan, a checkride PASS on actual data, and a scenario written before the ride in its done-bar |
+| **checkride plan** | the plan-time section (writing-plans; template in superdev:cli-checkride `checkride-plan.md`) naming the operator's starting point, the journeys at intent level with the command families they cross, the actual data each needs and how its availability is verified, and the expectations the evaluator judges against — ideas, never a script; reviewed with the plan |
+| **substrate law** | gates (checkride, battery, acceptance receipts) run on ACTUAL DATA at the operator's scale — never fixtures, mocks, stubs, seeded providers, or test-only modes, however labelled; when the real data is unavailable the gate STOPS and asks the operator (a DECIDE in autonomous mode); only the operator authorizes an exception, and no gate closes on a stand-in |
 | **blocking radius** | an item's transitive dependents in the milestone DAG — the number it holds hostage |
 | **unblocking kernel** | the minimal foundation part of a high-radius item that, merged first, releases its dependents |
 | **gate receipt** | the evidence line a plan checkpoint or the close gate records: tests run, marker delta, map rows claimed |
@@ -59,7 +61,7 @@ One table, one meaning per word, across every skill that touches the development
 | **full-set contract** | a plan answers to spec + log + ALL angles + census; angle content governs spec silence; contradictions stop planning (D71) |
 
 ## Kept unchanged
-charter · grounding probe / census · checkride · cursor · debrief · gate · room · green light · D# (design) · O# (orchestration method) · R5/RES (room events)
+charter · grounding probe / census · checkride · checkride plan · substrate law · cursor · debrief · gate · room · green light · D# (design) · O# (orchestration method) · R5/RES (room events)
 
 ## The gate ladder (named, never numbered)
 **ruling gate** (operator approval: corpus changes bind only when ruled) · **probe gate** (veto: no *item* charter without a census; ad-hoc probe rooms exempt) · **publish recipe** (mechanical FF-CAS; never blocks for architectural reasons) · **close gate** (veto: room close requires worktree merged+retired and archived tests deleted with manifest kept).

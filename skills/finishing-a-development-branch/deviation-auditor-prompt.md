@@ -40,18 +40,20 @@ Subagent (general-purpose):
 
     SCOPED DELEGATION: if this branch changed a USER-FACING SURFACE (CLI commands/args/
     output, API routes), the receipts come from a full CLI CHECKRIDE
-    (superdev:cli-checkride — executor drives the surface live, evaluator judges from the
-    operator's perspective, iterate until pass); cite its transcript + verdict here
-    instead of collecting receipts yourself. Trivial/no-surface branches keep THIS
+    (superdev:cli-checkride — ACTUAL DATA only, one step at a time, the evaluator in the
+    operator's seat, iterate until pass); cite its ledger + verdict (class + substrate
+    line) here instead of collecting receipts yourself. A ride paused on missing data is
+    a DECIDE, not a receipt — the branch does not close on it. Trivial/no-surface branches keep THIS
     lighter receipt check — never impose an executor+evaluator ride on a one-line bugfix.
 
-    For each UC#/AH# the plan discharges, produce ONE RECEIPT: run the capability on the
-    most realistic substrate available and capture it — a LIVE ARC transcript (the
+    For each UC#/AH# the plan discharges, produce ONE RECEIPT: run the capability on
+    ACTUAL DATA (the substrate law — engineering-patterns/process-discipline.md §2; never
+    a fixture, stub, or mock, however labelled) and capture it — a LIVE ARC transcript (the
     end-to-end journey the use case describes, command + output + exit code), a test
     name + output, or a file:line. Demonstrate, never assert from the task history.
-    State the honesty tier of every number (a fixture demo proves mechanism, not edge —
-    say so). A hint you cannot answer with a receipt is NAMED, never papered over, and
-    routed by Mode:
+    State the honesty tier of every number. A fixture demo is NOT a receipt. A hint you
+    cannot answer with a receipt on actual data is NAMED, never papered over and never
+    demonstrated on a stand-in, and routed by Mode:
     - **autonomous:** draft an owned backlog item (names the UC#/AH# it discharges, what
       remains, why) — the controller files it; the branch may still close.
     - **human-in-loop:** add it to the pushback package for the operator; do not present

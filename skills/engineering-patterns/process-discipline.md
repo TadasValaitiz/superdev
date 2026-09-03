@@ -22,6 +22,15 @@ this shapes conduct.
   surface × human/JSON mode × error paths; a matrix row without its verbatim transcript
   counts as NOT RUN. Where feasible a second pair of hands re-runs a sample and diffs
   against the claimed output.
+- **Gates run on ACTUAL DATA, never on stand-ins (the substrate law).** Fixtures, mocks,
+  stubs, seeded providers, recorded responses, and test-only modes prove a mechanism in a
+  unit test; they never stand in for the real path at a gate — checkride, battery, or
+  acceptance receipt — however honestly labelled. When the real data or service a gate
+  needs is unavailable, the gate STOPS and asks the operator (a DECIDE in autonomous
+  mode); it does not substitute, and it does not close. Only the operator authorizes an
+  exception, and an exception is disclosed on every artifact it touches. (Scar: a final
+  ride PASSed with zero findings on a stub server and fixtures the day before the real
+  operator journey died four ways.)
 
 
 ## 3. Reports, reviews, and session hygiene

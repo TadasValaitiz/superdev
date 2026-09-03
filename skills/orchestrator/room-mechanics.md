@@ -79,7 +79,8 @@ close, human-approved.
 - **R-H HOLISTIC CHECKPOINT** (hybrid rooms) — the accumulated HOLISTIC-PROVISIONAL batch +
   current shape, whenever it grows. The orchestrator queues it for the human at an altitude
   touchpoint; rooms never ping the human directly. The room keeps flowing — never waits on R-H.
-- **R4 PRE-PUBLISH** — gate output (exit code, counts) · diff stat · checkride verdict ·
+- **R4 PRE-PUBLISH** — gate output (exit code, counts) · diff stat · checkride verdict (PASS /
+  PASS-WITH-EXCEPTIONS on actual data — a ride paused on missing data is a DECIDE, not an R4) ·
   **deviation/acceptance audit verdict** (an unlogged deviation blocks publish) → then
   self-publish and confirm.
 - **R5 CLOSE** — summary · residual dispositions · proposed cursor text for the

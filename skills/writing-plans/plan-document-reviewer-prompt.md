@@ -37,6 +37,7 @@ Subagent (general-purpose):
     | Drift Direction | If an implementer hits a wall mid-task, does the plan tell them where to look (Through-Line → spec D# revisit-when → decision log) and what must be updated downstream (Consumes/Produces)? |
     | Acceptance coverage | The plan names which anchor UC#/AH# it discharges, and every discharged hint has task(s) that will PRODUCE its receipt (a real command/test/artifact, not a promise). A discharged UC# with no task that exercises it end-to-end is the gap this review exists to catch. |
     | Context Flow | The Context pack lists every artifact that exists (anchor/design, decision log, domain section, CLI surface); every task's Read-first points at specific anchors, not whole documents or nothing. |
+    | Checkride plan | REQUIRED when any task changes a user-facing surface (superdev:cli-checkride `checkride-plan.md`, "What the plan reviewer checks"): present · starts at the operator's real starting point · actual data named per journey with a verifiable availability check — a fixture, stub, or mock anywhere in the data table or in any task's ride instructions is BLOCKING · neighbouring surfaces crossed · judgeable expectations with no prewritten result numbers · every discharged UC#/AH# in a journey row · no literal command script (a script is a confirmation exercise, not a ride). Absent on a surface-changing plan = BLOCKING. |
 
     ## Calibration
 

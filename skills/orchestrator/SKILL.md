@@ -95,13 +95,17 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
      milestone?" → resolve here; "global?" → file and move on.
 5. **HIL touchpoints only at altitude:** startup co-planning · holistic checkpoints /
    batched forks (queue R-H reports; surface at convenient moments) · milestone close.
-   Never per-room, never per-detail.
+   Never per-room, never per-detail. One exception is queued, never skipped: a checkride
+   paused on missing real data (the substrate law, superdev:cli-checkride) is a DECIDE you
+   queue for the human — never resolved by a stand-in, never a close.
 6. **Milestone close — human-approved.** The close gate: residual ledger drained to zero
    (in-milestone) · escape-hatch items filed · milestone-level sweep (cross-room doc/code
    coherence — the deviation-audit instinct at milestone altitude) · **per-room close
    verified: worktree merged AND retired (`git worktree list`), archived tests deleted with
-   their manifest kept, and — when the item changed a user-facing surface — its date-stamped
-   scenario intent doc exists in `docs/superdev/scenarios/` (the checkride's distill step)** ·
+   their manifest kept, and — when the item changed a user-facing surface — its checkride
+   verdict is PASS (or a PASS-WITH-EXCEPTIONS the human has read) ON ACTUAL DATA, and its
+   date-stamped scenario intent doc exists in `docs/superdev/scenarios/` (written before the
+   ride, refreshed after)** ·
    **the milestone handoff complete — BOTH halves** (yours in `docs/orchestration/handoffs/`;
    the architect's half is the next milestone's document set coming into existence, D49) ·
    **N−1 operational sediment pruned** (D62: delete the PREVIOUS milestone's handovers, raw
@@ -114,7 +118,9 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
 
 Before the milestone close gate, charter an **ad-hoc battery room**: an executor walks EVERY
 scenario intent in `docs/superdev/scenarios/` against the current surface (re-deriving commands —
-intents, never scripts), an evaluator judges each against its what-good-looks-like criteria;
+intents, never scripts) on ACTUAL DATA under the checkride's substrate law (a scenario whose
+data is unavailable is a DECIDE, not a skipped row), in the same one-step loop (propose →
+rule → run → judge); an evaluator judges each against its what-good-looks-like criteria;
 verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
 milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
 

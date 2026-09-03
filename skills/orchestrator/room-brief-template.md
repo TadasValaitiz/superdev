@@ -87,12 +87,14 @@ SCOPE: ⟨what this room owns⟩. RESIDUALS OWNED: ⟨R# — file:line + what to
 PROCESS (superdev spine — invoke the skills, don't imitate them):
 superdev:⟨self-⟩brainstorming → design doc ⟨path⟩ → RATIFICATION GATE → superdev:writing-plans →
 superdev:subagent-driven-development (TDD; gate = ⟨command⟩) → ⟨cutover/cleanup steps⟩ →
-CLI CHECKRIDE (superdev:cli-checkride — executor drives the new surface live; evaluator
-judges from the operator's perspective; iterate until pass; commit the transcript) →
+CLI CHECKRIDE (superdev:cli-checkride — ACTUAL DATA ONLY, per the plan's Checkride plan;
+executor proposes and runs one step at a time, evaluator rules and judges each from the
+operator's seat; a step whose real data is unavailable STOPs the ride → DECIDE to me,
+never a stand-in; iterate until PASS; commit the ledger + verdict) →
 deviation/acceptance audit → self-publish per the recipe.
 
 FILES YOU PRODUCE: design doc ⟨path⟩ · decision-log entries ⟨your ID block⟩ (candidate until
-ratified) · plan (in worktree) · checkride transcript ⟨path⟩ · ⟨project-specific artifacts:
+ratified) · plan (in worktree) · checkride ledger + verdict ⟨path⟩ · ⟨project-specific artifacts:
 manifest updates, crosswalk dispositions, …⟩ · proposed cursor text (in R5).
 
 RULES: never invent a number. TWO kinds of contradiction, opposite duties: (a) the CORPUS
@@ -111,7 +113,8 @@ R3 HEARTBEAT — every commit-batch / ~45 min: phase · last commit · next · b
    (silence >90 min = fault).
 R-H HOLISTIC CHECKPOINT (hybrid) — the HOLISTIC-PROVISIONAL batch + current shape whenever
    it grows; keep flowing, never wait on R-H.
-R4 PRE-PUBLISH — gate output + diff stat + checkride verdict + deviation/acceptance AUDIT
+R4 PRE-PUBLISH — gate output + diff stat + checkride verdict (class + substrate line; a ride
+paused on missing data is a DECIDE, not an R4) + deviation/acceptance AUDIT
    verdict (an unlogged deviation blocks publish) → then self-publish + confirm.
 GREEN-LIGHT — you have nothing more to contribute to the CURRENT arc (not a close; you
 stay open for fixes/reviews): which arc · why exhausted. A checkpoint input.

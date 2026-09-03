@@ -262,6 +262,20 @@ the concrete artifacts: `tests/_archived/<plan>/` path, manifest, harvest file
 (reviewer-signed BEFORE archiving — the arc's first checkpoint), close-gate cleanup.
 Mechanics: test-driven-development/test-clearance.md.
 
+## Checkride plan (REQUIRED section when any task changes a user-facing surface)
+
+The plan carries the ride's EXPECTATIONS before a line of code exists — the missing half of
+the 2026-09 scar (a final ride with no pre-planned expectations rode whatever was at hand:
+a stub server and committed fixtures, and PASSed the day before the operator's real journey
+died). Copy the section from `superdev:cli-checkride` `checkride-plan.md`: the operator's
+starting point · the journeys at intent level with the command families they cross
+(INCLUDING neighbouring surfaces this plan does not change — seams are where operators die)
+· the ACTUAL DATA each journey needs and how its availability is verified before the ride ·
+the expectations the evaluator judges against · what is deliberately not ridden. Ideas and
+command families, never exact commands. Task-level checkride steps point at this section
+("run superdev:cli-checkride over journeys J1–J2") — never a literal command block, and
+never a fixture, stub, or mock path anywhere in the plan's ride instructions.
+
 ## Self-Review
 
 After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
@@ -281,6 +295,8 @@ planning (route back for reconciliation, never pick the convenient reading).
 
 **6. Acceptance & context flow:** Does the plan name which anchor UC#/AH# it discharges, and does every must-R#/UC# in that subset have tasks that will produce a receipt? Does every task carry a Read-first line pointing at real Context-pack anchors — and does the Context pack list every artifact that exists (design/anchor, decision log, domain section, CLI surface)?
 
+**7. Checkride plan:** If any task changes a user-facing surface, does the Checkride plan section exist, start at the operator's real starting point, name actual data per journey with an availability check (no fixture/stub/mock anywhere in it), cross the neighbouring surfaces the journey needs, and put every discharged UC#/AH# in a journey row?
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Plan Review (REQUIRED — fresh eyes)
@@ -288,7 +304,8 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 Your self-review above is inline. After it, dispatch the **plan reviewer subagent** per
 `skills/writing-plans/plan-document-reviewer-prompt.md` — it reads the plan against the
 anchor and checks narrative/trace, acceptance coverage (every discharged UC#/AH# has
-tasks that produce a receipt), and buildability. You are the author; you are the worst
+tasks that produce a receipt), the checkride plan (surface-changing plans), and
+buildability. You are the author; you are the worst
 judge of your own plan's gaps. Fix blocking issues and re-dispatch once. (This is the
 plan-level equivalent of brainstorming's required spec reviewer.)
 

@@ -1,3 +1,61 @@
+# v8.2.0 — the checkride rides actual data, one step at a time (2026-09-03)
+
+Diagnosed via superdev:self-improvement from the calibration project's Item 2 scar: a final
+checkride PASSed with zero findings on a stub data server (`_seed_warehouse()`), committed
+fixture inputs, and a two-day window; the operator's real journey the next day (blank page,
+real service, six-month window) died four ways before its first result. Bottleneck:
+prompt/template + skill-flow at the substrate/scenario boundary — upstream of the evaluator,
+which judged correctly on what it was given — plus a parent-skill gap (writing-plans carried
+no checkride contract, so the plan scripted the ride from test fixtures). Two operator-named
+failures: no pre-planned expectations, and riding whatever was at hand.
+
+- **cli-checkride — the substrate law (HARD-GATE):** steps run on ACTUAL DATA only, at the
+  operator's scale; fixtures/mocks/stubs/seeded providers/test-only modes never, however
+  labelled. Missing data → the step is NOT RUN, the ride PAUSES, the OPERATOR is asked
+  (provision · authorize a disclosed exception for named steps · defer as a named gap);
+  only the operator authorizes an exception. AUTONOMOUS mode → DECIDE to the orchestrator;
+  the item cannot close on it. Data preflight before either seat is dispatched.
+- **cli-checkride — the loop replaces the script:** PROPOSE (executor, in the operator's
+  words) → RULE (evaluator as the operator: GO / AMEND / ASK / STOP) → RUN (verbatim) →
+  JUDGE (findings as they occur + "what the operator would do next"). Both seats stay alive
+  for the whole ride (the same agents continued per step; the controller relays and appends
+  the ride ledger). A blocking finding pauses the ride; the fix lane runs; the ride RESUMES
+  from that step. OPERATOR-SURFACE GAP: anything the executor could only obtain from code or
+  tests is a finding, never a step. Verdict classes: PASS · PASS-WITH-EXCEPTIONS · FINDINGS;
+  no PASS exists without an actual-data step.
+- **cli-checkride — two artifacts before any command runs:** the plan-time checkride plan
+  (new `checkride-plan.md` template) and the scenario intent doc written BEFORE the ride
+  (from the plan, the UC/AH rows, and the operator's words; no expected numbers), refreshed
+  after.
+- **writing-plans:** REQUIRED "Checkride plan" section for surface-changing plans (starting
+  point · journeys at intent level · command families incl. neighbouring surfaces · actual
+  data + availability check · expectations · not-ridden); self-review item 7; the plan
+  reviewer judges it (a fixture/stub/mock in the data table or ride instructions is
+  BLOCKING; a literal script is a finding).
+- **engineering-patterns/process-discipline.md §2:** gates run on actual data, never on
+  stand-ins; unavailable → STOP and ask, never substitute, never close (conduct law, never
+  overridden by a project canon).
+- **orchestrator:** the close gate requires the checkride verdict on actual data and a
+  scenario written before the ride; a paused ride is a DECIDE queued for the human, never
+  resolved by a stand-in; the battery rides under the same law in the same loop; room-brief
+  PROCESS / CHECKRIDE / R4 lines, room-mechanics R4, and the chartering surface-item
+  done-bar updated.
+- **finishing-a-development-branch:** deviation-auditor Part B receipts on actual data; a
+  fixture demo is not a receipt — an unanswerable hint is NAMED and routed by Mode.
+- **system-design glossary:** scenario (written before the ride), checkride plan, substrate
+  law.
+
+Files: `skills/cli-checkride/{SKILL.md,executor-prompt.md,evaluator-prompt.md,checkride-plan.md}`
+· `skills/writing-plans/{SKILL.md,plan-document-reviewer-prompt.md}` ·
+`skills/engineering-patterns/process-discipline.md` ·
+`skills/orchestrator/{SKILL.md,room-brief-template.md,room-mechanics.md,chartering.md}` ·
+`skills/finishing-a-development-branch/deviation-auditor-prompt.md` ·
+`skills/system-design/glossary.md`. Evidence (calibration project):
+`docs/superdev/checkrides/2026-09-01-task8-truthful-reride-cli-checkride-verdict.md` (PASS on
+the stub) against `docs/superdev/checkrides/2026-09-02-operator-strategy-authoring-residuals.md`
+(the operator's real journey) and `docs/superpowers/plans/2026-08-30-canonical-strategy-optimization-implementation.md`
+Task 2 Step 7 / Task 8 Step 7 (the fixture-scripted ride).
+
 # v8.0.0 — the freshness architecture + the brainstorming experience (BREAKING)
 
 D47–D71, two arcs in one release:
