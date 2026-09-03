@@ -1,3 +1,60 @@
+# v8.3.0 — brainstorming shows its shape; invariants and pipelines get a home (2026-09-03)
+
+Diagnosed via superdev:self-improvement on the calibration project (same day as 8.2.0).
+MEASURED: every one of the repo's 49 angle documents was written by Codex sessions; Claude
+sessions wrote zero angles, and their design docs carried 0 code fences, 0 model sketches,
+0 invariants, 0 domain sections. The rich sets (Item 2: an 867-line anchor, D1–D56, 14
+angles + 3 view angles, a 603-line domain-model companion with 28 sketches, a 413-line
+pipelines-and-steps companion) came from sessions that ignored the skill's "conversation
+stays terse" law and INVENTED two companions no template asked for. Confound stated: the
+Claude brainstorms predate the angle-first skill (2026-08-28). Bottlenecks: the register
+law (SKILL.md), a context-doc gap (no pipelines template; domain model confined to a
+section; sketches "where shape exists"), and a return-contract gap (invariants and
+pipelines never reached writing-plans, the implementer, or the reviewers as checks).
+
+- **brainstorming — register law flipped:** design content is shown IN the conversation
+  as it is decided — every angle open and every fork carries the typed shape, the state it
+  changes, and the reasoning inline; "terse" applies to chatter only. The scar paragraph is
+  in the skill.
+- **brainstorming — the written set is gated:** step 11 hands the operator a written-set
+  table (census · decisions · anchor · angles · domain model · pipelines · CLI surface);
+  a required artifact missing without a logged D# reason does not reach the operator. The
+  spec reviewer checks the set, UC→P# coverage, I#→enforcer, and shape presence.
+- **New `pipelines-template.md`:** `…-pipelines.md` companion — cross-pipeline laws ·
+  behavioral topology · per pipeline: entry, Request → Response | typed refusal, P#.n
+  step table (typed transition · pure/effect · refusal boundary · durable effect),
+  transaction boundary, state after success, recovery, cannot-do · lifecycle table ·
+  refusal catalogue. Modeled on the Item 2 companion.
+- **`domain-design-template.md` becomes a standalone companion** (`…-domain-model.md`):
+  aggregate model · per-object typed sketches with status · identity invariants · the I#
+  invariant table with enforcer AND owning task · transitions summary · delta ledger ·
+  CLI↔domain mapping · deferred-field ledger; updated after every ruling.
+- **`item-angle-template.md`:** angles are for the unclear edges, a few and deep; typed
+  sketch REQUIRED for shape-bearing rulings; new `State and flow` (never omitted on a
+  journey angle) and `Invariants this journey relies on` sections.
+- **`design-doc-template.md`:** §5.0 I#/P# index; areas cite `Upholds: I#` and
+  `Steps: P#.n`; companions listed in the header.
+- **writing-plans:** Context pack slots for both companions; every task carries
+  `Invariants preserved` (I# → enforcer → test here) and `Pipeline steps` (P#.n → typed
+  in/out → refusal test) blocks; self-review item 8; the plan reviewer BLOCKS on an I#
+  with no owning task and checks P#.n ownership and checkride-plan → P# mapping.
+- **subagent-driven-development:** the implementer's Read-first carries the task's I#/P#
+  rows verbatim; the task reviewer's Part 1 gains invariant & pipeline conformance (enforcer
+  present and tested; transition typed; refusal typed per the catalogue; transaction
+  boundary as drawn).
+- **system-design:** angle-guide "may carry" → shape-bearing angles CARRY their sketches
+  and state-and-flow walk; glossary rows for domain-model companion, pipelines companion,
+  I#/P#.
+
+Files: `skills/brainstorming/{SKILL.md,pipelines-template.md,domain-design-template.md,
+item-angle-template.md,design-doc-template.md,spec-document-reviewer-prompt.md}` ·
+`skills/writing-plans/{SKILL.md,plan-document-reviewer-prompt.md}` ·
+`skills/subagent-driven-development/{implementer-prompt.md,task-reviewer-prompt.md}` ·
+`skills/system-design/{angle-guide.md,glossary.md}`. Evidence (calibration project):
+`docs/superpowers/specs/2026-08-30-canonical-strategy-optimization-pipelines-and-steps.md`
+and `…-2026-08-29-canonical-strategy-optimization-domain-model.md` (the Codex-invented
+companions the templates now ask for) versus the Aug 13 Claude-era design docs.
+
 # v8.2.0 — the checkride rides actual data, one step at a time (2026-09-03)
 
 Diagnosed via superdev:self-improvement from the calibration project's Item 2 scar: a final

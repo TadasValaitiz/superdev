@@ -26,7 +26,7 @@ An **angle** is a deliberately partial way to examine one shared architecture. I
 | boundary | one seam examined from both sides | portable core vs runtime; operator's attention |
 | map | current code → target (the only backward-looking angle) | KEEP/RESHAPE/REPLACE/DEFER by call site |
 
-Angles may carry **Pydantic invariant sketches** (FLEXIBLE by default — responsibilities and invariants, never final field names) and **functional-core / imperative-shell pseudo-code** walkthroughs.
+Shape-bearing angles CARRY their **Pydantic invariant sketches** (FLEXIBLE by default — responsibilities and invariants, never final field names) and their **state-and-flow walk** (a `->` flow or typed step table; functional-core / imperative-shell pseudo-code where it teaches). A shape described only in prose is a finding, not a style choice.
 
 ## When to create a new angle — and when NOT to
 

@@ -23,6 +23,8 @@ Subagent (general-purpose):
     companion is BLOCKING.
     **Anchor (design doc) for reference:** [SPEC_FILE_PATH] — its §3 Use cases (UC#)
     and §9 Acceptance hints (AH#) are the bar this plan discharges.
+    **Companions (REQUIRED inputs when they exist):** [DOMAIN_MODEL_PATH] (I# table §7) ·
+    [PIPELINES_PATH] (P#.n steps) · [CLI_SURFACE_PATH]
 
     ## What to Check
 
@@ -38,6 +40,7 @@ Subagent (general-purpose):
     | Acceptance coverage | The plan names which anchor UC#/AH# it discharges, and every discharged hint has task(s) that will PRODUCE its receipt (a real command/test/artifact, not a promise). A discharged UC# with no task that exercises it end-to-end is the gap this review exists to catch. |
     | Context Flow | The Context pack lists every artifact that exists (anchor/design, decision log, domain section, CLI surface); every task's Read-first points at specific anchors, not whole documents or nothing. |
     | Checkride plan | REQUIRED when any task changes a user-facing surface (superdev:cli-checkride `checkride-plan.md`, "What the plan reviewer checks"): present · starts at the operator's real starting point · actual data named per journey with a verifiable availability check — a fixture, stub, or mock anywhere in the data table or in any task's ride instructions is BLOCKING · neighbouring surfaces crossed · judgeable expectations with no prewritten result numbers · every discharged UC#/AH# in a journey row · no literal command script (a script is a confirmation exercise, not a ride). Absent on a surface-changing plan = BLOCKING. |
+    | Invariants & pipelines | When the anchor has a domain-model companion: every I# has exactly one owning task whose Invariants-preserved block names the enforcer and the test — an I# with no owning task is BLOCKING. When it has a pipelines companion: every P#.n step has an owning task with a typed refusal test; the checkride plan's journeys cite the P#s they drive. A task that touches a domain object with an empty Invariants-preserved block, or implements behavior with an empty Pipeline-steps block, is a finding. |
 
     ## Calibration
 

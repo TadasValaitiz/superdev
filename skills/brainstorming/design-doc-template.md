@@ -44,7 +44,7 @@ one sentence naming its role in that story.
 **Date:** YYYY-MM-DD · **Status:** draft (governs nothing yet) | approved (the anchor — governs the build) | superseded-by <path>
 **Mode:** autonomous | human-in-loop   ← governs how anchor deviations route (see top)
 **Decision log:** ./YYYY-MM-DD-<topic>-decisions.md   ← full deliberation trail
-**Companions:** <EVERY angle companion by filename · -cli-surface.md if commands change · related specs — or "none"; a companion not listed here is undiscoverable from the anchor>
+**Companions:** <EVERY angle companion by filename · -domain-model.md if domain objects change · -pipelines.md if behavior/state changes · -cli-surface.md if commands change · related specs — or "none"; a companion not listed here is undiscoverable from the anchor>
 **Origin:** brainstorm with <human> | self-brainstorm run <workflow run id>
 
 ## 1. Problem & intent   [ANCHOR]
@@ -90,11 +90,24 @@ of the doc against.
 
 One subsection per area. Each MUST open with its narrative link-sentence.
 
-> **Conditional sections:** work touches domain objects → one area is the **Domain
-> model** section per `domain-design-template.md` (diagram, naming discrepancy table,
-> add/remove delta ledger, invariants with enforcers, CLI↔domain mapping). Commands
-> added/changed → the separate `…-cli-surface.md` companion (per `cli-surface-template.md`)
-> is required and linked in the header.
+> **Conditional companions (separate files, linked in the header, indexed in §5.0):**
+> work touches domain objects → `…-domain-model.md` per `domain-design-template.md`
+> (aggregate model, typed sketches, identity, the I# invariant table with enforcers, delta
+> ledger, CLI↔domain mapping). Work changes behavior or state → `…-pipelines.md` per
+> `pipelines-template.md` (P# pipelines of typed P#.n steps, transaction boundaries, state
+> evolution, refusal catalogue, recovery). Commands added/changed → `…-cli-surface.md` per
+> `cli-surface-template.md`.
+
+### 5.0 Invariants and pipelines — the index
+
+| I# / P# | One line | Companion anchor | Enforced / realized by |
+|---|---|---|---|
+| I1 | <the invariant> | domain-model §7 | <enforcer> · Task (plan fills) |
+| P1 | <the pipeline, as a verb phrase> | pipelines §3 | §5.x area(s) |
+
+Every §5 area below cites the I#s it upholds and the P#.n steps it realizes; every UC in
+§3 maps to at least one P# (a use case with no pipeline is behavior nobody designed).
+Omit this section only when neither companion is required — and say so in one line.
 
 ### 5.x <Area>
 
@@ -108,7 +121,7 @@ weight, never only prose about the shape.>
 - **Design:** the actual shape — structures, flow, behavior.
 - **Interface / contract:** what consumers see; what this area promises.
 - **Depends on:** other areas, external systems.
-- **Serves:** R#… · **Governed by:** D#… · **Realizes:** UC#…
+- **Serves:** R#… · **Governed by:** D#… · **Realizes:** UC#… · **Upholds:** I#… · **Steps:** P#.n…
 
 ## 6. Decisions
 

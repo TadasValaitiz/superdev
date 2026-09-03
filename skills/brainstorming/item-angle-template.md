@@ -7,6 +7,11 @@ SESSION's reconcile sweep (SKILL.md step 8c, re-run after every later edit) does
 to companions, including retro-filling `Series: N of ?`. Repetition with system angles is expected. Full theory: superdev:system-design
 `angle-guide.md`.
 
+**Which angles get written:** the UNCLEAR journeys, edge cases, and collisions the use
+cases and the census's FLAGGED rows expose — a few, deep — never one per topic and never a
+catalogue. The well-understood shape belongs in the domain-model and pipelines companions;
+an angle earns its file by teaching an edge that would otherwise be misread.
+
 **The depth bar (register law, D66):** an angle companion is a TEACHING document — a
 stranger reads it and understands the design *without opening the decision log*. Its length
 is earned by domain complexity, never by the angle number: lean questions close in ~600
@@ -14,7 +19,7 @@ words, heavy journeys may need ~2,000+. The density law underneath is sections-p
 words, not totals — no section carries more than ~160 words of unbroken prose. **A companion
 that only cites D#s is an index wearing angle clothes; delete it and write the angle.**
 
-**Section order is fixed as shown.** Omissions: `Current mismatch` only if genuinely none; `What X cannot do` and `Visible collisions` only when honestly empty (say so is unnecessary — just omit); `The central question`, `The mental model`, `Concrete journey`, and `Reconciled outcome` are never omitted. **Word-budget scope:** the ~600/~2,000 totals count the whole file; the ~160-word density law counts unbroken PROSE only — tables, sketches, and fences are exempt.
+**Section order is fixed as shown.** Omissions: `Current mismatch` only if genuinely none; `What X cannot do` and `Visible collisions` only when honestly empty (say so is unnecessary — just omit); `The central question`, `The mental model`, `Concrete journey`, `State and flow` (for any journey angle), and `Reconciled outcome` are never omitted. **Word-budget scope:** the ~600/~2,000 totals count the whole file; the ~160-word density law counts unbroken PROSE only — tables, sketches, and fences are exempt.
 
 **When it is written:** at the angle's CLOSE, while the collision detail is hot — never
 batched to the session's end. An angle that carried no real collisions closes into a
@@ -58,8 +63,9 @@ demolished in a line. Every misreading met at the door.>
 ruling:>
 
 ### LOCKED — <the claim, as a sentence>   <!-- heading markers are the D70 third census-counted form. FLEXIBLE/MISMATCH claims that are load-bearing to the walk get ### headings too: '### MISMATCH — …'; the status word leads either way -->
-<The ruling explained in prose, with its shape shown where shape exists — a small frozen
-model, a formula, a file tree, a message flow, labeled with its epistemic weight
+<The ruling explained in prose, with its shape SHOWN — a shape-bearing ruling without its
+typed sketch (a small frozen model, a step table, a formula, a file tree, a `->` message
+flow) is a reviewer finding, not a style choice; label the sketch with its epistemic weight
 ("FLEXIBLE sketch around locked laws"). Then ALWAYS the consequence: "This means…" —
 2–3 concrete things the reader can now rely on. A LOCKED without its consequence is
 the cheapest fix a reviewer will demand.>
@@ -68,6 +74,19 @@ the cheapest fix a reviewer will demand.>
 `->` flows — difference-under-repetition is how a boundary teaches itself. Use tables for
 ownership, comparisons, and repeated mappings. Label invented figures SEED-ILLUSTRATIVE;
 cite measured ones with their source.>
+
+## State and flow
+<How state evolves along the journey: a `->` flow or a step table (step · typed transition ·
+pure/effect · refusal boundary) — the same grammar as the pipelines companion, cited by
+P#.n when one exists. Which objects are created, which facts appended, what is true at the
+end that was not at the start. An angle that walks a journey without showing its state
+moving has walked nothing.>
+
+## Invariants this journey relies on
+<The I#s (from the domain-model companion — or named here and promoted there at the
+reconcile sweep) the journey depends on, each with the enforcer that makes it hold and the
+edge case where it bites. This is where "edge cases that are not very clear" get their
+teaching: one short paragraph per unclear edge, showing the rule under the second scenario.>
 
 ## What <the subject — the component/mechanism the journey walked> cannot do
 <Capability fences as first-class content — the reader asking "can I…?" finds the no

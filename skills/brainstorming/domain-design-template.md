@@ -1,21 +1,38 @@
-# Domain Design Section Template
+# Domain model companion template — what exists, and what makes it authoritative
 
-REQUIRED inside the design doc (as its own numbered section) whenever the work adds,
-removes, or reshapes domain objects, their fields, or their relationships. Its job is
-**discrepancy hunting**: laying the whole domain out in one place is what surfaces the
-gaps a section-by-section read hides — the same concept under two names, two commands
-persisting the same field differently, an invariant nobody enforces. CLI Command
-models (Pydantic request models — the Command pattern) ARE domain objects and belong
-in this section; that is how discrepancies between CLI commands become visible as
-model diffs.
+REQUIRED as a SEPARATE companion file — `YYYY-MM-DD-<topic>-domain-model.md`, next to the
+design doc — whenever the work adds, removes, or reshapes domain objects, their fields,
+relationships, identities, or invariants. (It was a design-doc section until 2026-09-03;
+measured on a real item, the section form grew past 600 lines because this is where the
+invariants live. A companion keeps the anchor readable and stays live through the build.)
+Its job is two things at once: **discrepancy hunting** — laying the whole domain out in one
+place surfaces the same concept under two names, two commands persisting one field
+differently, an invariant nobody enforces — and **invariant ownership**: every invariant
+gets an `I#`, an enforcer, and, at plan time, an owning task. CLI Command models (Pydantic
+request models — the Command pattern) ARE domain objects and belong here; that is how
+discrepancies between commands become visible as model diffs.
+
+Written in Pass 2 (SKILL.md step 8b) and **updated after every ruling that touches a
+shape** — "the companion now exists; I'll keep updating it after each ruling" is the tempo.
+Sketches are FLEXIBLE by default (responsibilities and invariants, never final field
+names) unless a ruling LOCKs a shape; label each with its status and D#.
 
 ```markdown
-## §N. Domain model
+# <Topic> — Domain model (status: draft | ratified <who, when>)
 
-### N.1 The diagram
+**Design doc:** ./YYYY-MM-DD-<topic>-design.md · **Decision log:** ./…-decisions.md ·
+**Pipelines:** ./…-pipelines.md (if any) · **CLI surface:** ./…-cli-surface.md (if any)
+**Governed by:** D#…
 
-One mermaid classDiagram of every object this work touches — existing-and-kept,
-changed, and new. Stereotype each class with its role, and mark identity explicitly:
+## 1. Domain boundary
+
+What this domain OWNS; what it CONSUMES from neighbours (each neighbour named, with the
+exact seam); what it must NEVER own or recreate (the duplicate-authority fences).
+
+## 2. Aggregate model
+
+One mermaid classDiagram of every object this work touches — existing-and-kept, changed,
+and new — stereotyped by role, identity marked:
 
     ```mermaid
     classDiagram
@@ -23,7 +40,6 @@ changed, and new. Stereotype each class with its role, and mark identity explici
         <<value object — identity: hashes>>
         symbol: str
         qty: Decimal
-        tif: TimeInForce
       }
       class PlaceOrderCommand {
         <<CLI command model — st order place>>
@@ -33,51 +49,86 @@ changed, and new. Stereotype each class with its role, and mark identity explici
       PlaceOrderCommand --> OrderSpec
     ```
 
-Relationships drawn, not implied. If the diagram is getting too big to read, the
-design is too big for one spec — that is a finding, not a formatting problem.
+Then the ownership table:
 
-### N.2 Naming & field conventions
+| Object | Role | Identity | Status (D#) |
+|---|---|---|---|
+| `OrderSpec` | value object | content hash of (symbol, qty, tif) | LOCKED (D#) |
 
-The conventions this domain obeys (casing, unit suffixes, id/ref/hash naming,
-tense of booleans) — and the DISCREPANCY TABLE: every place the same concept
-appears under different names, or the same name means different things, across
-domain objects AND across CLI command models:
+If the diagram is too big to read, the design is too big for one spec — a finding.
+
+## 3. Objects
+
+One subsection per object, in dependency order:
+
+### `<Object>` — LOCKED | DERIVED | FLEXIBLE (D#)
+
+    ```python
+    class <Object>(FrozenModel):
+        field: Type          # unit · identity? · what it means
+    ```
+
+**This means:** one or two lines a reader can rely on (what may never change once
+created, what is derived, what it is NOT).
+
+## 4. Naming & field conventions — and the DISCREPANCY TABLE
+
+The conventions this domain obeys (casing, unit suffixes, id/ref/hash naming, tense of
+booleans) — and every place the same concept appears under different names, or the same
+name means different things, across domain objects AND CLI command models:
 
 | Concept | Appears as | Where | Resolution (D#) |
 |---|---|---|---|
 | <concept> | `qty` vs `quantity` vs `size` | OrderSpec / st order place / ledger row | D# — converge on `qty` |
 
-An empty table means you looked and found none — say so explicitly. Never skip
-the hunt; this table is the section's reason to exist.
+An empty table means you looked and found none — say so. Never skip the hunt.
 
-### N.3 The delta ledger — what this work adds and removes
-
-Explicit before → after, one row per change. "The domain after" without "the
-domain before" hides exactly the drift this section exists to catch:
+## 5. The delta ledger — what this work adds and removes
 
 | Change | Object.field / invariant | Before | After | Why (D#) |
 |---|---|---|---|---|
 | ADD / REMOVE / RENAME / RETYPE | … | … | … | D# |
-| INVARIANT-ADD / INVARIANT-REMOVE | … | (not enforced) | enforced by <validator/test/type> | D# |
+| INVARIANT-ADD / INVARIANT-REMOVE | I# | (not enforced) | enforced by <enforcer> | D# |
 
-### N.4 Invariants
+## 6. Identity and comparison invariants
 
-Every invariant that must hold, each with its ENFORCER — the validator, frozen
-type, or test that makes violation impossible or red. An invariant with no
-enforcer is a wish; classify it as a gap and give it a task in the plan.
-Include the identity rule where objects hash: which fields are identity, which
-are annotations — and the test that fails when a new field lands unclassified.
+Which fields are identity and which are annotations, per object; what two objects may
+never be compared as equal silently (different scopes, bases, windows, versions); what a
+reference spelling is and what resolution is forbidden (bare / latest). Each is an `I#`
+row in §7.
 
-### N.5 CLI ↔ domain mapping
+## 7. Invariants and enforcers
 
-Every CLI command touched by this work, its Pydantic Command model, and the
-domain objects it consumes/produces — one row each. This row set must agree
-with the CLI surface doc's family tables; a mismatch between the two documents
+| I# | Invariant (one sentence) | Enforcer | Owning task (plan fills) | Status |
+|---|---|---|---|---|
+| I1 | <what must hold> | frozen type / validator / transaction / import guard / test | Task N | LOCKED (D#) |
+
+**An invariant with no enforcer is a wish** — mark it `GAP` here and the plan gives it a
+task; the plan reviewer BLOCKS on an I# with no owning task. Include the identity test
+that fails when a new field lands unclassified.
+
+## 8. Transitions summary
+
+Which pipelines create, append to, and terminate each object — one row per object,
+pointing at the pipelines companion's P#.n steps. (The pipelines companion carries the
+mechanics; this table is the cross-reference that catches an object no pipeline creates,
+or a mutation no pipeline owns.)
+
+## 9. CLI ↔ domain mapping
+
+Every CLI command touched, its Pydantic Command model, the domain objects it consumes and
+produces — one row each. Must agree with the CLI surface doc's family tables; a mismatch
 is a spec bug to fix before planning.
+
+## 10. Deferred and flexible field ledger
+
+What is intentionally undecided — each with the ruling that will decide it and the
+session/item that owns it. Bare "later" is a finding.
 ```
 
-**How this section gets used downstream:** writing-plans lists it in the Context pack;
-tasks that touch a domain object name this section in their Read-first line; the
-implementer's model changes are checked against N.3/N.4 at task review. The delta
-ledger is also the drift protocol's reference point — a build-time deviation that
-touches the domain updates THIS section, not just the code.
+**Downstream use:** the plan's Context pack lists this file; every task that touches a
+domain object carries `Invariants preserved: I# → enforcer → test in this task`
+(writing-plans task structure); the implementer's Read-first quotes those rows and the
+delta-ledger rows; the task reviewer checks each claimed I#'s enforcer is present and
+tested; the §10 drift protocol updates THIS file first when a build-time deviation touches
+the domain — never only the code.

@@ -85,6 +85,14 @@ Subagent (general-purpose):
       "nice to haves"
     - **Misunderstood:** right feature built the wrong way, wrong problem
       solved
+    - **Invariant & pipeline conformance:** for every I# in the task's
+      `Invariants preserved` block — is the named enforcer present in the diff (frozen
+      type, validator, transaction, import guard) and is there a test that goes red when
+      it is violated? For every P#.n in the `Pipeline steps` block — is the transition
+      typed as the pipelines companion specifies (frozen input → frozen output), is the
+      refusal typed and named as its refusal-catalogue row says, is the transaction
+      boundary drawn where the companion draws it? An I# claimed but unenforced, or a
+      P# step whose refusal is a raw exception, is ❌ regardless of test count.
 
     If a requirement cannot be verified from this diff alone (it lives in
     unchanged code or spans tasks), report it as a ⚠️ item instead of

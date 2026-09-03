@@ -31,6 +31,19 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 
 Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
 
+## The scar this skill carries (2026-09-03)
+
+Measured on one project: every rich design set — typed domain sketches, invariant tables,
+step-by-step pipelines, decisions with reasoning — came from sessions that IGNORED this
+skill's "conversation stays terse" law and INVENTED two companions the templates never
+asked for (a standalone domain model, a pipelines-and-steps document). Sessions that
+followed the skill literally produced prose-only designs: zero code fences, zero model
+sketches, zero invariants. The operator's verdict: the design material belongs IN the
+conversation as it is decided, and the artifact set must have a home for invariants and
+pipelines — otherwise they exist only when an agent volunteers them, and nothing
+downstream ever turns them into checks. Every rule below that mentions shape, I#, or P#
+exists because of that.
+
 ## Checklist
 
 You MUST create a task for each of these items and complete them in order:
@@ -45,18 +58,24 @@ You MUST create a task for each of these items and complete them in order:
    five-line census; the artifact scales in length, never in kind. **If a `docs/system-design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on the area's post-migration vision document (`YYYY-MM-DD-<area>-post-migration-domain.md`, not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is recorded in YOUR OWN item files and reported to the orchestrator with a pointer (D51/D61) — never a local ruling, never a write into anyone else's space
 2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
 3. **Register the visual-companion rule (a STANDING rule — this step completes by reading it, no action now):** the companion is offered just-in-time, NOT upfront — the first time a question at ANY later step would genuinely be clearer shown than described, offer it then (its own message); if no visual question ever arises, never offer it. See the Visual Companion section below.
-4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
+4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Angles are for the UNCLEAR journeys, edge cases, and collisions the use cases and the census's FLAGGED rows expose — a few, deep — never one per topic and never a catalogue; the well-understood shape goes to the domain-model and pipelines companions (step 8b) instead. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
 5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled — and if the angle carried real
 collisions, WRITE its companion NOW, to `item-angle-template.md`'s teaching form
-(mental model, journey with `### LOCKED — claim` + "this means…", cannot-do, mismatch,
-collisions the journey didn't settle), and commit it before the next angle opens. If the WRITING itself surfaces a new fork or collision (it regularly does — writing is the second thinking pass), that fork goes BACK to the operator and the log BEFORE the companion is committed; unruled design never enters a companion. The
+(mental model, journey with `### LOCKED — claim` + "this means…" and a TYPED SKETCH for
+every shape-bearing ruling, state and flow, the invariants the journey relies on,
+cannot-do, mismatch, collisions the journey didn't settle), and commit it before the next
+angle opens. If the WRITING itself surfaces a new fork or collision (it regularly does — writing is the second thinking pass), that fork goes BACK to the operator and the log BEFORE the companion is committed; unruled design never enters a companion. The
 collision detail is hot exactly now; batching to session end produces cite-only
 indexes (measured: ~380 words vs the ~1,500+ the same angles carried when written hot). Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
 6. **Propose 2-3 whole-design approaches** — AFTER the angles are reconciled: how the rulings compose into a shape. This is a fork like any other — present it per the Fork Presentation Standard, never as bare labels
 7. **Present design** — in sections scaled to their complexity, get user approval after each section
 7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
 8. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** already written at each angle's close (step 5); this step only confirms the set is complete and named `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` — beside the spec, never in the system corpus. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
-8b. **Conditional companion artifacts** — work touches domain objects/fields/relationships → the design doc MUST carry a Domain model section per `skills/brainstorming/domain-design-template.md` (the discrepancy hunt: naming table, delta ledger, invariant enforcers). Work adds/renames/reworks CLI commands → write the separate CLI surface doc per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths). Both are downstream context: they enter the plan's Context pack and subagent Read-first lines.
+8b. **Companion artifacts (the home of invariants and pipelines)** — three separate files beside the spec, each REQUIRED by its trigger and each UPDATED after every later ruling that touches it:
+   - work touches domain objects/fields/relationships/identities → `…-domain-model.md` per `skills/brainstorming/domain-design-template.md`: aggregate model, typed object sketches, identity rules, the **I# invariant table with enforcers** (an unenforced invariant is a GAP row the plan must own), delta ledger, CLI↔domain mapping;
+   - work changes behavior or state (anything that writes, replays, searches, judges) → `…-pipelines.md` per `skills/brainstorming/pipelines-template.md`: **P# pipelines** as typed Request → Response | refusal paths of P#.n steps (typed transition · pure/effect · refusal boundary · durable effect), transaction boundaries, state evolution, the refusal catalogue, recovery;
+   - work adds/renames/reworks CLI commands → `…-cli-surface.md` per `skills/brainstorming/cli-surface-template.md` (families, exhaustive args → Command models, composition rationale, operator sequences with recovery paths).
+   The design doc's §5.0 INDEXES every I# and P# and each §5 area cites the I#s it upholds and the P#.n steps it realizes; a UC with no P# is behavior nobody designed. All three are downstream context AND downstream checks: they enter the plan's Context pack, every task's `Invariants preserved` / `Pipeline steps` blocks, the implementer's Read-first, the task reviewer's conformance check, and the checkride plan.
 8c. **The in-session reconcile sweep** — after the spec is written: re-check EVERY
    produced document (census, companions, spec) against EVERY D# ruled this session; flip
    statuses that moved, banner anything superseded, fix any recommendation still reading
@@ -66,7 +85,7 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
    set shipped without its final sweep contains its own contradictions.
 9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log + census + EVERY angle companion, checks narrative continuity and traceability, and runs the angle experience probes (stranger test, LOCKED-without-consequence, bare "later"); fix blocking issues, re-dispatch once
-11. **User reviews the written set** — hand the operator EVERYTHING by file link: the spec, the decision log, the census, and every angle companion. The operator reviews documents, not a chat summary — approval means the written record is what got approved
+11. **User reviews the written set** — hand the operator EVERYTHING by file link, as a WRITTEN-SET TABLE (artifact · required-by · present / omitted — and every omission's logged D# reason): the census · the decision log · the design anchor · every angle companion · the domain-model companion (when objects change) · the pipelines companion (when behavior/state changes) · the CLI surface (when commands change). A required artifact that is missing with no logged reason does not reach the operator — write it or log why. The operator reviews documents, not a chat summary — approval means the written record is what got approved
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Presentation convention (all session output)
@@ -80,8 +99,13 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
   cite measured ones with their source — the two must never be typographically identical.
 - Once a fork is resolved, the written record shows the SELECTED design and why. It never
   preserves a recommendation as though the choice were still pending.
-- Register law: these rules govern DELIVERABLES (documents). Conversation stays terse —
-  and never the other way around.
+- Register law: DESIGN CONTENT IS SHOWN IN THE CONVERSATION AS IT IS DECIDED. Every
+  angle open and every fork carries, inline, the typed shape (a small frozen model, a step
+  table, a `->` flow), the state it changes, and the reasoning — the operator rules on
+  material, never on a summary of material. "Terse" applies to chatter and ceremony, never
+  to design content; the documents then carry the same material in teaching form. (The
+  older rule — deliverables rich, conversation terse — is retired: it produced prose-only
+  designs, see the scar above.)
 
 ## Fork Presentation Standard (what the operator rules on) {#fork-presentation-standard}
 
@@ -177,7 +201,8 @@ digraph brainstorming {
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
 - Ask after each section whether it looks right so far
-- Cover: architecture, components, data flow, error handling, testing
+- Cover: architecture, components, the domain shapes (typed sketches), the pipelines (how
+  state moves, step by step, with refusals), the invariants, error/refusal handling, testing
 - Be ready to go back and clarify if something doesn't make sense
 
 **Design for isolation and clarity:**
@@ -251,7 +276,7 @@ see. Fix blocking issues, re-dispatch once to confirm.
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:
 
-> "The set is written and committed — spec: `<link>` · decision log: `<link>` · census: `<link>` · angles: `<links>`. Please review before we write the implementation plan."
+> "The set is written and committed — spec: `<link>` · decision log: `<link>` · census: `<link>` · angles: `<links>` · domain model: `<link or 'not required: no objects change'>` · pipelines: `<link or 'not required: no behavior changes'>` · CLI surface: `<link or 'not required'>`. Please review before we write the implementation plan."
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
 

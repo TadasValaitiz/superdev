@@ -23,7 +23,9 @@ Subagent (general-purpose):
     1. THE BIG PICTURE: paste the plan's Through-Line section (or its
        load-bearing gist), plus task-specific dependencies.
     2. READ FIRST: the task's Read-first anchors from the plan, verbatim —
-       spec §s, domain-model delta rows, CLI surface family tables. The
+       spec §s, the task's `Invariants preserved` rows (I# → enforcer → test) and
+       `Pipeline steps` rows (P#.n → typed in/out → refusal) copied VERBATIM from the
+       plan, domain-model delta rows, CLI surface family tables. The
        subagent has Read; pointing at the truth beats paraphrasing it.
     3. ORCHESTRATOR KNOWLEDGE DUMP: everything YOU know that bears on this
        task and is written nowhere the subagent will look — nuances from the

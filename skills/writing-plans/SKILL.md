@@ -90,7 +90,10 @@ a pack that omits an existing companion is incomplete by definition:
   speaks, the ANGLE GOVERNS (it teaches a ruling the spec's compression dropped); where
   they CONTRADICT, planning STOPS and the set goes back for reconciliation]
 - Census: [the -census.md grounding artifact]
-- Domain model: [design doc §N, if the spec has one]
+- Domain model: [companion -domain-model.md — I# invariants with enforcers; its §7
+  enforcer table is what this plan's tasks OWN, one owning task per I#]
+- Pipelines: [companion -pipelines.md — P# pipelines and P#.n steps; every step gets an
+  owning task and a refusal test; the checkride plan's journeys drive these P#s]
 - CLI surface: [companion -cli-surface.md, if commands change]
 - Prior art: [related specs/plans a worker might need]
 
@@ -180,6 +183,16 @@ Subagents have Read — point them at the truth instead of paraphrasing it.]
 - Produces: [what later tasks rely on — exact function names, parameter
   and return types. A task's implementer sees only their own task; this
   block is how they learn the names and types neighboring tasks use.]
+
+**Invariants preserved:** [one row per I# from the domain-model companion this task
+touches — `I# → its enforcer (type / validator / transaction / guard) → the test in THIS
+task that goes red when it is violated`. "none" only when the task touches no domain
+object. These rows travel verbatim into the implementer's Read-first and are what the task
+reviewer checks.]
+
+**Pipeline steps:** [one row per P#.n step this task implements — `P#.n → typed input →
+typed output → the refusal it types → the test for that refusal`. "none" only when the
+task implements no behavior.]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -297,6 +310,8 @@ planning (route back for reconciliation, never pick the convenient reading).
 
 **7. Checkride plan:** If any task changes a user-facing surface, does the Checkride plan section exist, start at the operator's real starting point, name actual data per journey with an availability check (no fixture/stub/mock anywhere in it), cross the neighbouring surfaces the journey needs, and put every discharged UC#/AH# in a journey row?
 
+**8. Invariants & pipelines:** Does every I# in the domain-model companion have exactly one owning task whose Invariants-preserved block names its enforcer and test? Does every P#.n step have an owning task with its refusal test? Do the checkride plan's journeys name the P#s they drive? An I# with no owner becomes a gap task — never a silent omission.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Plan Review (REQUIRED — fresh eyes)
@@ -304,7 +319,8 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 Your self-review above is inline. After it, dispatch the **plan reviewer subagent** per
 `skills/writing-plans/plan-document-reviewer-prompt.md` — it reads the plan against the
 anchor and checks narrative/trace, acceptance coverage (every discharged UC#/AH# has
-tasks that produce a receipt), the checkride plan (surface-changing plans), and
+tasks that produce a receipt), the checkride plan (surface-changing plans), the I#/P#
+ownership (every invariant enforced by a task, every pipeline step owned), and
 buildability. You are the author; you are the worst
 judge of your own plan's gaps. Fix blocking issues and re-dispatch once. (This is the
 plan-level equivalent of brainstorming's required spec reviewer.)

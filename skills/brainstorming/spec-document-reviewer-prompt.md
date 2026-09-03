@@ -26,7 +26,10 @@ Subagent (general-purpose):
     **Angle companions (REQUIRED inputs when any exist):** [ANGLE_FILE_PATHS]
     **Census:** [CENSUS_FILE_PATH]
     **Templates they must follow:** [PLUGIN_ROOT]/skills/brainstorming/design-doc-template.md ·
-    item-angle-template.md (the teaching form) · decision-log-template.md
+    item-angle-template.md (the teaching form) · decision-log-template.md ·
+    domain-design-template.md · pipelines-template.md · cli-surface-template.md
+    **Companions (REQUIRED inputs when they exist):** [DOMAIN_MODEL_PATH] · [PIPELINES_PATH] ·
+    [CLI_SURFACE_PATH]
 
     ## What to check
 
@@ -47,6 +50,9 @@ Subagent (general-purpose):
     | Corpus & angles | Collisions between areas/angles are surfaced and reconciled, not left implicit; every §5 area carries a positional status line (`**Status:** LOCKED|FLEXIBLE|… (D#|owner) — …`); angle companions contradict neither the spec nor the log (a contradiction with a system-scale ruling must appear as residue, never a silent local ruling); every companion collision appears in the spec's areas or §8 Not-doing. |
     | Angle experience probes (per companion) | STRANGER TEST: pick 2–3 claims and answer "what does this rule and why?" from the companion plus its DECLARED sibling angles — never the log; a claim answerable only via the log is a finding. Each of these is a finding: a `LOCKED` with no "this means…" consequence · a deferral saying bare "later" (no landing place) · a resolved fork still reading as a pending recommendation · a status guide listing fewer statuses than the body uses · measured and invented quantities typographically identical · a MISSING mental model / "It is not:" section on a subject with likely wrong readings · a shape-bearing ruling or option shown without its typed sketch · missing negative space ("cannot do") on a likely-misread ruling · a bare visual with no text explanation · a document without its first-lines Authority statement. |
     | Decision-entry probes (log) | Entries missing Decided-by (with the selection event and any rider), Rests-on, or Affects; a shape-bearing fork whose entry preserves no sketch receipt; an autonomous-mode pick not flagged provisional — each is a finding. |
+    | Written set | The set SKILL.md step 11 requires is present, or each omission is a logged D#: census · decision log · design anchor · angle companions for the unclear edges the use cases expose · domain-model companion when objects change · pipelines companion when behavior/state changes · CLI surface when commands change. A required companion missing with no logged reason is BLOCKING. |
+    | Invariants & pipelines | Every UC# maps to ≥1 P# (a use case with no pipeline is behavior nobody designed — blocking); every I# in the domain-model companion names an enforcer, or is an explicit GAP row (an unenforced invariant with neither is blocking); every P#.n step has a typed transition AND a typed refusal boundary; §5.0 indexes every I#/P# and each §5 area cites the I#s it upholds and the P#.n steps it realizes; the refusal catalogue has no planned exit-1 row. |
+    | Shape presence | Every shape-bearing ruling — in the spec, the companions, and the angles — shows its typed sketch (a frozen model, a step table, a `->` flow); a shape described only in prose is a finding. Journey angles carry a State-and-flow section and name the I#s they rely on. |
     | YAGNI | Unrequested features, over-engineering, areas serving no R#/UC#. |
 
     ## Calibration
