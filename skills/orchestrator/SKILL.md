@@ -123,6 +123,9 @@ data is unavailable is a DECIDE, not a skipped row), in the same one-step loop (
 rule → run → judge); an evaluator judges each against its what-good-looks-like criteria;
 verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
 milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
+The battery's judging seat is **superdev:milestone-sweep-judge**. It settles scope, keeps the command
+matrix, the P0–P3 bug ledger and the gap list, never approves a write, and returns exactly one verdict:
+PASS-TO-HUMAN · BLOCKED · INCOMPLETE. The human tests only after PASS-TO-HUMAN.
 
 ## Chartering — granularity and the best path
 

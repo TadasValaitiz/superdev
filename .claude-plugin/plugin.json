@@ -1,7 +1,7 @@
 {
   "name": "superdev",
   "description": "Development-organisation toolchain for coding agents: system-design corpus + architect/orchestrator/item rooms, milestone chartering, checkride gates, and pattern law. Evolved fork of Superpowers by Jesse Vincent.",
-  "version": "8.3.0",
+  "version": "8.4.0",
   "author": {
     "name": "Tadas (fork); original: Jesse Vincent",
     "email": "valaitis.t@gmail.com"

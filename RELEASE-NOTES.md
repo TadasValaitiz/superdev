@@ -1,3 +1,41 @@
+# v8.4.0 — milestone-sweep-judge: the last gate before the human (2026-09-24)
+
+Built from four milestone sweeps on the calibration project (a judge room plus an executor room,
+driving a shared live store read-only) and tested per writing-skills. Four no-skill baselines each
+failed in named ways:
+- bars copied from a pre-fix receipt, which would have failed the fix itself;
+- write-class verbs "probed" by running them and counting afterwards;
+- claims marked UNVERIFIED but never recomputed;
+- an executor that summed money in float, kept its helper in a job dir, and gave verdicts;
+- ad-hoc status words, gaps priced as bugs, and no written P-scale;
+- a judge that guessed scope, planned to run unapproved writes itself, and offered a "conditional pass".
+
+With the skill, all four scenarios complied.
+
+- **New skill `milestone-sweep-judge`:** the judging seat that guards a milestone's close for any CLI
+  or API surface.
+  - Scope first: the live inventory is placed IN / complementary / DEFERRED / OUT, and every unplaced
+    item is a DECIDE.
+  - Six laws: a receipt is evidence of a past tree; recompute, don't confirm; zero writes proven by a
+    receipt chain; writes belong to the human (refusal probes need a file:line proof, a guard and ONE
+    attempt); bugs and gaps are separate lists; scope is a lens.
+  - Exactly one verdict to the orchestrator: PASS-TO-HUMAN · BLOCKED · INCOMPLETE.
+- **`methodology.md`:** the reference covers:
+  - transport law and heartbeats;
+  - `scope.md`;
+  - `bars.md` §0–§6 with the ⊥ operand;
+  - the receipt chain R and its helper contract;
+  - read-only classes and the W4 refusal-probe protocol;
+  - judging (JC-n corrections, VOID for environmental failures);
+  - the bug ledger with NEW / CARRIED / REGRESSED;
+  - the written P0–P3 scale and its effect on the close;
+  - `matrix.md` (WORKS / WORKS-WITH-ISSUES / BROKEN / NOT DRIVEN, carry-forward while guarded paths are unchanged), `gaps.md` (never priced), `triage.md`;
+  - reporting and closing.
+- **`executor-brief.md`:** the executor seat. It captures (HEAD, separate streams, a versioned receipt
+  helper in the sweep dir, exact-decimal operands) and never judges.
+- **Cross-links:** the orchestrator's battery names this skill as its judging seat; cli-checkride
+  points here for the milestone gate; README catalog.
+
 # v8.3.0 — brainstorming shows its shape; invariants and pipelines get a home (2026-09-03)
 
 Diagnosed via superdev:self-improvement on the calibration project (same day as 8.2.0).
