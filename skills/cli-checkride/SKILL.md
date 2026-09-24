@@ -25,11 +25,11 @@ that mean nothing in the real world). Every rule below exists so neither can rec
 - **Any branch/area that changed a user-facing surface** (new/renamed commands, changed
   args/output, API routes) — in a room's DoD, or at an ordinary branch's finishing gate.
 - **Not** for trivial/no-surface branches: the deviation auditor's receipt cross-check
-  covers those.
-- **Not** the milestone-close gate. Re-driving a whole milestone's surface on the merged tip, and
-  deciding whether it goes to the human, is superdev:milestone-sweep-judge. Scoping is about *which surfaces changed*, never about *how much of the
+  covers those. Scoping is about *which surfaces changed*, never about *how much of the
   operator's journey to ride*: the ride starts where the operator starts and crosses every
   neighbouring surface the journey needs, changed or not — seams are where operators die.
+- **Not** the milestone-close gate. Re-driving a whole milestone's surface on the merged tip, and
+  deciding whether it goes to the human, is superdev:milestone-sweep-judge.
 
 ## The substrate law — actual data, or stop and ask
 
