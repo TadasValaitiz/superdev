@@ -80,44 +80,61 @@ built on hallucinated ground truth is worse than no spec.
 
 ## The phases
 
-State lives in the script, not in the agents: the **angle agenda**, a **decision ledger
-per angle** (the ratchet) and an **assumption queue**. Each round threads ONLY the current
-angle's ledger plus the reconciled outcomes of closed angles — never the full transcript,
-never other open angles' detail. That is the token discipline: a round's context is one
-angle wide.
+You — the session running this skill (the CONTROLLER) — hold the spine. Workflows are
+small: **ONE workflow run per angle**. The angle file is the hand-off between runs, so any
+fresh session can pick up where the last angle file left off, and the architect (and the
+human) can be brought in BETWEEN angles.
 
 ```
-Ground   → one grounding agent writes the census (same contract as brainstorming step 1:
-           MEASURED / READ / FLAGGED, file:line) and the load-bearing unknowns
-Agenda   → the Questioner proposes 3–5 ANGLES from the census's FLAGGED rows and the use
-           cases (superdev:system-design angle-guide.md#item-angles: one central question ·
-           why it matters · boundaries) — a few, deep; the well-understood shape goes to the
-           domain-model / pipelines companions instead.
-           STOP: the human agrees the agenda (drop · add · reorder) before any angle is
-           worked. In an orchestrated room the human does it in the room; the agreed agenda
-           is recorded in the decision log.
-Angles   → for each agreed angle, in order: Questioner ↔ Responder rounds scoped to THIS
-           angle (round cap per angle; default 6), until the angle is reconciled or capped.
-           CLOSE the angle: state what was reconciled, then WRITE its companion NOW per
-           brainstorming's item-angle-template.md (mental model · journey with LOCKED claims
-           and typed sketches · invariants · cannot-do · collisions) and commit it before
-           the next angle opens. A new angle found mid-way is ADDED to the agenda, never
-           worked silently.
-Shape    → after all angles close: the whole-design shape, composed FROM the angle
-           companions and the domain-model (I#) / pipelines (P#) companions; the design doc
-           indexes every angle, I# and P#.
-Review   → dispatch the spec reviewer (skills/brainstorming/spec-document-reviewer-prompt.md)
-           over the design doc + decision log + census + EVERY angle companion; fix blocking
-           issues once
-Summary  → the architecture summary and the STOP (see The hand-off)
+1 Ground    → YOU (or one sonnet agent) write the census (brainstorming step 1 contract:
+              MEASURED / READ / FLAGGED, file:line; first line "CENSUS — evidence record;
+              rules nothing"). If a docs/system-design/ corpus exists, READ the angles and
+              decisions that govern this item and quote the load-bearing lines (file:line).
+              Commit it.
+2 Agenda    → YOU propose 3–5 ANGLES, inline, no workflow (superdev:system-design
+              angle-guide.md#item-angles: one central question · why it matters ·
+              boundaries) — a few, deep, for the UNCLEAR journeys and collisions; the
+              well-understood shape goes to the domain-model / pipelines companions.
+              ORDER THEM: the most important angle FIRST (the one the others depend on).
+              STOP: the human agrees the agenda (drop · add · reorder). In an orchestrated
+              room the human does it in the room. Record the agreed agenda in the decision log.
+3 Angle N   → launch ONE self-brainstorm workflow for THIS angle (workflow-reference.md):
+              inputs = the angle, the census, EVERY previous angle file, the governing
+              system-design passages, and any architect answers. Questioner ↔ Responder,
+              at most 6 rounds, scoped to this angle; the run closes the angle and WRITES
+              + COMMITS its angle file per brainstorming's item-angle-template.md, then ends.
+4 Between   → YOU read the new angle file before launching the next workflow:
+              · check it against the system-design corpus (the architect keeps it correct);
+              · a discrepancy with the corpus, or a question only the architect can answer
+                → send the architect an ASK (a pointer: the cell, the corpus file:line, the
+                angle's position); wait for the answer ONLY if the next angle depends on it,
+                otherwise carry it as an open question into the next angle's inputs;
+              · a question only the human can answer → ask the human now (in the room);
+              · a genuinely NEW angle surfaced → add it to the agenda openly and tell the
+                human; never work it silently;
+              · the architect's answers and the human's rulings go into the next angle's
+                inputs and the decision log.
+              Then step 3 for the next angle. Repeat until every agreed angle is closed.
+5 Shape     → after all angles: the whole-design shape, composed FROM the angle files and the
+              domain-model (I#) / pipelines (P#) companions; design doc + decision log; the
+              design doc indexes every angle, I# and P#.
+6 Review    → the spec reviewer (skills/brainstorming/spec-document-reviewer-prompt.md) over
+              the design doc + decision log + census + EVERY angle file; fix blocking issues once
+7 Summary   → the architecture summary and the STOP (see The hand-off)
 ```
 
-Why angles, measured in brainstorming: companions written hot, as each angle closes,
-carried ~1,500+ words of teaching detail; the same angles batched to the end became
-~380-word cite-only indexes. One whole-design loop is the batched form, and costs more
-tokens for less design.
+Why this shape:
+- **Small workflows:** a run is one angle wide, so its context is one angle wide — the main
+  token control. Depth comes from more agreed angles, never a longer loop.
+- **The angle file is the checkpoint:** a paused or crashed brainstorm resumes from the last
+  committed angle file; a different session (or a different room) can continue it.
+- **The loop is open between angles:** the corpus check and the architect ASK happen where
+  they are cheap — before the next angle builds on a wrong premise, not after the spec.
+- **Measured in brainstorming:** angle files written hot, as each angle closes, carried
+  ~1,500+ words of teaching detail; the same angles batched to the end became ~380-word
+  cite-only indexes.
 
-The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/workflow-reference.md`.
+The per-angle workflow script, schemas, and role prompts: `skills/self-brainstorming/workflow-reference.md`.
 
 ## Artifacts (identical contract to brainstorming)
 

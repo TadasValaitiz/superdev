@@ -1,8 +1,10 @@
-# Self-Brainstorming Workflow Reference
+# Self-Brainstorming Workflow Reference — one angle per run
 
-The script skeleton, output schemas, and role prompts. Adapt the prompts' bracketed
-slots to the task; keep the schemas and the loop mechanics intact — they ARE the
-protocol (the ratchet, the evidence tiers, the saturation contract).
+ONE workflow run brainstorms ONE agreed angle and writes its angle file. Grounding, the
+agenda, the between-angle checks (corpus, architect ASK, human), the shape, review and
+summary are the CONTROLLER's steps in SKILL.md "The phases" — not in this script. Keep the
+schemas and mechanics intact — they ARE the protocol (the per-angle ratchet, the evidence
+tiers, the hot angle file).
 
 ## Inputs (pass via `args`)
 
@@ -12,96 +14,90 @@ protocol (the ratchet, the evidence tiers, the saturation contract).
   "brief": "the problem statement / idea, as given",
   "repoRoot": "/abs/path",
   "specDir": "docs/superdev/specs",
-  "maxRounds": 12,
+  "censusPath": "the committed census",
+  "angle": { "n": 2, "slug": "…", "centralQuestion": "…", "whyItMatters": "…", "boundaries": "…" },
+  "previousAngles": ["paths of the angle files already closed, in order"],
+  "systemDesign": ["corpus passages governing this angle — path:line, quoted by the controller"],
+  "architectAnswers": ["answers received since the last angle, with their D#/pointer"],
+  "openQuestions": ["carried questions the controller did not block on"],
+  "dStart": 12,
+  "maxRounds": 6,
   "todayISO": "YYYY-MM-DD",
   "nowISO": "full ISO timestamp for log stamps"
 }
 ```
 
-(`todayISO`/`nowISO` are passed in because workflow scripts cannot call `Date.now()`.)
-Scale `maxRounds` to the problem: ~6 for a contained utility, 10–15 for a subsystem,
-20+ only with an explicit budget directive.
+`dStart` is the next free D# (the controller reads it from the decision log), so lock ids
+stay monotonic across runs. `maxRounds` defaults to 6; lower it for a narrow angle.
 
 ## Schemas
 
 ```js
-const GROUND_SCHEMA = { type: 'object', required: ['currentState','constraints','priorArt','unknowns'], properties: {
-  currentState: { type: 'string' },                       // what exists today, cited
-  constraints:  { type: 'array', items: { type: 'string' } },
-  priorArt:     { type: 'array', items: { type: 'string' } }, // related specs/decision logs found
-  unknowns:     { type: 'array', items: { type: 'string' } }  // load-bearing open questions
-}}
-
-const Q_SCHEMA = { type: 'object', required: ['locks','saturated'], properties: {
+const Q_SCHEMA = { type: 'object', required: ['locks','reconciled'], properties: {
   locks: { type: 'array', items: { type: 'object',
     required: ['id','title','decision','alternatives','why','status','revisitWhen'],
     properties: {
-      id:           { type: 'string' },   // "D7" — monotonic, script-verified
+      id:           { type: 'string' },   // "D12" — monotonic from args.dStart, script-verified
       title:        { type: 'string' },
       decision:     { type: 'string' },
       alternatives: { type: 'array', items: { type: 'string' } }, // each with gains/sacrifices
       why:          { type: 'string' },
       status:       { enum: ['locked','provisional'] },  // provisional iff resting on ASSUMPTION
-      holistic:     { type: 'boolean' },  // HYBRID mode: true = human-owned fork -> force provisional + queue for R-H
-      restsOn:      { type: 'string' },   // evidence cite or "A3"
+      holistic:     { type: 'boolean' },  // HYBRID mode: human-owned fork -> provisional + queued
+      restsOn:      { type: 'string' },   // evidence cite, corpus path:line, or "A3"
       revisitWhen:  { type: 'string' }
     }}},
-  saturated:  { type: 'boolean' },        // true → no remaining unknown changes what gets built
-  question:   { type: 'string' },         // required when !saturated — ONE question
-  whyItMatters: { type: 'string' },       // what this question de-risks
-  options:    { type: 'array', items: { type: 'string' } } // 2-3 concrete options w/ trade-offs
+  reconciled:   { type: 'boolean' },      // true → no remaining unknown IN THIS ANGLE changes what gets built
+  question:     { type: 'string' },       // required when !reconciled — ONE question, inside this angle
+  whyItMatters: { type: 'string' },
+  options:      { type: 'array', items: { type: 'string' } }, // 2-3 concrete options w/ trade-offs
+  parked:       { type: 'array', items: { type: 'string' } }, // belongs to ANOTHER angle
+  askArchitect: { type: 'array', items: { type: 'string' } }, // corpus discrepancies / architect-only questions
+  newAngle:     { type: 'object' }        // proposed, never worked here
 }}
 
 const A_SCHEMA = { type: 'object', required: ['answer','tier','alternatives','recommendation'], properties: {
   answer:         { type: 'string' },
   tier:           { enum: ['EVIDENCE','REASONED','ASSUMPTION'] },
-  evidence:       { type: 'array', items: { type: 'string' } }, // files read / probes run / cites
-  assumptionText: { type: 'string' },     // required when tier=ASSUMPTION: the assumption, stated plainly
-  alternatives:   { type: 'array', items: { type: 'string' } }, // follow-up alternatives w/ trade-offs
+  evidence:       { type: 'array', items: { type: 'string' } }, // files read / probes run / corpus cites
+  assumptionText: { type: 'string' },     // required when tier=ASSUMPTION
+  alternatives:   { type: 'array', items: { type: 'string' } },
   recommendation: { type: 'string' },
   risks:          { type: 'string' }
 }}
 
-const PATHS_SCHEMA = { type: 'object', required: ['specPath','logPath'], properties: {
-  specPath: { type: 'string' }, logPath: { type: 'string' } }}
-
-const REVIEW_SCHEMA = { type: 'object', required: ['status','blocking','advisory'], properties: {
-  status: { enum: ['Approved','IssuesFound'] },
-  blocking: { type: 'array', items: { type: 'string' } },
-  advisory: { type: 'array', items: { type: 'string' } } }}
+const CLOSE_SCHEMA = { type: 'object',
+  required: ['anglePath','reconciledOutcome','newForks','askArchitect'], properties: {
+  anglePath:         { type: 'string' },  // the angle file, written and COMMITTED
+  reconciledOutcome: { type: 'string' },
+  newForks:          { type: 'array', items: { type: 'string' } }, // forks the WRITING surfaced
+  askArchitect:      { type: 'array', items: { type: 'string' } }, // for the controller to send
+  parked:            { type: 'array', items: { type: 'string' } },
+  newAngle:          { type: 'object' }
+}}
 ```
 
 ## Script skeleton
 
 ```js
 export const meta = {
-  name: 'self-brainstorm',
-  description: 'Questioner-responder brainstorm loop that locks decisions and writes a ratification-ready design spec',
+  name: 'self-brainstorm-angle',
+  description: 'Brainstorm ONE agreed angle: bounded questioner-responder loop, then write and commit its angle file',
   phases: [
-    { title: 'Explore',    detail: 'ground the topic in the repo' },
-    { title: 'Dialogue',   detail: 'question ↔ evidence-tiered answer, locking per round' },
-    { title: 'Synthesize', detail: 'write design doc (two passes) + decision log' },
-    { title: 'Review',     detail: 'spec reviewer over both artifacts' },
+    { title: 'Dialogue', detail: 'question <-> evidence-tiered answer, locking per round, this angle only' },
+    { title: 'Close',    detail: 'reconcile the angle; write + commit the angle file' },
   ],
 }
 
-phase('Explore')
-const ground = await agent(
-  `You are grounding a design brainstorm. Topic: ${args.topic}. Brief: ${args.brief}
-   Repo: ${args.repoRoot}. Read the relevant code, docs, prior specs and decision logs
-   (${args.specDir}). Report ONLY what you actually read — cite paths. List the
-   load-bearing unknowns a designer must resolve.`,
-  { schema: GROUND_SCHEMA, label: 'ground', model: 'sonnet' })
-
 phase('Dialogue')
-const ledger = [], assumptions = []
-let last = null, saturated = false, round = 0, dHwm = 0
+const ledger = [], assumptions = [], parked = [], asks = []
+let last = null, reconciled = false, round = 0, dHwm = args.dStart - 1, newAngle = null
 
-while (!saturated && round < (args.maxRounds ?? 12)
+while (!reconciled && round < (args.maxRounds ?? 6)
        && (!budget.total || budget.remaining() > 30000)) {
   round++
-  const q = await agent(questionerPrompt(ground, ledger, assumptions, last),
-                        { schema: Q_SCHEMA, label: `q${round}`, phase: 'Dialogue', model: 'opus' })
+  const q = await agent(questionerPrompt(args, ledger, assumptions, last),
+                        { schema: Q_SCHEMA, label: `q${round}`, model: 'opus' })
   for (const lock of q.locks) {              // script-enforced ratchet hygiene
     const n = parseInt(lock.id.slice(1), 10)
     if (!(n > dHwm)) throw new Error(`non-monotonic lock id ${lock.id}`)
@@ -110,103 +106,83 @@ while (!saturated && round < (args.maxRounds ?? 12)
       lock.status = 'provisional'            // the iron rule, enforced in code
     ledger.push({ ...lock, round })
   }
-  if (q.saturated) { saturated = true; break }
-  last = await agent(responderPrompt(q, ledger, ground),
-                     { schema: A_SCHEMA, label: `a${round}`, phase: 'Dialogue', model: 'sonnet' })
+  parked.push(...(q.parked ?? [])); asks.push(...(q.askArchitect ?? []))
+  if (q.newAngle) newAngle = q.newAngle    // reported to the controller, never worked here
+  if (q.reconciled) { reconciled = true; break }
+  last = await agent(responderPrompt(args, q, ledger),
+                     { schema: A_SCHEMA, label: `r${round}`, model: 'sonnet' })
   if (last.tier === 'ASSUMPTION')
-    assumptions.push({ id: `A${assumptions.length + 1}`, text: last.assumptionText, round })
+    assumptions.push({ id: `A-${args.angle.slug}-${assumptions.length + 1}`, text: last.assumptionText, round })
   log(`round ${round}: ${ledger.length} locked, ${assumptions.length} assumptions`)
 }
-log(saturated ? `saturated after ${round} rounds` : `STOPPED UNSATURATED at round ${round}`)
 
-phase('Synthesize')
-const paths = await agent(
-  `Write BOTH brainstorm artifacts for topic "${args.topic}" (date ${args.todayISO}).
-   Templates (follow them exactly):
-   - design doc:    <plugin>/skills/brainstorming/design-doc-template.md
-   - decision log:  <plugin>/skills/brainstorming/decision-log-template.md
-   Inputs: brief=${args.brief}; grounding=${JSON.stringify(ground)};
-   ledger=${JSON.stringify(ledger)}; assumptions=${JSON.stringify(assumptions)};
-   stamp entries ${args.nowISO}, phase: brainstorm, decided-by: self-brainstorm round N.
-   Write the design doc in TWO PASSES: pass 1 the shape + anchor (§1 intent, §2
-   requirements, §3 use cases, §4 narrative, §5 design, §9 acceptance hints); pass 2 the
-   enrichment (§2 requirements, §3 use cases, §6 decisions w/ revisit-when, §7
-   assumptions, §8 not-doing, §9 acceptance hints, and the narrative link-sentence
-   opening every §5 area).
-   Header: Origin: self-brainstorm. Save under ${args.repoRoot}/${args.specDir}/.
-   Do NOT commit.`,
-  { schema: PATHS_SCHEMA, label: 'synthesize', model: 'opus' })
+phase('Close')
+const close = await agent(closePrompt(args, ledger, assumptions, reconciled),
+                          { schema: CLOSE_SCHEMA, label: 'close', model: 'opus' })
 
-phase('Review')
-let review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 'review', model: 'opus' })
-if (review.status === 'IssuesFound') {
-  await agent(`Fix these blocking issues in ${paths.specPath} and ${paths.logPath},
-    amending (never erasing) per the templates: ${JSON.stringify(review.blocking)}`,
-    { label: 'fix', model: 'opus' })
-  review = await agent(reviewerPrompt(paths), { schema: REVIEW_SCHEMA, label: 're-review', model: 'opus' })
-}
-
-return { ...paths, rounds: round, saturated, locked: ledger.length,
-         provisional: ledger.filter(l => l.status === 'provisional').length,
-         assumptions, review }
+return { angle: args.angle.slug, anglePath: close.anglePath, rounds: round,
+         reconciled, locks: ledger, nextD: dHwm + 1, assumptions,
+         newForks: close.newForks, askArchitect: [...asks, ...close.askArchitect],
+         parked: [...parked, ...(close.parked ?? [])], newAngle: close.newAngle ?? newAngle,
+         next: 'CONTROLLER: read the angle file, check the corpus, send any architect ASK, then launch the next angle' }
 ```
 
 ## Role prompts
 
-**questionerPrompt(ground, ledger, assumptions, lastAnswer)** — the design authority:
+**questionerPrompt(args, ledger, assumptions, lastAnswer)** — the design authority, one angle wide:
 
 ```
-You are the QUESTIONER in a self-brainstorming loop — the design authority.
-Topic/brief: [...]  Grounding: [...]
-Decision ledger so far (settled — do not reopen without new information): [...]
-Open assumptions: [...]  Previous answer to your last question: [...]
+You are the QUESTIONER for ONE angle of a self-brainstorm — the design authority.
+THIS ANGLE: [central question · why it matters · boundaries]
+Census: [path]. Previous angle files (settled — do not reopen without new information): [paths].
+System-design passages governing this angle (the architect keeps them correct): [path:line …].
+Architect answers since the last angle: [...]  Carried open questions: [...]
+This angle's ledger so far: [...]  Open assumptions: [...]  Previous answer: [...]
 
-1. LOCK: from the previous answer, emit any decisions now settled — id (next D#),
-   decision, alternatives WITH gains/sacrifices, why, revisitWhen (a concrete reopening
-   trigger — "never" must be argued). If the answer's tier was ASSUMPTION, status is
-   provisional and restsOn names the A#.
-2. ASK: the ONE question that most reduces remaining design uncertainty. Attach 2-3
-   concrete options with trade-offs. Prefer forks that kill whole branches of the
-   design space. YAGNI ruthlessly — do not explore features nobody asked for.
-3. SATURATION: when no remaining unknown would change what gets built, say so
-   (saturated: true, no question) instead of inventing further questions. Draining
-   every conceivable topic is not the goal; a buildable, honest design is.
+1. LOCK: from the previous answer, emit decisions now settled — id (next D#), decision,
+   alternatives WITH gains/sacrifices, why, revisitWhen. ASSUMPTION-tier → provisional, restsOn the A#.
+2. ASK: the ONE question, INSIDE THIS ANGLE, that most reduces its remaining uncertainty —
+   2-3 concrete options (mechanism, an example from THIS project, consequences). YAGNI.
+3. PARK what belongs to another angle; put a corpus discrepancy or an architect-only
+   question in askArchitect (never decide against the corpus silently); propose a genuinely
+   new angle in newAngle — never work it here.
+4. RECONCILED: when no remaining unknown in THIS angle would change what gets built, say so.
 ```
 
-**responderPrompt(q, ledger, ground)** — the grounded oracle:
+**responderPrompt(args, q, ledger)** — the grounded oracle, one angle wide:
 
 ```
-You are the RESPONDER in a self-brainstorming loop — a grounded oracle, not an
-imaginative one. Question: [...] Options offered: [...]
-Settled ledger (respect it): [...]  Repo: [...]
-
-Answer FROM EVIDENCE: read the relevant code/docs/specs, run read-only probes, and
-cite what you actually consulted. Tier your answer honestly:
-EVIDENCE (grounded + cited) / REASONED (explicit inference from evidence) /
-ASSUMPTION (could not ground it — state the assumption plainly in assumptionText;
-NEVER dress a guess as fact; "I could not determine X" is an acceptable answer).
-Give follow-up alternatives the questioner may not have seen, a recommendation with
-reasoning, and the risks of your recommendation.
+You are the RESPONDER — a grounded oracle, not an imaginative one — for ONE angle.
+Angle: [central question · boundaries]  Question: [...] Options: [...]
+Previous angle files and system-design passages (respect them): [...]  This angle's ledger: [...]
+Answer FROM EVIDENCE: read the code/docs/specs/corpus, run read-only probes, cite what you
+consulted. Tier honestly: EVIDENCE / REASONED / ASSUMPTION (state it plainly; "I could not
+determine X" is acceptable). Give alternatives, a recommendation with reasoning, and its risks.
 ```
 
-**reviewerPrompt(paths)** — instantiate the dispatch template in
-`skills/brainstorming/spec-document-reviewer-prompt.md` with SPEC_FILE_PATH=paths.specPath,
-DECISION_LOG_PATH=paths.logPath; request the REVIEW_SCHEMA fields as the output.
+**closePrompt(args, ledger, assumptions, reconciled)** — close and write hot:
+
+```
+CLOSE angle [n · slug] ([reconciled | CAPPED at the round limit — say so in the file]).
+State what was reconciled, in prose. WRITE the angle file NOW to
+[specDir]/[todayISO]-[topic]-angle-[NN]-[slug].md per skills/brainstorming/item-angle-template.md
+— mental model; the journey with `### LOCKED — claim` + "this means…" and a TYPED SKETCH for
+every shape-bearing ruling; the invariants it relies on; cannot-do; mismatch; collisions it
+did not settle; the provisional locks with their A#; the open architect questions. If the
+WRITING surfaces a new fork, list it in newForks — never write it in as decided.
+COMMIT the angle file (explicit path) before returning.
+```
 
 ## Mechanics notes
 
-- **Ledger-as-state, not transcript-as-state:** each round sends only the distilled
-  ledger + latest exchange. Fresh eyes per round is deliberate (anti-anchoring); the
-  workflow journal preserves the full exchange history for archaeology, and every lock
-  lands in the durable decision log at synthesis.
-- **Resume:** the run is resumable (`resumeFromRunId`) — completed rounds replay from
-  cache. If a run dies pre-synthesis, resume rather than restart: the ledger rebuilds
-  from cached calls at zero cost.
-- **Budget scaling:** with a token directive, the `budget.remaining()` guard paces
-  depth; without one, `maxRounds` is the knob. Report which limit ended the run.
-- **Model/effort:** Workflow supports the exact per-call `model` option used in the
-  script skeleton. Grounding and the Responder pin native Claude Code `sonnet`
-  (`medium`). The Questioner, synthesis, design review, design-fix, and re-review pin
-  native Claude Code `opus` (`very smart`). These are native Claude roles, not
-  Codex-worker dispatches; do not substitute Codex for main-session brainstorming or
-  design.
+- **One angle per run:** the run's context is one angle wide (the angle, the census, the
+  previous angle FILES by path, the governing corpus passages). That is the token control.
+- **The angle file is the hand-off:** the next run reads it; a paused brainstorm resumes from
+  the last committed angle file, in this or another session.
+- **Between runs is where the controller works:** reading the angle file, the corpus check,
+  the architect ASK, the human's questions, and the next run's inputs (SKILL.md step 4).
+- **Resume:** a run is resumable (`resumeFromRunId`); if it dies before Close, resume it.
+- **Budget:** `maxRounds` (default 6) caps the angle; a capped angle is written as CAPPED,
+  never passed off as reconciled.
+- **Model/effort:** the Responder pins `sonnet` (`medium`); the Questioner and Close pin
+  `opus` (`very smart`). Native Claude roles, not Codex-worker dispatches.
