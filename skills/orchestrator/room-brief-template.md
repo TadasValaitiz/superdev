@@ -85,12 +85,20 @@ SCOPE: ⟨what this room owns⟩. RESIDUALS OWNED: ⟨R# — file:line + what to
 ⟨Optional: CROSSWALK / backlog rows to disposition.⟩
 
 PROCESS (superdev spine — invoke the skills, don't imitate them):
-superdev:⟨self-⟩brainstorming → design doc ⟨path⟩ → RATIFICATION GATE → superdev:writing-plans →
-superdev:subagent-driven-development (TDD; gate = ⟨command⟩) → ⟨cutover/cleanup steps⟩ →
-CLI CHECKRIDE (superdev:cli-checkride — ACTUAL DATA ONLY, per the plan's Checkride plan;
-executor proposes and runs one step at a time, evaluator rules and judges each from the
-operator's seat; a step whose real data is unavailable STOPs the ride → DECIDE to me,
-never a stand-in; iterate until PASS; commit the ledger + verdict) →
+superdev:⟨self-⟩brainstorming → design doc ⟨path⟩ → DESIGN STOP (skip only when this brief
+says MECHANICAL): STOP before planning and execution; write an ARCHITECTURE SUMMARY in your
+room (the core forks · what was decided · why · the list of design files with paths) — the
+operator reviews the design IN THIS ROOM, where the context lives; send the architect the
+design files for its SCORE and FEEDBACK (advisory; it rules only the forks it owns); send me a
+one-line notice with the summary path; while you wait, only census xfails and read-only
+spikes → RATIFICATION GATE → superdev:writing-plans →
+superdev:subagent-driven-development (TDD; gate = ⟨command⟩; probe the surface you build as
+you build it) → ⟨cutover/cleanup steps⟩ →
+CLI CHECKRIDE at the plan's named finalization points only (superdev:cli-checkride — ACTUAL
+DATA ONLY; a REGRESSION when a surface is finished, never per lane or per fix; executor
+proposes and runs one step at a time, evaluator rules and judges each from the operator's
+seat; a step whose real data is unavailable STOPs the ride → DECIDE to me, never a stand-in;
+iterate until PASS; commit the ledger + verdict) →
 deviation/acceptance audit → self-publish per the recipe.
 
 FILES YOU PRODUCE: design doc ⟨path⟩ · decision-log entries ⟨your ID block⟩ (candidate until
