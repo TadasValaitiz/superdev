@@ -87,10 +87,11 @@ SCOPE: ⟨what this room owns⟩. RESIDUALS OWNED: ⟨R# — file:line + what to
 PROCESS (superdev spine — invoke the skills, don't imitate them):
 superdev:⟨self-⟩brainstorming → design doc ⟨path⟩ → DESIGN STOP (skip only when this brief
 says MECHANICAL): STOP before planning and execution; write an ARCHITECTURE SUMMARY in your
-room (the core forks · what was decided · why · the list of design files with paths) — the
-operator reviews the design IN THIS ROOM, where the context lives; send the architect the
-design files for its SCORE and FEEDBACK (advisory; it rules only the forks it owns); send me a
-one-line notice with the summary path; while you wait, only census xfails and read-only
+room (the core forks · what was decided · why · every design file as a clickable file:// URL);
+send the architect the design files for its SCORE and FEEDBACK (advisory; it rules only the
+forks it owns); run the design review; update the summary with both; send me a one-line
+notice that it is ready for the operator; the operator then enters THIS ROOM, opens the
+files, and APPROVES here — no planning before that approval; while you wait, only census xfails and read-only
 spikes → RATIFICATION GATE → superdev:writing-plans →
 superdev:subagent-driven-development (TDD; gate = ⟨command⟩; probe the surface you build as
 you build it) → ⟨cutover/cleanup steps⟩ →

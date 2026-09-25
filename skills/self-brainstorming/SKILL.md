@@ -165,14 +165,16 @@ human in EVERY mode — autonomy delegates the running, never the look at the de
 2. **Per angle:** its central question, the core forks (options weighed · what was decided ·
    why — one short paragraph each), and whether it closed reconciled or capped.
 3. Rounds run per angle; the reviewer's verdict.
-4. **The design files** — census, every angle companion, design doc, decision log, and the
-   domain-model / pipelines / CLI companions — each with its path.
+4. **The design files** — census, every angle file, design doc, decision log, and the
+   domain-model / pipelines / CLI companions — each as a clickable `file://` absolute URL,
+   so the human can open and review each one.
 5. Recommended next step (usually: ratify A#s → approve spec → writing-plans).
 
 Report it to the ratifying authority (per the mode law). Inside an orchestrated room, the
-human reviews the design IN THE ROOM (the context lives there), the design files go to the
-architect for its score and feedback, and the orchestrator gets a one-line notice with
-the summary path.
+order is fixed: (1) the design files go to the architect for its score and feedback; (2) the
+design review runs; (3) the summary is updated with both; (4) the human enters the room,
+opens the files, and APPROVES there — the room waits for that approval before planning. The
+orchestrator gets a one-line notice when the summary is ready for the human.
 
 ## Red flags
 
