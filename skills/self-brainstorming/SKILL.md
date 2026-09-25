@@ -96,6 +96,11 @@ human) can be brought in BETWEEN angles.
               boundaries) — a few, deep, for the UNCLEAR journeys and collisions; the
               well-understood shape goes to the domain-model / pipelines companions.
               ORDER THEM: the most important angle FIRST (the one the others depend on).
+              The LAST angle is ALWAYS TESTING & CLEARANCE, worked after every other angle
+              is closed: how we approach tests so they do not slow us down — which existing
+              tests are SAFETY NET vs IMPLEMENTATION HELPERS, what is archived, deleted or
+              rewritten (per test-clearance.md), the mechanical census, and the target test
+              count after the item.
               STOP: the human agrees the agenda (drop · add · reorder). In an orchestrated
               room the human does it in the room. Record the agreed agenda in the decision log.
 3 Angle N   → launch ONE self-brainstorm workflow for THIS angle (workflow-reference.md):
