@@ -179,8 +179,8 @@ designer:
   foundation angles for that area; then the room launches, self-brainstorms the details, and
   the human reviews and iterates. The gate is scoped: unaffected charters proceed. Chartered,
   building rooms are NEVER stopped by design-dryness; they finish, plant markers, and merge.
-- **Process feedback (the fast loop):** rooms' R5 lines + your measured facts into your
-  process-feedback ledger; adapt every NEW room's brief immediately (one O-line per change).
+- **Process feedback (the fast loop):** rooms' R5 RETROSPECTIVES (orchestrator/retrospective-template.md)
+  + your measured facts into your process-feedback ledger — one row per proposal, citing the retro; adapt every NEW room's brief immediately (one O-line per change).
   You never edit skills; when entries cluster, the operator runs superdev:self-improvement
   in inbox mode.
 - **You never execute work.** No micro-task tier. Ad-hoc rooms (probe, spike, sweep) are

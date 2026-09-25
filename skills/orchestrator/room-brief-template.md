@@ -110,7 +110,13 @@ RULES: never invent a number. TWO kinds of contradiction, opposite duties: (a) t
 vs REALITY (a LOCKED design claim the code cannot satisfy) = the DEVIATION DUTY above —
 keep building, never stall (D61); (b) an operator instruction about YOUR OWN scope,
 parameters, or conduct = STOP AND REPORT (the orchestrator owns cross-room decisions); follow the governing engineering-patterns doc;
-sub-agents inherit the HOME paragraph verbatim; heartbeat every commit-batch / ~45 min.
+sub-agents inherit the HOME paragraph AND these fences verbatim, at every depth (a
+sub-agent's own sub-agents too): never `git stash`, no writes to shared stores, kill
+processes ONLY by a PID you started (never `pkill`/`killall` by name) — prefer a mechanical
+guard over the sentence where one is possible; force-track (`git add -f`) your gitignored
+ledgers and reports; after the machine sleeps, check your sub-agents (dead test monitors,
+stalled implementers, DB steps that failed) and resume them; heartbeat every commit-batch /
+~45 min.
 
 REPORTING (to "⟨orchestrator session name⟩" via SendMessage):
 R0 START — after grounding: what you read · worktree state · first move.

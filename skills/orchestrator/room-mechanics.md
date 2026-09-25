@@ -109,3 +109,15 @@ a blind relaunch double-writes.
   deterministic; global settings changes bind only sessions launched after them.
 - **Disjoint decision-number blocks** for each room's own candidate D# entries (D24+ vs D40+; no shared append-only ledgers exist — D51, findings travel in reports):
   assigned in the orchestration graph at spawn, or parallel branches collide on renumbering.
+- **Liveness is commits, across ALL of a room's branches** — rooms run parallel lanes in side
+  worktrees; watching one branch reads a busy room as stalled. `git for-each-ref
+  --sort=-committerdate` over the room's branches is the check.
+- **A `--bg` session can end when idle** (and after a supervisor restart): its name disappears
+  from the listing while its service keeps running. Relaunch by RESUMING its conversation
+  (`claude --bg … --resume <session-id> -n <name> "<what to do now>"`) — never a fresh room —
+  shortly before its next scheduled step. Stop any duplicate left under the same name.
+- **After the machine sleeps:** check the shared services first (e.g. the database port —
+  Docker Desktop's port forward can die while the container stays healthy; Docker itself can
+  stop), then ask every room to check its own subagents and report in one line.
+- **Before retiring a room, check `git status --ignored` in its worktree** — worktree removal
+  deletes gitignored files; the room force-tracks what is worth keeping first.
