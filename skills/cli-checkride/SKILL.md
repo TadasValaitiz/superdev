@@ -146,6 +146,14 @@ Mechanics that make the loop real:
 
 ## Verdict, then the three closing duties
 
+- **Triage every finding at intake, before any fix:** the evaluator proposes one of
+  **blocks-publish** (this surface must not ship with it), **blocks-milestone** (may ship in
+  a publish another room needs if NAMED in the publish report, fixed before the milestone
+  closes), or **backlog** (the default for experience and polish findings); the room's
+  controller decides; a disputed triage goes to the human. **Honesty and safety findings are
+  never backlog** — an invented or unmeasured number, a remedy that is false or destructive,
+  a traceback, a leaked credential, anything that fails open on integrity: at least
+  blocks-milestone. Only blocks-publish findings enter the fix lane before the verdict.
 - **PASS** — the evaluator would hand this surface to the operator as-is, and every step ran
   on actual data. **PASS-WITH-EXCEPTIONS** — same, but one or more steps ran under an
   operator-authorized exception; each is listed with the operator's words, and the gate
