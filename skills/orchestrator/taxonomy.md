@@ -19,7 +19,7 @@ better than the one here, change this file. Every change to this file is a skill
 | **orchestrator** | The orchestration room: milestones, room graph, sequencing, merges, gates, grants | "controller" meaning the orchestrator |
 | **architect** | The architect room: owns the design corpus, scores and rules design | "architect" meaning any session running system-design (that is an "architect session") |
 | **room** | An enterable `claude --bg` session with a brief, its own worktree and a closing condition; an **item room** builds one ITEM | — |
-| **the room's session** | Whoever runs a skill inside a room | "the controller" |
+| **ROOM SESSION** | The session running a skill — inside a room, or standalone on an ordinary branch | "the controller", "the room's session" |
 | **subagent** | A headless helper inside a room; never enterable, never messaged by the human | — |
 | **role** | The named job a subagent fills, matching the skill or brief that defines it: implementer · reviewer (also the adversary that plants mutations) · ride executor · ride evaluator · sweep judge · sweep executor · questioner · responder | "seat" |
 | **lane** | A parallel line of work with its own worktree and file set, opened only after a file-conflict map | "lane" meaning a role |
@@ -50,7 +50,7 @@ it is a parallel line of work that can carry arcs side by side.
 | **DEFERRED** | commands left as they are this milestone: no work, not swept, never a P0/P1 |
 | **OUT OF SCOPE** | belongs to another named milestone: never built, swept or "just fixed" here |
 | **ITEM SCOPE** | one room's slice: its area, its write surface (from MAPPING), its journeys; lives in the brief; always inside the MILESTONE SCOPE; never crosses another item's files without a grant |
-| **SCOPE RULE (findings)** | inside IN SCOPE → triaged (§5); in DEFERRED or OUT OF SCOPE → never a sweep finding, recorded as a residual tagged with its target milestone — except a crash an in-scope journey triggers |
+| **SCOPE RULE (findings)** | inside IN SCOPE → triaged (§6 finding triage); in DEFERRED or OUT OF SCOPE → never a sweep finding, recorded in the RESIDUALS FILE tagged with its target milestone — except a crash an in-scope journey triggers |
 | **SWEEP SCOPE** | the sweep judge's matrix has one row per IN SCOPE command; it tests on the milestone's main; PASS-TO-HUMAN speaks for the MILESTONE SCOPE only |
 | **SCOPE CHANGE** | only the human changes the milestone scope; the orchestrator proposes, and the scope document records it with the human's words and the date |
 
@@ -109,7 +109,8 @@ One name per event. The room-communication plugin's older names are aliases only
 | **R3 HEARTBEAT** | room → orchestrator | phase · last commit · next · blockers |
 | **R4 PRE-PUBLISH** | room → orchestrator | gates + checkride verdict + audit, then publish |
 | **R5 CLOSE** | room → orchestrator | the item is done: summary · RESIDUALS FILE path · RETROSPECTIVE path |
-| **HIL-NEEDED** | anyone → orchestrator | THE single "human needed" message: what needs ruling · who is blocked · where it is written up; the human rules in the room named |
+| **HIL-NEEDED** | anyone → orchestrator | THE single "human needed" message: what needs ruling · who is blocked · where it is written up; the human rules in the room named. A hybrid room may send a **BATCHED HIL-NEEDED**: several forks, each already decided provisionally, while it keeps working |
+| **HOLD / PROCEED-PROVISIONAL / FYI** | orchestrator → room | the orchestrator's answer to a HIL-NEEDED: **HOLD** — that thread stops until RULED · **PROCEED-PROVISIONAL** — keep going, mark the work provisional, redo it if the ruling differs · **FYI** — nothing is blocked |
 | **RULED** | room → orchestrator | what the human decided in that room; for a design, the GO to plan |
 | **STOP** | room → orchestrator | the room stops ITSELF: an instruction about its own scope was broken, a gate is red out of scope, or it would touch outside its area |
 | **HALT** | anyone → everyone | the shared premise is invalid; the whole graph stops; only the human restarts it |
@@ -123,7 +124,7 @@ One name per event. The room-communication plugin's older names are aliases only
 Design-stop order: brainstorming ends → DESIGN-REVIEW → ARCHITECT-VERDICT (APPROVED, or revise) → design review →
 R1 DESIGN-READY → the human approves in the room → RULED → PLAN.
 
-**Retired:** DECIDE, CLASS, R-H → HIL-NEEDED (+ RULED) · STOP-SCOPED → PAUSE · A1 READY / HB → R1 / R3 ·
+**Retired:** DECIDE, CLASS, R-H → HIL-NEEDED (+ HOLD / PROCEED-PROVISIONAL / FYI, then RULED) · STOP-SCOPED → PAUSE · A1 READY / HB → R1 / R3 ·
 GREEN-LIGHT, PRE-SPAWN, ESCALATE → folded into R3 HEARTBEAT or HIL-NEEDED · "deviation pointer" / "pointer relay" →
 ASK-ARCHITECT. "Stop" alone means only the STOP message.
 
@@ -142,8 +143,10 @@ ASK-ARCHITECT. "Stop" alone means only the STOP message.
 | **hand-off** | the room (item) and the orchestrator (milestone) | `…/milestones/<milestone>/handoffs/` | kept |
 | **ROADMAP · conventions · process-feedback ledger** | orchestrator (the human ratifies the roadmap) | `docs/orchestration/` | project-wide |
 
-**Rules:** rooms NEVER file backlog items — a room closes residuals inside its area before ITEM CLOSE, and leaves
-everything else in its RESIDUALS FILE; nothing reaches a shared backlog without the orchestrator's RESIDUAL TRIAGE.
+**FILING RULE:** NO individual items are ever filed — not by rooms, not by a standalone ROOM SESSION. Every finding
+that is not fixed goes into ONE combined **RESIDUALS FILE** per room (or per branch, when standalone); the orchestrator
+(or, standalone, the human) runs RESIDUAL TRIAGE over whole files. Individual filing turns into a pile nobody triages.
+A room closes residuals inside its ITEM SCOPE before ITEM CLOSE and leaves everything else in its RESIDUALS FILE.
 A residual (a loose end) ≠ residue (a design-class finding that goes to the architect by ASK-ARCHITECT).
 
 **RESIDUALS FILE format** — one row per residual: id (room prefix + number) · what (one line) · where found (file:line
@@ -159,7 +162,7 @@ target (a milestone, a room, or drop) · evidence tier.
 | **a decision's strength** | **locked** · **provisional** (rests on an ASSUMPTION or awaits the human; also a timeboxed recommendation standing in for an unruled human cell) | decision logs; "candidate" is retired |
 | **checkride verdict** (item level) | **PASS** · **PASS-WITH-EXCEPTIONS** · **FINDINGS** | one ride |
 | **sweep verdict** (milestone level) | **PASS-TO-HUMAN** · **BLOCKED** · **INCOMPLETE** | the milestone; never mixed with ride verdicts |
-| **finding triage** | **blocks-publish** · **blocks-milestone** · **backlog** | ride, review and sweep findings; honesty and safety findings are never backlog |
+| **finding triage** | **BLOCKS-PUBLISH** · **BLOCKS-MILESTONE** · **RESIDUAL** (goes into the RESIDUALS FILE) | ride, review and sweep findings; honesty and safety findings are never RESIDUAL |
 
 Project data tiers (e.g. SIMULATED, SEED-DEFAULT) are the product's own vocabulary and stay in the project's rules;
 FLAGGED (census) = a READ observation not yet verified.
