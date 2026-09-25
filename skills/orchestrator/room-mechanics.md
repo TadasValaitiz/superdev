@@ -72,20 +72,20 @@ close, human-approved.
 - **R1 DESIGN-READY** — design/surface doc path + rulings needed. Self rooms WAIT here for
   relayed ratification; HIL rooms send it as a record (the human ruled in-room).
 - **R2 PLAN** — plan summary before implementation (tasks · cutover scope · removals).
-- **PRE-SPAWN** — before the room dispatches its own subagents (how the orchestrator sees
+- **Before the room dispatches its own subagents** — it mentions it in R3 HEARTBEAT (how the orchestrator sees
   multi-agent activity behind the membrane).
 - **R3 HEARTBEAT** — every commit-batch or ~45 min: phase · last commit · next · blockers.
   **Silence >90 min of active work = fault.**
-- **R-H HOLISTIC CHECKPOINT** (hybrid rooms) — the accumulated HOLISTIC-PROVISIONAL batch +
+- **BATCHED HIL-NEEDED** (hybrid rooms) — the accumulated HOLISTIC-PROVISIONAL batch +
   current shape, whenever it grows. The orchestrator queues it for the human at an altitude
-  touchpoint; rooms never ping the human directly. The room keeps flowing — never waits on R-H.
+  touchpoint; rooms never ping the human directly. The room keeps flowing — never waits on a BATCHED HIL-NEEDED.
 - **R4 PRE-PUBLISH** — gate output (exit code, counts) · diff stat · checkride verdict (PASS /
-  PASS-WITH-EXCEPTIONS on actual data — a ride paused on missing data is a DECIDE, not an R4) ·
+  PASS-WITH-EXCEPTIONS on actual data — a ride paused on missing data is a HIL-NEEDED, not an R4) ·
   **deviation/acceptance audit verdict** (an unlogged deviation blocks publish) → then
   self-publish and confirm.
 - **R5 CLOSE** — summary · residual dispositions · proposed cursor text for the
   orchestrator's durable state.
-- **STOP (immediately, any time):** violating an operator instruction about the room's own scope or conduct (a corpus-vs-reality contradiction with a LOCKED design claim is the D61 deviation duty — build on, report the pointer) · gate red the
+- **STOP (immediately, any time):** violating a human instruction about the room's own scope or conduct (a corpus-vs-reality contradiction with a LOCKED design claim is the D61 deviation duty — build on, send ASK-ARCHITECT) · gate red the
   room can't triage inside its scope · anything touching outside its worktree.
 
 ## Fault handling (never blind-relaunch)
@@ -107,7 +107,7 @@ a blind relaunch double-writes.
   every git operation, or you read/commit in the wrong checkout.
 - **Settings hot-reload is not guaranteed** for a running session — launch flags are
   deterministic; global settings changes bind only sessions launched after them.
-- **Disjoint decision-number blocks** for each room's own candidate D# entries (D24+ vs D40+; no shared append-only ledgers exist — D51, findings travel in reports):
+- **Disjoint decision-number blocks** for each room's own provisional D# entries (D24+ vs D40+; no shared append-only ledgers exist — D51, findings travel in reports):
   assigned in the orchestration graph at spawn, or parallel branches collide on renumbering.
 - **Liveness is commits, across ALL of a room's branches** — rooms run parallel lanes in side
   worktrees; watching one branch reads a busy room as stalled. `git for-each-ref

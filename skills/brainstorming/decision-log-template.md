@@ -34,7 +34,7 @@ Append-only; newest at the bottom. D-numbering shared with the spec's §6.
 ## D<n> — <short title>
 **When:** <ISO-8601 UTC — the rule; the worked example below predates it and shows a local offset> ·
 **Phase:** brainstorm | spec | plan | build, plus an optional qualifier ("optimization brainstorm") ·
-**Status:** locked | provisional | superseded-by D<m>, plus an optional scope qualifier ("locked for MVP"). An AUTONOMOUS-mode pick (D59) is always `provisional (autonomous pick — flagged for operator review)` until the next human touchpoint confirms or overturns it
+**Status:** locked | provisional | superseded-by D<m>, plus an optional scope qualifier ("locked for MVP"). An AUTONOMOUS-mode pick (D59) is always `provisional (autonomous pick — flagged for human review)` until the next human touchpoint confirms or overturns it
 **Decided by:** <who, AND the selection event: which variant they picked and any RIDER
 they attached — e.g. "operator (live, in-session; selected C with an explicit
 sampler-extensibility requirement)". A rider is the operator amending the offered menu;

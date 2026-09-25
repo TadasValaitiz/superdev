@@ -23,8 +23,8 @@ Subagent (general-purpose):
     you audit AGREEMENT between artifacts and reality, and you DEMONSTRATE the done bar.
 
     **Mode:** [autonomous | human-in-loop — from the plan header. Governs how unmet
-    hints route: autonomous → each becomes an owned backlog item; human-in-loop → they
-    become a pushback package to the operator.]
+    hints route: autonomous → each becomes an owned residual in the RESIDUALS FILE; human-in-loop → they
+    become a pushback package to the human.]
 
     **Inputs:**
     - Anchor (design doc): [SPEC_PATH] — §3 Use cases (UC#), §9 Acceptance hints (AH#),
@@ -43,7 +43,7 @@ Subagent (general-purpose):
     (superdev:cli-checkride — ACTUAL DATA only, one step at a time, the evaluator in the
     operator's seat, iterate until pass); cite its ledger + verdict (class + substrate
     line) here instead of collecting receipts yourself. A ride paused on missing data is
-    a DECIDE, not a receipt — the branch does not close on it. Trivial/no-surface branches keep THIS
+    a HIL-NEEDED, not a receipt — the branch does not close on it. Trivial/no-surface branches keep THIS
     lighter receipt check — never impose an executor+evaluator ride on a one-line bugfix.
 
     For each UC#/AH# the plan discharges, produce ONE RECEIPT: run the capability on
@@ -54,9 +54,9 @@ Subagent (general-purpose):
     State the honesty tier of every number. A fixture demo is NOT a receipt. A hint you
     cannot answer with a receipt on actual data is NAMED, never papered over and never
     demonstrated on a stand-in, and routed by Mode:
-    - **autonomous:** draft an owned backlog item (names the UC#/AH# it discharges, what
-      remains, why) — the controller files it; the branch may still close.
-    - **human-in-loop:** add it to the pushback package for the operator; do not present
+    - **autonomous:** draft an owned residual (names the UC#/AH# it discharges, what
+      remains, why) — the ROOM SESSION records it in the RESIDUALS FILE; the branch may still close.
+    - **human-in-loop:** add it to the pushback package for the human; do not present
       merge as clean.
 
     ## Part A — Cross-checks (all five, in this order)
@@ -94,7 +94,7 @@ Subagent (general-purpose):
     | UC1 / AH3 | `st order place …` → fill, exit 0 (transcript) | fixture | yes |
     | AH5 | — could not demonstrate: <why> | — | NO → routed (see below) |
 
-    **Unmet hints (if any):** each with its Mode routing — [autonomous: backlog item
+    **Unmet hints (if any):** each with its Mode routing — [autonomous: residual
     drafted, names UC#/AH#] or [human-in-loop: in pushback package].
 
     ## Deviation Audit (Part A)
@@ -113,10 +113,10 @@ Subagent (general-purpose):
 
 **Handling the result (the finishing skill's contract):**
 - **Unmet acceptance hint:** not a hard stop by itself — routed by Mode. Autonomous:
-  the controller files the drafted backlog item (owned, referencing the UC#/AH#) and
+  the ROOM SESSION records the drafted residual (owned, referencing the UC#/AH#) in the RESIDUALS FILE and
   the branch may close with the gap recorded. Human-in-loop: the pushback package goes
-  to the operator BEFORE merge — a materially unmet done bar is the operator's call, not
-  the controller's. Either way the unmet hint is NAMED in the options message, never
+  to the human BEFORE merge — a materially unmet done bar is the human's call, not
+  the ROOM SESSION's. Either way the unmet hint is NAMED in the options message, never
   silently merged as done.
 - **BLOCKER (unlogged deviation):** stop — same severity as a failing test. Either log
   it now (D#, phase: build, and amend the governing spec sections) or revert the

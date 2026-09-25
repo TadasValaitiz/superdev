@@ -5,7 +5,7 @@ description: Use when standing up the development organisation in a project — 
 
 # Bootstrapping the development organisation
 
-You are setting up the organisation whose law lives in `superdev:system-design` (corpus, glossary, protocols) and `superdev:orchestrator` (milestone machinery, room mechanics). This skill is the **cold-start conversation** — deliberately NOT a script: an existing project has conventions, and each one is **bridged, adopted, or discarded by the operator's ruling**, never by a scaffold's assumption.
+You are setting up the organisation whose law lives in `superdev:system-design` (corpus, glossary, protocols) and `superdev:orchestrator` (milestone machinery, room mechanics). This skill is the **cold-start conversation** — deliberately NOT a script: an existing project has conventions, and each one is **bridged, adopted, or discarded by the human's ruling**, never by a scaffold's assumption.
 
 ## Phase 0 — Technical preflight (refuse with the fix; never promise messaging you haven't verified)
 
@@ -18,7 +18,7 @@ You are setting up the organisation whose law lives in `superdev:system-design` 
 
 **Survey first** (read, don't create): existing spec/design locations (`docs/rfcs/`, `docs/specs/`, …), decision records (ADRs, decision logs), backlog (TODO.md, tickets), test layout and fixture weight, CLAUDE.md conventions, any prior orchestration state.
 
-Then put a **mapping table to the operator, one row per convention, three options each — they rule, you never default:**
+Then put a **mapping table to the human, one row per convention, three options each — they rule, you never default:**
 
 | found | canonical role it could play | adopt / bridge / discard |
 |---|---|---|
@@ -30,23 +30,23 @@ Record every ruling in `docs/orchestration/conventions.md` — the map future ro
 
 ## Phase 2 — Create the floor (per the rulings, by hand)
 
-The canonical floor, with adopted paths substituted where ruled: `docs/system-design/` (FLAT, D69 — the milestone's INDEX/decisions/census/glossary/handover files + angles + anchors + visions, filename convention per `superdev:system-design`; grandfather anything already on the ground — never move it) · `docs/orchestration/` (graph, cursor, residual ledger, typed residue + process-feedback ledgers, decision_queue.md, conventions.md, handovers/, handoffs/, execution/ — every file stamped OPERATIONAL RECORD) · `frontdesk/digest.md` · `.superdev/sdd/progress.md` · `docs/superdev/{specs,plans,scenarios}/` · `docs/backlog/` (or adopted equivalent). Assign **decision-number blocks** per future room in `conventions.md` (no shared append-only files exist — D51). Record the milestone MODE there at the co-plan. Commit the floor.
+The canonical floor, with adopted paths substituted where ruled: `docs/system-design/` (FLAT, D69 — the milestone's INDEX/decisions/census/glossary/handover files + angles + anchors + visions, filename convention per `superdev:system-design`; grandfather anything already on the ground — never move it) · `docs/orchestration/` (graph, cursor, RESIDUALS FILES + RESIDUAL TRIAGE, typed residue + process-feedback ledgers, decision_queue.md, conventions.md, handovers/, handoffs/, execution/ — every file stamped OPERATIONAL RECORD) · `frontdesk/digest.md` · `.superdev/sdd/progress.md` · `docs/superdev/{specs,plans,scenarios}/` · `docs/backlog/` (or adopted equivalent). Assign **decision-number blocks** per future room in `conventions.md` (no shared append-only files exist — D51). Record the milestone MODE there at the co-plan. Commit the floor.
 
 ## Phase 3 — Seed the corpus (mandatory BEFORE any charter)
 
-The probe gate and every charter cite map rows — **an empty corpus can charter nothing**. So the first working session is a `superdev:system-design` session with the operator (this bootstrap session may become it): ground on the codebase, write the first angles and the current→target map, a vision for any migration already known, D#s for what the operator rules. Harvest the surveyed RFCs/ADRs/TODO into it where the rulings said adopt.
+The probe gate and every charter cite map rows — **an empty corpus can charter nothing**. So the first working session is a `superdev:system-design` session with the human (this bootstrap session may become it): ground on the codebase, write the first angles and the current→target map, a vision for any migration already known, D#s for what the human rules. Harvest the surveyed RFCs/ADRs/TODO into it where the rulings said adopt.
 
 ## Phase 4 — Launch (order matters; briefs per superdev:orchestrator's room-brief-template)
 
 1. **ORCHESTRATOR** (runs `superdev:orchestrator`; owns `docs/orchestration/`) — send it the **activation message**: roster, ID blocks, gate ladder, conventions map, what to escalate.
-2. **FRONT DESK** (view-only; renders `decision_queue` + events; DESIGN column; conversations happen in the room that needs the operator, never at the desk).
+2. **FRONT DESK** (view-only; renders `decision_queue` + events; DESIGN column; conversations happen in the room that needs the human, never at the desk).
 3. **ARCHITECT** (runs `superdev:system-design` in room mode; **launches idle** — its law: nothing between design checkpoints unless messaged; ruling gates resolve per the milestone MODE (canonical: system-design SKILL.md#mode-law); reserved forks and milestone close always human).
 4. **Item rooms: none yet.** They exist only when chartered.
 
 ## Phase 5 — The first milestone (who talks to whom about what)
 
-- **Content** comes from the corpus you just seeded, not from conversation: the operator + **ORCHESTRATOR** run its HIL co-plan — cut the milestone boundary from the map (rows, bridges, item order), ratify the graph, then charter (probe gate: each item charter needs a census — ad-hoc probe rooms make them).
-- **Later milestones** open from the **handoff** (milestone N may not close without the architect's next-milestone half being the NEW milestone document set itself (never a section of the handoff — D49/D68)); the **backlog** feeds only this boundary conversation — the orchestrator brings items that now fit; the operator rules them in or leaves them parked. Nothing enters a milestone around this conversation.
+- **Content** comes from the corpus you just seeded, not from conversation: the human + **ORCHESTRATOR** run its HIL co-plan — cut the milestone boundary from the map (rows, bridges, item order), ratify the graph, then charter (probe gate: each item charter needs a census — ad-hoc probe rooms make them).
+- **Later milestones** open from the **handoff** (milestone N may not close without the architect's next-milestone half being the NEW milestone document set itself (never a section of the handoff — D49/D68)); the **backlog** feeds only this boundary conversation — the orchestrator brings items that now fit; the human rules them in or leaves them parked. Nothing enters a milestone around this conversation.
 - The desk never scopes milestones; it only shows you that the conversation is waiting.
 
 ## Red flags

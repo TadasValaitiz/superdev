@@ -38,7 +38,7 @@ step-by-step pipelines, decisions with reasoning — came from sessions that IGN
 skill's "conversation stays terse" law and INVENTED two companions the templates never
 asked for (a standalone domain model, a pipelines-and-steps document). Sessions that
 followed the skill literally produced prose-only designs: zero code fences, zero model
-sketches, zero invariants. The operator's verdict: the design material belongs IN the
+sketches, zero invariants. The human's verdict: the design material belongs IN the
 conversation as it is decided, and the artifact set must have a home for invariants and
 pipelines — otherwise they exist only when an agent volunteers them, and nothing
 downstream ever turns them into checks. Every rule below that mentions shape, I#, or P#
@@ -58,18 +58,18 @@ You MUST create a task for each of these items and complete them in order:
    five-line census; the artifact scales in length, never in kind. **If a `docs/system-design/` corpus exists** (see superdev:system-design; its glossary is the shared vocabulary): this brainstorm is ITEM-level — read the map rows and angle passages governing this item and QUOTE the load-bearing ones into the session **with file:line**; ground on the area's post-migration vision document (`YYYY-MM-DD-<area>-post-migration-domain.md`, not the legacy code) wherever the map's verdict is RESHAPE/REPLACE. System-scale design (many items, cross-boundary) is NOT this skill — hand it to superdev:system-design. A cross-boundary concern discovered here is recorded in YOUR OWN item files and reported to the orchestrator with a pointer (D51/D61) — never a local ruling, never a write into anyone else's space
 2. **Start the decision log** — create `docs/superdev/specs/YYYY-MM-DD-<topic>-decisions.md` from `skills/brainstorming/decision-log-template.md`; append every fork AS it is resolved in dialogue (see Decision Logging below)
 3. **Register the visual-companion rule (a STANDING rule — this step completes by reading it, no action now):** the companion is offered just-in-time, NOT upfront — the first time a question at ANY later step would genuinely be clearer shown than described, offer it then (its own message); if no visual question ever arises, never offer it. See the Visual Companion section below.
-4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Angles are for the UNCLEAR journeys, edge cases, and collisions the use cases and the census's FLAGGED rows expose — a few, deep — never one per topic and never a catalogue; the well-understood shape goes to the domain-model and pipelines companions (step 8b) instead. Then PRESENT the angle list to the operator as the session agenda — each angle named with its central question and one line on why it matters — and let the operator amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
-5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the operator nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled — and if the angle carried real
+4. **Identify angles and PRESENT the angle plan** — before the first clarifying question: what kind of problem is this, which 3–5 candidate ANGLES govern it (superdev:system-design `angle-guide.md#item-angles`: one central question · boundaries · concrete consequences · visible collisions · reconciled outcome), what is probably unexamined. Angles are for the UNCLEAR journeys, edge cases, and collisions the use cases and the census's FLAGGED rows expose — a few, deep — never one per topic and never a catalogue; the well-understood shape goes to the domain-model and pipelines companions (step 8b) instead. Then PRESENT the angle list to the human as the session agenda — each angle named with its central question and one line on why it matters — and let the human amend it (drop, add, reorder) before work starts. The agreed agenda is the session's spine; emergent angles discovered mid-session are ADDED to it explicitly ("this collision opens a new angle — adding it"), never worked silently. The agreed agenda — and every mid-session amendment to it — is recorded in the decision log (it is the session's spine; a future reader needs it)
+5. **Work angle by angle** — clarifying questions one at a time (purpose/constraints/success criteria first), then the agenda's angles in order. OPEN each angle with its situation in prose — what is being decided, what breaks or diverges depending on the answer — before any option appears; a bare option list with no situation gives the human nothing to rule on. Forks inside an angle follow the Fork Presentation Standard below; the full movement protocol (frame → explore → collide → log → follow consequences → close; its 7th step, write-at-checkpoint, is system-scale only) is superdev:system-design `angle-guide.md#angle-movement`. Close each angle by stating what was reconciled — and if the angle carried real
 collisions, WRITE its companion NOW, to `item-angle-template.md`'s teaching form
 (mental model, journey with `### LOCKED — claim` + "this means…" and a TYPED SKETCH for
 every shape-bearing ruling, state and flow, the invariants the journey relies on,
 cannot-do, mismatch, collisions the journey didn't settle), and commit it before the next
-angle opens. If the WRITING itself surfaces a new fork or collision (it regularly does — writing is the second thinking pass), that fork goes BACK to the operator and the log BEFORE the companion is committed; unruled design never enters a companion. The
+angle opens. If the WRITING itself surfaces a new fork or collision (it regularly does — writing is the second thinking pass), that fork goes BACK to the human and the log BEFORE the companion is committed; unruled design never enters a companion. The
 collision detail is hot exactly now; batching to session end produces cite-only
 indexes (measured: ~380 words vs the ~1,500+ the same angles carried when written hot). Overlap with system angles is expected — system angles skip details deliberately; this session is where details live
 6. **Propose 2-3 whole-design approaches** — AFTER the angles are reconciled: how the rulings compose into a shape. This is a fork like any other — present it per the Fork Presentation Standard, never as bare labels
 7. **Present design** — in sections scaled to their complexity, get user approval after each section
-7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the operator: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
+7b. **Test disposition (REQUIRED when the item touches existing tests/legacy code):** per touched area, put the question to the human: {keep · regenerate · archive-then-rewrite · fix-in-place}. The answer is recorded in the spec's Operational notes and BINDS the plan (which may refine mechanics, never reverse — D28). For archive-then-rewrite, name what the harvest must capture.
 8. **Write design doc in two passes** — per `skills/brainstorming/design-doc-template.md`, save to `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md` and commit (see Two-Pass Authoring below). **Item angle companions:** already written at each angle's close (step 5); this step only confirms the set is complete and named `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md` — beside the spec, never in the system corpus. **Vision demand:** if the design implies variants or a post-migration shape, a vision document is produced or demanded before the affected areas can be marked LOCKED
 8b. **Companion artifacts (the home of invariants and pipelines)** — three separate files beside the spec, each REQUIRED by its trigger and each UPDATED after every later ruling that touches it:
    - work touches domain objects/fields/relationships/identities → `…-domain-model.md` per `skills/brainstorming/domain-design-template.md`: aggregate model, typed object sketches, identity rules, the **I# invariant table with enforcers** (an unenforced invariant is a GAP row the plan must own), delta ledger, CLI↔domain mapping;
@@ -80,12 +80,12 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
    produced document (census, companions, spec) against EVERY D# ruled this session; flip
    statuses that moved, banner anything superseded, fix any recommendation still reading
    as pending after its fork resolved. One commit. AND: the sweep RE-RUNS as a micro-pass
-   after every later mutation — reviewer folds (step 10) and operator-requested changes
+   after every later mutation — reviewer folds (step 10) and human-requested changes
    (step 11) each end with their own re-sweep, so no edit ever ships unswept. A document
    set shipped without its final sweep contains its own contradictions.
 9. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 10. **Dispatch the spec reviewer subagent** — REQUIRED, per `skills/brainstorming/spec-document-reviewer-prompt.md`; it reads spec + decision log + census + EVERY angle companion, checks narrative continuity and traceability, and runs the angle experience probes (stranger test, LOCKED-without-consequence, bare "later"); fix blocking issues, re-dispatch once
-11. **User reviews the written set** — hand the operator EVERYTHING by file link, as a WRITTEN-SET TABLE (artifact · required-by · present / omitted — and every omission's logged D# reason): the census · the decision log · the design anchor · every angle companion · the domain-model companion (when objects change) · the pipelines companion (when behavior/state changes) · the CLI surface (when commands change). A required artifact that is missing with no logged reason does not reach the operator — write it or log why. The operator reviews documents, not a chat summary — approval means the written record is what got approved
+11. **User reviews the written set** — hand the human EVERYTHING by file link, as a WRITTEN-SET TABLE (artifact · required-by · present / omitted — and every omission's logged D# reason): the census · the decision log · the design anchor · every angle companion · the domain-model companion (when objects change) · the pipelines companion (when behavior/state changes) · the CLI surface (when commands change). A required artifact that is missing with no logged reason does not reach the human — write it or log why. The human reviews documents, not a chat summary — approval means the written record is what got approved
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Presentation convention (all session output)
@@ -101,43 +101,43 @@ indexes (measured: ~380 words vs the ~1,500+ the same angles carried when writte
   preserves a recommendation as though the choice were still pending.
 - Register law: DESIGN CONTENT IS SHOWN IN THE CONVERSATION AS IT IS DECIDED. Every
   angle open and every fork carries, inline, the typed shape (a small frozen model, a step
-  table, a `->` flow), the state it changes, and the reasoning — the operator rules on
+  table, a `->` flow), the state it changes, and the reasoning — the human rules on
   material, never on a summary of material. "Terse" applies to chatter and ceremony, never
   to design content; the documents then carry the same material in teaching form. (The
   older rule — deliverables rich, conversation terse — is retired: it produced prose-only
   designs, see the scar above.)
 
-## Fork Presentation Standard (what the operator rules on) {#fork-presentation-standard}
+## Fork Presentation Standard (what the human rules on) {#fork-presentation-standard}
 
-An option the operator cannot evaluate is not an option. Every fork presented for a
+An option the human cannot evaluate is not an option. Every fork presented for a
 ruling carries:
 
 1. **The situation** — what is being decided, and what breaks or diverges depending on
    the answer: the failure modes, not just the topic.
 2. **Each option's mechanism** — how it actually works, not its label; include a worked
    or concrete example whenever the option is abstract (a sample file line, a command, a
-   quoted sentence — something the operator can picture in THIS project).
+   quoted sentence — something the human can picture in THIS project).
 3. **Each option's consequences** — what it costs and what it buys, stated for this
    project, not generically.
 4. **A recommendation with its reasoning** — evidence over taste where evidence exists.
 
 A/B labels are for REFERRING to options, never a substitute for presenting them.
 A fork awaiting a ruling is presented IN FULL at every asking — "as presented
-earlier" is never a substitute; the operator rules on what is in front of them
+earlier" is never a substitute; the human rules on what is in front of them
 now, not on scrollback.
 
 **Variants with shape arrive as sketches.** Where an option has structure — a type, a
 file layout, a message format, a command — the option IS the sketch: the thing itself,
-small and concrete, not prose about it. The operator's pattern-matching is the instrument
+small and concrete, not prose about it. The human's pattern-matching is the instrument
 doing the ruling; give it material.
 
 **The pick is an event.** Record the selection itself in the D# entry: who picked, which
-variant, and any RIDER the operator attached ("selected C with an explicit extensibility
-requirement"). A rider is the operator amending the offered menu; it enters the law with
+variant, and any RIDER the human attached ("selected C with an explicit extensibility
+requirement"). A rider is the human amending the offered menu; it enters the law with
 the same force as the variant. Options are never take-it-or-leave-it.
 Compression is for the trivial end only: if a fork honestly fits in three lines, it is
-probably not worth the operator's attention — decide it yourself, state the call in one
-sentence, and log it (the decision log records it either way). Spend the operator's
+probably not worth the human's attention — decide it yourself, state the call in one
+sentence, and log it (the decision log records it either way). Spend the human's
 attention on forks presented in full, not on many forks presented thinly.
 
 ## Process Flow
@@ -146,7 +146,7 @@ attention on forks presented in full, not on many forks presented thinly.
 digraph brainstorming {
     "Ground + commit census\n(MEASURED/READ/FLAGGED)" [shape=box];
     "Start decision log" [shape=box];
-    "Identify angles,\npresent agenda\n(operator amends)" [shape=box];
+    "Identify angles,\npresent agenda\n(human amends)" [shape=box];
     "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)" [shape=box];
     "Propose 2-3 whole-design\napproaches (per Standard)" [shape=box];
     "Present design sections" [shape=box];
@@ -159,8 +159,8 @@ digraph brainstorming {
     "Invoke writing-plans skill" [shape=doublecircle];
 
     "Ground + commit census\n(MEASURED/READ/FLAGGED)" -> "Start decision log";
-    "Start decision log" -> "Identify angles,\npresent agenda\n(operator amends)";
-    "Identify angles,\npresent agenda\n(operator amends)" -> "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)";
+    "Start decision log" -> "Identify angles,\npresent agenda\n(human amends)";
+    "Identify angles,\npresent agenda\n(human amends)" -> "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)";
     "Work angle by angle\n(open with situation,\nforks per Standard,\nlog each ruling,\nWRITE companion at close)" -> "Propose 2-3 whole-design\napproaches (per Standard)";
     "Propose 2-3 whole-design\napproaches (per Standard)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
@@ -185,7 +185,7 @@ digraph brainstorming {
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
-- Multiple choice is fine for REFERRING to options — but every fork reaching the operator is presented per the Fork Presentation Standard (situation, mechanism with example, consequences, recommendation), never as bare labels
+- Multiple choice is fine for REFERRING to options — but every fork reaching the human is presented per the Fork Presentation Standard (situation, mechanism with example, consequences, recommendation), never as bare labels
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
@@ -288,7 +288,7 @@ Wait for the user's response. If they request changes, make them and re-run the 
 ## Key Principles
 
 - **One question at a time** - Don't overwhelm with multiple questions
-- **Angle agenda first** - Present the angle plan; the operator amends it before work starts
+- **Angle agenda first** - Present the angle plan; the human amends it before work starts
 - **Present forks in full** - Fork Presentation Standard always: situation, mechanism with example, consequences, recommendation. Labels refer; they never present. Trivial forks: decide yourself and log
 - **YAGNI ruthlessly** - Remove unnecessary features from all designs
 - **Explore alternatives** - Always propose 2-3 approaches before settling

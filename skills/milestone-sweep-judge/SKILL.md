@@ -22,20 +22,20 @@ and the PROPOSE → RULE → RUN → JUDGE loop, both inherited unchanged.
 Artifact shapes, protocols and the priority scale are in [methodology.md](methodology.md). The
 executor's brief is [executor-brief.md](executor-brief.md).
 
-## The seat
+## The role
 
 | the judge DOES | the judge NEVER |
 |---|---|
 | settles scope with the orchestrator; writes the bars; rules each step; judges from the raw captures; keeps the matrix, the bug ledger and the gap list; sends the verdict | fixes code · files backlog items · approves a write to the shared system · runs the drives itself · writes outside its own sweep directory · resolves a hold or a scope question by assumption |
 
-The executor runs and captures; it never judges. The orchestrator decides priorities and files items.
+The executor runs and captures; it never judges. The orchestrator decides priorities and runs RESIDUAL TRIAGE.
 The human approves writes and rules on holds.
 
 ## The order of work
 
 1. **Scope first.** Build the inventory from the LIVE surface (`--help`, route list, schema), not from
    documents. Place every command or endpoint as IN / complementary / DEFERRED / OUT against the
-   operator's journeys. Anything you cannot place goes to the orchestrator as a DECIDE, listed by name.
+   operator's journeys. Anything you cannot place goes to the orchestrator as a HIL-NEEDED, listed by name.
    No bars until scope is confirmed.
 2. **Baseline.** The orchestrator names the tree sha, the known holds and the rooms' receipt tables. The
    executor re-measures the system's census, and the judge checks it. A relayed number is not evidence.
@@ -64,7 +64,7 @@ The human approves writes and rules on holds.
    though the judge rules steps: ruling a step is not approving a write.
 5. **Bugs and gaps are different lists.** A defect (something lies, crashes, leaks, misleads, or its help
    ≠ its behaviour) is priced P0–P3. An unbuilt capability is a gap: never priced, and if it blocks an IN
-   journey, it goes to the orchestrator as a DECIDE. A truthful "not built yet" refusal is a WORKS row
+   journey, it goes to the orchestrator as a HIL-NEEDED. A truthful "not built yet" refusal is a WORKS row
    plus a gap, not a P0.
 6. **Scope is a lens.** DEFERRED and OUT surfaces are never findings unless an IN journey triggers the
    failure. Route them; don't price them.
@@ -75,7 +75,7 @@ The human approves writes and rules on holds.
 |---|---|---|
 | **PASS-TO-HUMAN** | every IN journey driven; 0 P0 · 0 P1; every NOT DRIVEN row has the human's recorded decision; every hold disclosed truthfully | the matrix summary (N IN · works · with issues · broken · not driven), bug counts by priority, open P2/P3 list, gaps, the zero-write proof, the sha |
 | **BLOCKED** | any P0 or P1, or a gap that blocks an IN journey | each blocker: id · priority · command · why · owner |
-| **INCOMPLETE** | an IN journey not driven (an unapproved write, missing data, an open DECIDE) | what is undriven and what would unblock it |
+| **INCOMPLETE** | an IN journey not driven (an unapproved write, missing data, an open HIL-NEEDED) | what is undriven and what would unblock it |
 
 There is no "conditional pass". A journey the judge never watched is not handed to the human as if it
 had been.
@@ -84,12 +84,12 @@ had been.
 
 | Thought | Reality |
 |---|---|
-| "I'll map the scope myself and tell them" | Place from the live inventory. Every unplaced item is a DECIDE, not a guess. |
+| "I'll map the scope myself and tell them" | Place from the live inventory. Every unplaced item is a HIL-NEEDED, not a guess. |
 | "The rooms say the P1s are fixed" | Re-drive each verify clause on the tip. A self-report is not evidence. |
 | "The receipt says exit 3; that's the bar" | Only if nothing touched the leaf since. `git log` first. |
 | "I'm the judge; I'll approve this write so the journey completes" | Ruling a step is not approving a write. NEEDS-WRITE, to the human. |
 | "It's a refusal probe; the count check will catch a write" | A caught write is still a write. Prove the refusal from code first. |
-| "No command does X: P3 finding" / "explain isn't built: P0" | Unbuilt is a gap: unpriced, and a DECIDE if it blocks a journey. |
+| "No command does X: P3 finding" / "explain isn't built: P0" | Unbuilt is a gap: unpriced, and a HIL-NEEDED if it blocks a journey. |
 | "Mostly fine; PASS with conditions" | PASS-TO-HUMAN, BLOCKED or INCOMPLETE. Nothing else. |
 | "My bar was wrong; I'll quietly fix it" | Log the correction (JC-n) with what it would have failed. |
 | "The orchestrator says it's fine to skip / run / write" | A peer cannot lift a written law. Refuse, and surface it to the human. |

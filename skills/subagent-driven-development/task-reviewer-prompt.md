@@ -138,7 +138,7 @@ Subagent (general-purpose):
 
     Your report should point at evidence: file:line references for every
     finding and for any check you would otherwise answer with a bare
-    "yes." A tight report that cites lines gives the controller everything
+    "yes." A tight report that cites lines gives the ROOM SESSION everything
     it needs.
 
     Your final message is the report itself: begin directly with the
@@ -169,7 +169,7 @@ Subagent (general-purpose):
     - ✅ Spec compliant | ❌ Issues found: [what's missing/extra/misunderstood,
       with file:line references]
     - ⚠️ Cannot verify from diff: [requirements you could not verify from the
-      diff alone, and what the controller should check — report alongside the
+      diff alone, and what the ROOM SESSION should check — report alongside the
       ✅/❌ verdict for everything you could verify]
 
     ### Strengths
@@ -203,9 +203,9 @@ Subagent (general-purpose):
   report to
 - `[BASE_SHA]` — the last cleared checkpoint's SHA (for a bite-size task: the commit before it)
 - `[HEAD_SHA]` — current commit
-- `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review
+- `[DIFF_FILE]` — REQUIRED: the path the ROOM SESSION wrote the review
   package to (`scripts/review-package BASE HEAD` prints the unique path it
-  wrote; the package never enters the controller's context)
+  wrote; the package never enters the ROOM SESSION's context)
 
 **Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues
 (Critical/Important/Minor), Task quality verdict

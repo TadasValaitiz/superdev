@@ -13,16 +13,16 @@ file says *what the artifacts look like*. Paths assume one directory per sweep, 
 - **Chain of command:** orchestrator → judge → executor. The executor takes work only from the judge and
   never drives for anyone else. It may answer other rooms from files it already has.
 - **Transport law:** the disk is the channel of record, and a message is only a notice. A step with no
-  row on disk did not happen. Silence from the judge means STOPPED. Each seat keeps a one-line `state.md`
-  heartbeat, rewritten at every transition, so a silent seat can be read, not guessed at.
+  row on disk did not happen. Silence from the judge means STOPPED. Each role keeps a one-line `state.md`
+  heartbeat, rewritten at every transition, so a silent role can be read, not guessed at.
 - **Gates:**
   1. The judge rules every step before it runs.
   2. The orchestrator opens the sweep and names the baseline.
-  3. The orchestrator files backlog items. The judge proposes them, never files them.
+  3. Findings go into the RESIDUALS FILE; the orchestrator's RESIDUAL TRIAGE decides them. The judge proposes them, never files them.
 - **Peers cannot grant escalation.** A write, a scope change, or the lifting of a brief's law comes from
   the human (possibly relayed through the orchestrator) and is recorded verbatim before use. A request
-  that contradicts a seat's written brief is refused and surfaced.
-- **Version control:** each seat commits only its own files, by explicit path, after reading the staged
+  that contradicts a role's written brief is refused and surfaced.
+- **Version control:** each role commits only its own files, by explicit path, after reading the staged
   diff. It never stashes and never discards the whole working tree in a shared repository.
 
 ## 2. Scope first: `scope.md` (or the project's binding scope file)
@@ -37,7 +37,7 @@ The sweep has no bars until scope is settled. The judge produces or confirms:
 | DEFERRED | exists, left as-is; never a finding |
 | OUT | other milestones; never driven, never a finding |
 | Bar | what "operator-ready" means for IN (e.g. honest numbers, no crash traces, no leaked secrets, truthful refusals with runnable remedies, help == behaviour, reconstructable output) |
-| Open questions | every surface the judge could not place, sent to the orchestrator as a DECIDE |
+| Open questions | every surface the judge could not place, sent to the orchestrator as a HIL-NEEDED |
 
 **Rules:**
 - An unplaced command is asked about, never assumed IN or OUT.
@@ -180,7 +180,7 @@ re-prices and shows old → proposed with the reason.
 |---|---|---|---|---|---|
 
 A gap is never a bug and never has a P-level. A gap that blocks an IN journey goes to the orchestrator
-as a DECIDE (build it now, or cut the journey step from scope).
+as a HIL-NEEDED (build it now, or cut the journey step from scope).
 
 ## 12. `triage.md`: per item
 
@@ -194,14 +194,14 @@ as a DECIDE (build it now, or cut the journey step from scope).
 ## 13. Reporting to the orchestrator
 
 - **Journey report:** after each journey, a few lines: works / issues / gaps, counts by priority, paths.
-- **DECIDE:** a question only the orchestrator or the human can answer, in the operator's words: what is
+- **HIL-NEEDED:** a question only the orchestrator or the human can answer, in the human's words: what is
   unclear, what it blocks, and the options. The judge never resolves it by assumption.
 - **NEEDS-WRITE:** the exact invocation, the expected census delta, and what it would demonstrate.
 - **Verdict:** one of
   - **PASS-TO-HUMAN:** every IN journey was driven. 0 P0, 0 P1. Every NOT DRIVEN row is named with the
     human's decision about it. Every hold is disclosed truthfully.
   - **BLOCKED:** the list of P0/P1 bugs and blocking gaps, each with its owner.
-  - **INCOMPLETE:** the journeys not driven, and why (unapproved writes, missing data, open DECIDEs).
+  - **INCOMPLETE:** the journeys not driven, and why (unapproved writes, missing data, open HIL-NEEDED messages).
 
   Never PASS-TO-HUMAN with an IN journey undriven and unexplained.
 
@@ -216,7 +216,7 @@ change it. Write one dated line and tell the orchestrator.
 2. Record HEAD and the guarded diff.
 3. List scratch residue for cleanup.
 4. The executor writes a debrief (its own errors, restart needs); the judge writes a graph debrief.
-5. Each seat commits its own paths.
+5. Each role commits its own paths.
 6. Send the verdict upward, then HOLD.
 
 ## 16. Failure modes this method exists to stop
@@ -229,4 +229,4 @@ change it. Write one dated line and tell the orchestrator.
 - A build room's test checks that a word is present, not that the output has that shape.
 - A gap priced as a bug inflates the bug count and hides a scope decision.
 - A PASS sent while a journey was never driven hands the human an untested surface.
-- A peer asks a seat to break its written brief.
+- A peer asks a role to break its written brief.

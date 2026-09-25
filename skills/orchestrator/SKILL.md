@@ -25,7 +25,7 @@ sentences; you write new sentences every milestone. Two layers, keep them straig
 
 **LAWS (invariant — measured or structural; never improvise):** the transport wiring
 (messages don't deliver otherwise) · worktree-per-room + FF-CAS self-publish (rooms merge
-themselves; you never do) · the membrane (the operator talks to rooms, never their
+themselves; you never do) · the membrane (the human talks to rooms, never their
 subagents) · durable state as files · human-approved milestone close with zero in-milestone
 leftovers · the untouched base case.
 
@@ -53,10 +53,10 @@ composition IS the job.
 
 ## The membrane (two layers — never blur them)
 
-- **Operator ↔ rooms**: peer sessions, enterable, HIL-gated. The operator's ONLY
+- **Human ↔ rooms**: peer sessions, enterable, HIL-gated. The human's ONLY
   counterparties.
 - **Room ↔ its own subagents**: headless SDD workers behind the membrane. SDD is not
-  replaced — it is the engine *inside* a build room. The operator never touches a subagent.
+  replaced — it is the engine *inside* a build room. The human never touches a subagent.
 
 Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and build
 (brainstorm → implement via SDD → checkride → self-publish). Room **modes** (human tempo):
@@ -89,17 +89,17 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
      related deviations into one batched ruling / cleanup room, or ruled via an HIL room.
      These MUST drain to zero before close.
    - **Out-of-milestone / global** (platform/architecture issue that isn't this milestone's
-     job) → the **ESCAPE HATCH**: file it to the project's backlog/ticketing system (or to a
-     human). Filing IS the disposition — it never blocks close. Batch these at the end
+     job) → the **RESIDUALS FILE**: record it in the room's RESIDUALS FILE (no individual items are
+     filed); RESIDUAL TRIAGE decides it. Recording IS the disposition — it never blocks close. Batch these at the end
      unless genuinely urgent (a P0 on main). Never confuse the two classes: "belongs to the
-     milestone?" → resolve here; "global?" → file and move on.
+     milestone?" → resolve here; "global?" → record and move on.
 5. **HIL touchpoints only at altitude:** startup co-planning · holistic checkpoints /
-   batched forks (queue R-H reports; surface at convenient moments) · milestone close.
+   batched forks (queue BATCHED HIL-NEEDED reports; surface at convenient moments) · milestone close.
    Never per-room, never per-detail. One exception is queued, never skipped: a checkride
-   paused on missing real data (the substrate law, superdev:cli-checkride) is a DECIDE you
+   paused on missing real data (the substrate law, superdev:cli-checkride) is a HIL-NEEDED you
    queue for the human — never resolved by a stand-in, never a close.
-6. **Milestone close — human-approved.** The close gate: residual ledger drained to zero
-   (in-milestone) · escape-hatch items filed · milestone-level sweep (cross-room doc/code
+6. **Milestone close — human-approved.** The MILESTONE CLOSE GATE: in-milestone residuals drained to zero
+   · every RESIDUALS FILE through RESIDUAL TRIAGE · milestone-level sweep (cross-room doc/code
    coherence — the deviation-audit instinct at milestone altitude) · **per-room close
    verified: worktree merged AND retired (`git worktree list`), archived tests deleted with
    their manifest kept, and — when the item changed a user-facing surface — its checkride
@@ -114,16 +114,16 @@ Room **shapes**: design-only (brainstorm → rulings → hand back the doc) and 
    approves; you land milestone→main (a fast-forward — your one merge act, the sole human
    gate on the merge path).
 
-## The battery — the operational suite at milestone close
+## The SWEEP — the operational suite at milestone close
 
-Before the milestone close gate, charter an **ad-hoc battery room**: an executor walks EVERY
+Before the MILESTONE CLOSE GATE, charter an **ad-hoc SWEEP room**: an executor walks EVERY
 scenario intent in `docs/superdev/scenarios/` against the current surface (re-deriving commands —
 intents, never scripts) on ACTUAL DATA under the checkride's substrate law (a scenario whose
-data is unavailable is a DECIDE, not a skipped row), in the same one-step loop (propose →
+data is unavailable is a HIL-NEEDED, not a skipped row), in the same one-step loop (propose →
 rule → run → judge); an evaluator judges each against its what-good-looks-like criteria;
-verdict per scenario; observations auto-file as backlog/residue. The battery report rides the
-milestone handoff. Partial batteries on demand when a ride's findings smell systemic.
-The battery's judging seat is **superdev:milestone-sweep-judge**. It settles scope, keeps the command
+verdict per scenario; observations go into the RESIDUALS FILE or become residue. The SWEEP report rides the
+milestone handoff. Partial SWEEPs on demand when a ride's findings smell systemic.
+The SWEEP's judging role is **superdev:milestone-sweep-judge**. It settles scope, keeps the command
 matrix, the P0–P3 bug ledger and the gap list, never approves a write, and returns exactly one verdict:
 PASS-TO-HUMAN · BLOCKED · INCOMPLETE. The human tests only after PASS-TO-HUMAN.
 
@@ -133,10 +133,10 @@ Cutting the milestone into items and finding the launch order is an ALGORITHM, n
 (D44/D45): items are cut from the map along corpus seams into independently deliverable,
 testable units; **dependencies are never parallelised — the producer merges first**;
 parallelism is created by SPLITTING high-blocking items so their unblocking kernel merges
-earliest; scheduling is greedy on "unblocks the most work soonest", capped by the operator's
+earliest; scheduling is greedy on "unblocks the most work soonest", capped by the human's
 attention. Types (foundation · surface · ad-hoc · quick fix · backlog) carry different
 done-bars. Full taxonomy, principles and the algorithm: [chartering.md](chartering.md);
-the operator ratifies the graph + splits at the co-plan.
+the human ratifies the graph + splits at the co-plan.
 
 ## The system-design layer (binds whenever the project has a `docs/system-design/` corpus)
 
@@ -154,24 +154,24 @@ designer:
   `conventions.md`. The canonical law lives in system-design SKILL.md#mode-law; in
   AUTONOMOUS mode YOU pick among the architect's presented options (every pick a flagged,
   revisitable D#; reserved forks — money/irreversibility, blast radius, taste — always
-  queue to the operator; close is always operator-approved).
+  queue to the human; close is always human-approved).
 - **Residue ≠ residual, and rooms never write ledgers (D51).** Rooms record findings in
   their own item files; their REPORTS carry the survivors; YOU comprehend reports into the
   typed residue ledger in your space (kinds: discrepancy · insight · duplicate-risk ·
-  question) and cluster continuously — never interpret as architecture, never file residue
-  to the backlog escape hatch. **Plan-time deviation pointers (D61):** when a room messages
-  a corpus contradiction after planning, RELAY the pointer to the architect immediately —
+  question) and cluster continuously — never interpret as architecture, never put residue
+  into a RESIDUALS FILE. **Plan-time ASK-ARCHITECT (D61):** when a room finds
+  a corpus contradiction after planning, it sends ASK-ARCHITECT to the architect directly —
   pointers, never paraphrase; the room keeps building.
 - **Design checkpoints, declared by rule + green lights + feel.** Your side: ONE handover
   document with clusters inline (checkpoint-protocol.md); the architect's answer arrives as
   a response BLOCK in the milestone's decisions file, followed by rulings and the named
   reconcile commit. Two-step discharge: you CLAIM map rows with evidence; only the architect
   writes the map — and rejected claims come back with reasons. Between checkpoints the
-  architect is idle: it may RECEIVE pointers anytime, but do not message it work.
+  architect is idle: it may RECEIVE ASK-ARCHITECT anytime, but do not message it work.
 - **Briefs carry architecture as-of the reconcile SHA** (room-brief-template.md: the
   five-part block — MAJOR/NARROW reads, 3–5 verbatim LOCKED quotes, post-SHA D# pointers).
   After each sitting, update the SHA your new briefs cite.
-- **The foundation gate — no room launches on a design-dry area.** Before chartering a room,
+- **The FOUNDATION GATE — no room launches on a design-dry area.** Before chartering a room,
   ask the architect to CONFIRM its area has a foundation: at least a few angles and the
   governing system-design passages (full coverage is not expected — rooms analyze their use
   cases and build the details). If nothing exists, do NOT launch: the human leads the
@@ -181,23 +181,23 @@ designer:
   building rooms are NEVER stopped by design-dryness; they finish, plant markers, and merge.
 - **Process feedback (the fast loop):** rooms' R5 RETROSPECTIVES (orchestrator/retrospective-template.md)
   + your measured facts into your process-feedback ledger — one row per proposal, citing the retro; adapt every NEW room's brief immediately (one O-line per change).
-  You never edit skills; when entries cluster, the operator runs superdev:self-improvement
+  You never edit skills; when entries cluster, the human runs superdev:self-improvement
   in inbox mode.
 - **You never execute work.** No micro-task tier. Ad-hoc rooms (probe, spike, sweep) are
   yours to charter freely — the probe gate does not bind them; they are how censuses get made.
 
-## The execution proposal (D55 — yours to author, by opposed seats)
+## The execution proposal (D55 — yours to author, by opposed roles)
 
 Before chartering, translate the reconciled corpus into a delivery hypothesis:
 `docs/orchestration/execution/<milestone>-proposal.md` (stamped OPERATIONAL RECORD;
-reconcilable, never locked; authorizes no code). Method — dispatch two read-only seat
+reconcilable, never locked; authorizes no code). Method — dispatch two read-only role
 subagents, both grounded on the corpus as-of the reconcile SHA:
 
-- **Domain-boundaries seat:** "Cut the ruled architecture along domain seams — type
+- **Domain-boundaries role:** "Cut the ruled architecture along domain seams — type
   ownership, package boundaries, contract breaks. You optimize CLEAN CUTS; you are
   forbidden to weigh demonstrability. Return: proposed items, each with the seams it
   respects and the contracts it isolates."
-- **Celebration seat:** "Cut along operator-visible journeys on the real user surface. You
+- **Celebration role:** "Cut along operator-visible journeys on the real user surface. You
   optimize PROVABLE WINS — each celebration a journey with proof, refusal, and recovery
   evidence; you are forbidden to weigh internal cleanliness. Return: proposed celebrations,
   each with the journey that proves it."
@@ -206,7 +206,7 @@ Their reports land in your space or sdd scratch (never the corpus — D68). **Th
 zone is the product**; adjudicate under the five rules: operator-visible capability · proof
 at the user surface · foundations fold into the first proving vertical *unless they unlock
 named independent streams* · terminal-not-tiny · reconciliation expected. Ratify the
-reconciled proposal with the operator at the co-plan; then derive the charter graph
+reconciled proposal with the human at the co-plan; then derive the charter graph
 (chartering.md). Item-level splits/merges amend YOUR proposal (rule 5); only design-class
 divergence crosses to the architect, as residue. The architect touches this twice only:
 upstream via the corpus (a gap = design-dry), downstream via an advisory conformance note.
@@ -223,7 +223,7 @@ the second net.
 ## When NOT to use
 
 Single task → standalone path. Independent headless diagnostics → dispatching-parallel-agents.
-Multi-milestone plan inside ONE session → SDD parallel-execution (controller-merge lanes).
+Multi-milestone plan inside ONE session → SDD parallel-execution (ROOM SESSION-merge lanes).
 Rooms are for work where the human needs enterable, context-preserving sessions and
 milestone-level coordination — the machinery costs attention; don't pay it below that scale.
 

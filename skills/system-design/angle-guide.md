@@ -39,7 +39,7 @@ Shape-bearing angles CARRY their **Pydantic invariant sketches** (FLEXIBLE by de
 ## How an angle moves through a session {#angle-movement}
 
 1. **Frame it** — central question, current context, boundaries, in prose, before any option appears.
-2. **Explore one decision at a time** — present enough architecture and code context for the operator to reason without having written the implementation (this is the brainstorming skill's Fork Presentation Standard, at architecture scale).
+2. **Explore one decision at a time** — present enough architecture and code context for the human to reason without having written the implementation (this is the brainstorming skill's Fork Presentation Standard, at architecture scale).
 3. **Collide alternatives** — two or three materially different approaches with gains, sacrifices, and a recommendation.
 4. **Log every resolved fork immediately** — decision, rejected alternatives, reasoning, revisit-when; never batch-reconstruct.
 5. **Follow consequences** — check the ruling against the domain models, runtimes, journeys, and current code it touches.

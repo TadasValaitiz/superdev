@@ -2,7 +2,7 @@
 
 ONE workflow run brainstorms ONE agreed angle and writes its angle file. Grounding, the
 agenda, the between-angle checks (corpus, architect ASK, human), the shape, review and
-summary are the CONTROLLER's steps in SKILL.md "The phases" — not in this script. Keep the
+summary are the ROOM SESSION's steps in SKILL.md "The phases" — not in this script. Keep the
 schemas and mechanics intact — they ARE the protocol (the per-angle ratchet, the evidence
 tiers, the hot angle file).
 
@@ -17,9 +17,9 @@ tiers, the hot angle file).
   "censusPath": "the committed census",
   "angle": { "n": 2, "slug": "…", "centralQuestion": "…", "whyItMatters": "…", "boundaries": "…" },
   "previousAngles": ["paths of the angle files already closed, in order"],
-  "systemDesign": ["corpus passages governing this angle — path:line, quoted by the controller"],
+  "systemDesign": ["corpus passages governing this angle — path:line, quoted by the ROOM SESSION"],
   "architectAnswers": ["answers received since the last angle, with their D#/pointer"],
-  "openQuestions": ["carried questions the controller did not block on"],
+  "openQuestions": ["carried questions the ROOM SESSION did not block on"],
   "dStart": 12,
   "maxRounds": 6,
   "todayISO": "YYYY-MM-DD",
@@ -27,7 +27,7 @@ tiers, the hot angle file).
 }
 ```
 
-`dStart` is the next free D# (the controller reads it from the decision log), so lock ids
+`dStart` is the next free D# (the ROOM SESSION reads it from the decision log), so lock ids
 stay monotonic across runs. `maxRounds` defaults to 6; lower it for a narrow angle.
 
 ## Schemas
@@ -71,7 +71,7 @@ const CLOSE_SCHEMA = { type: 'object',
   anglePath:         { type: 'string' },  // the angle file, written and COMMITTED
   reconciledOutcome: { type: 'string' },
   newForks:          { type: 'array', items: { type: 'string' } }, // forks the WRITING surfaced
-  askArchitect:      { type: 'array', items: { type: 'string' } }, // for the controller to send
+  askArchitect:      { type: 'array', items: { type: 'string' } }, // for the ROOM SESSION to send
   parked:            { type: 'array', items: { type: 'string' } },
   newAngle:          { type: 'object' }
 }}
@@ -107,7 +107,7 @@ while (!reconciled && round < (args.maxRounds ?? 6)
     ledger.push({ ...lock, round })
   }
   parked.push(...(q.parked ?? [])); asks.push(...(q.askArchitect ?? []))
-  if (q.newAngle) newAngle = q.newAngle    // reported to the controller, never worked here
+  if (q.newAngle) newAngle = q.newAngle    // reported to the ROOM SESSION, never worked here
   if (q.reconciled) { reconciled = true; break }
   last = await agent(responderPrompt(args, q, ledger),
                      { schema: A_SCHEMA, label: `r${round}`, model: 'sonnet' })
@@ -124,7 +124,7 @@ return { angle: args.angle.slug, anglePath: close.anglePath, rounds: round,
          reconciled, locks: ledger, nextD: dHwm + 1, assumptions,
          newForks: close.newForks, askArchitect: [...asks, ...close.askArchitect],
          parked: [...parked, ...(close.parked ?? [])], newAngle: close.newAngle ?? newAngle,
-         next: 'CONTROLLER: read the angle file, check the corpus, send any architect ASK, then launch the next angle' }
+         next: 'ROOM SESSION: read the angle file, check the corpus, send any ASK-ARCHITECT, then launch the next angle' }
 ```
 
 ## Role prompts
@@ -179,7 +179,7 @@ COMMIT the angle file (explicit path) before returning.
   previous angle FILES by path, the governing corpus passages). That is the token control.
 - **The angle file is the hand-off:** the next run reads it; a paused brainstorm resumes from
   the last committed angle file, in this or another session.
-- **Between runs is where the controller works:** reading the angle file, the corpus check,
+- **Between runs is where the ROOM SESSION works:** reading the angle file, the corpus check,
   the architect ASK, the human's questions, and the next run's inputs (SKILL.md step 4).
 - **Resume:** a run is resumable (`resumeFromRunId`); if it dies before Close, resume it.
 - **Budget:** `maxRounds` (default 6) caps the angle; a capped angle is written as CAPPED,

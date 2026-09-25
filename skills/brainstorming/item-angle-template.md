@@ -38,7 +38,7 @@ nothing yet" before its angle's rulings land; "RECONCILABLE, NOT LOCKED" for a p
 **Formal anchors:** [decision log](./<file>.md) D#… · <governing design §…> — the GOVERNING D#s only, not every D# touched.
 **Series:** N of M — at close-time M is often unknown: write `N of ? (open)` and retro-fill at the session's reconcile sweep. A solo angle is `1 of 1 (solo)`.
 
-> **Status guide:** LOCKED operator-ruled · FLEXIBLE boundary agreed, shape may move ·
+> **Status guide:** LOCKED human-ruled · FLEXIBLE boundary agreed, shape may move ·
 > DEFERRED another session owns it (named below) · MISMATCH current code/text behaves
 > differently today · SEED-ILLUSTRATIVE worked example only, never a measurement.
 > <TRIM this shipped line to exactly the statuses the body uses, each glossed — a guide

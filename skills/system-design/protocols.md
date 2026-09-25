@@ -8,7 +8,7 @@ Rooms do NOT write any shared file. A room records findings in its OWN item file
 
 - **Residue ledger** — design-class findings; row kinds: `discrepancy | insight | duplicate-risk | question`. Each row cites the room report it came from. Disposition never edits a row: the handover's cluster list and the response block's verdicts cite row ids — those documents ARE the disposition record.
 - **Process-feedback ledger** — rooms' R5 lines + his own `measurement` rows (charter→merge wall-clock, review cycles, blocked-wait, token sums); kinds: `friction | brief-gap | measurement | win`. Feeds brief adaptation immediately and `/superdev:self-improvement` in batch.
-- **Plan-time deviation pointers (D61):** a room that finds the corpus contradicted collects deviations in its own files during grounding→planning, then — after planning, before execution — messages the orchestrator a summary + pointer; the orchestrator RELAYS the pointer to the architect immediately. Relay of pointers, never paraphrase. The architect may act at once (per the mode law) or fold it to the next checkpoint.
+- **Plan-time ASK-ARCHITECT (D61):** a room that finds the corpus contradicted collects deviations in its own files during grounding→planning, then — after planning, before execution — sends the architect ASK-ARCHITECT directly: a summary + pointer; the orchestrator does not relay. Pointers, never paraphrase. The architect may act at once (per the mode law) or fold it to the next checkpoint.
 
 ## The checkpoint handover (orchestrator → architect) — ONE operational document {#checkpoint-handover}
 
@@ -65,7 +65,7 @@ Conformance notes: celebration 3 straddles a REPLACE boundary — advisory only.
 ### D466 — the fee model owns its rounding …
 ```
 
-Claim verdicts and their reasons survive greppably — the map alone could never tell you WHY a claim was refused. **Bounce-downs land mechanically:** the orchestrator (backlog curator) files each bounced cluster as items or routes them into an upcoming charter; his NEXT handover's WHAT WE GOT confirms the filing — the loop audits itself. The reconcile commit (SKILL.md step 5) closes the sitting; the message back is a pointer.
+Claim verdicts and their reasons survive greppably — the map alone could never tell you WHY a claim was refused. **Bounce-downs land mechanically:** the orchestrator enters each bounced cluster in RESIDUAL TRIAGE (no individual items are filed) or routes them into an upcoming charter; his NEXT handover's WHAT WE GOT confirms the entry — the loop audits itself. The reconcile commit (SKILL.md step 5) closes the sitting; the message back is a pointer.
 
 ## The milestone handoff — SPLIT, no shared file (D49/D68) {#milestone-handoff}
 
@@ -74,7 +74,7 @@ Near-homophones, deliberately contrasted: **handovers** are per-CHECKPOINT opera
 - **Orchestrator's half** — `docs/orchestration/handoffs/<milestone>.md`: what was built, map rows discharged, marker census, retro facts (measured), architectural suggestions harvested from unresolved residue.
 - **Architect's half IS the birth of the next milestone's document set** — its INDEX, decisions file, census, glossary, continuation handover, first visions under the new slug in the flat corpus. Not a section anywhere; a working set coming into existence.
 
-A milestone may not close without both halves; close is operator-approved in every mode.
+A milestone may not close without both halves; close is human-approved in every mode.
 
 ## The sitting protocol {#session-protocol}
 

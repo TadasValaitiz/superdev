@@ -103,7 +103,7 @@ Subagent (general-purpose):
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
+    The ROOM SESSION can provide more context, re-dispatch with a more capable model,
     or break the task into smaller pieces.
 
     ## Before Reporting Back: Self-Review
@@ -161,7 +161,7 @@ Subagent (general-purpose):
     - The report file path
 
     If BLOCKED or NEEDS_CONTEXT, put the specifics in the final message
-    itself — the controller acts on it directly.
+    itself — the ROOM SESSION acts on it directly.
 
     Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
     Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
@@ -169,7 +169,7 @@ Subagent (general-purpose):
 
     If you deviated from the task's stated approach in ANY way (different interface,
     substituted dependency, dropped or added a step), name the deviation and why in
-    your report — even under DONE. The controller records it in the work stream's
+    your report — even under DONE. The ROOM SESSION records it in the work stream's
     decision log; an unreported deviation is invisible there and will read as
     unexplained drift later.
 ```

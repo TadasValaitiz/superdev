@@ -17,10 +17,10 @@ Execute a plan by dispatching ONE carrying implementer per broad, role-carried a
 - **One carrying implementer per arc; never parallel initial writes** (everything lands in one worktree). Parallelism = reads always, and quick-fix lanes in the SAME worktree after the shape exists — see parallel-execution.md.
 - **Reviews at plan checkpoints** (`## Checkpoint Cn` in the plan): the reviewer reads the diff-since-last-checkpoint + the implementer's report — never per-mini-task; frequent small reviews cost more than they catch. The reviewer is also the TEST ADVERSARY (task-reviewer-prompt.md): it writes/commissions failing tests per checkpoint and observes every guard fail before the checkpoint clears.
 - **Fixes are resume-first:** message the ORIGINAL implementer (its live context is the memory) with only the new findings — SendMessage for Claude subagents, `codex-worker run --name` for Codex. Fresh dispatch + report file only when resume fails.
-- **RESUME metadata is mandatory** in every implementer/reviewer report: worker kind · name/agent-id · exact resume command or address · session ref · territory one-liner. The controller tracks these as rows in the progress ledger (`.superdev/sdd/progress.md`) — no separate registry file.
-- **Roles:** carrying implementer · reviewer/adversary · **follow-up** — the short-lived third seat that lands checkpoint findings, quick fixes and cleanup after the arc's shape exists (the quick-fix lane's usual occupant).
+- **RESUME metadata is mandatory** in every implementer/reviewer report: worker kind · name/agent-id · exact resume command or address · session ref · territory one-liner. The ROOM SESSION tracks these as rows in the progress ledger (`.superdev/sdd/progress.md`) — no separate registry file.
+- **Roles:** carrying implementer · reviewer/adversary · **follow-up** — the short-lived third role that lands checkpoint findings, quick fixes and cleanup after the arc's shape exists (the quick-fix lane's usual occupant).
 - **Auto-enter:** when writing-plans ends with the operator agreeing the execution shape, SDD auto-enters — no "shall I proceed"; the agreement WAS the flip (the room goes autonomous there).
-- **Design-class deviations — show must go on (D61):** an arc that hits an architecture-vs-code discrepancy COLLECTS it in the item's own files (decision log / spec deviations section) during grounding→planning; after planning, before execution, the room messages the orchestrator a summary + pointer (relayed to the architect immediately); then it implements against reality with `MIG-MARK` planted at the exact sites — never a local ruling, never a write into any shared file (no shared residue ledger exists; the orchestrator's ledger is built from your reports).
+- **Design-class deviations — show must go on (D61):** an arc that hits an architecture-vs-code discrepancy COLLECTS it in the item's own files (decision log / spec deviations section) during grounding→planning; after planning, before execution, the room sends the architect ASK-ARCHITECT: a summary + pointer (directly, not relayed); then it implements against reality with `MIG-MARK` planted at the exact sites — never a local ruling, never a write into any shared file (no shared residue ledger exists; the orchestrator's ledger is built from your reports).
 
 ## Codex workers from Claude Code
 
@@ -332,7 +332,7 @@ and is re-read on every later turn. Hand artifacts over as files:
 ## Durable Progress
 
 Conversation memory does not survive compaction. In real sessions,
-controllers that lost their place have re-dispatched entire completed task
+ROOM SESSIONS that lost their place have re-dispatched entire completed task
 sequences — the single most expensive failure observed. Track progress in
 a ledger file, not only in todos.
 
@@ -435,7 +435,7 @@ Done!
 - Review checkpoints automatic
 
 **Efficiency gains:**
-- Controller curates exactly what context is needed; bulk artifacts move
+- ROOM SESSION curates exactly what context is needed; bulk artifacts move
   as files, not pasted text
 - Subagent gets complete information upfront
 - Questions surfaced before work begins (not after)
@@ -449,7 +449,7 @@ Done!
 
 **Cost:**
 - One carrying implementer invocation per arc plus checkpoint reviewers
-- Controller prepares broad arc briefs and checkpoint review packages
+- ROOM SESSION prepares broad arc briefs and checkpoint review packages
 - Review loops add targeted iterations at checkpoints
 - But catches issues early (cheaper than debugging later)
 

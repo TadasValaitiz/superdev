@@ -19,10 +19,10 @@ Ask "agree or disagree with 1–3?" and send ONE pointer message.
 
 ## Receiving the response — a BLOCK in the milestone's decisions file, not a document
 Find it in `docs/system-design/…-architecture-decisions.md` under `## Checkpoint <n> — response (reconcile <sha>)`, followed by the new D# entries. Your duties:
-- AGREE sections → proceed. **BOUNCED-DOWN clusters** → file each as backlog items or route into an upcoming charter — and CONFIRM the filing in your NEXT handover's WHAT WE GOT (the loop audits itself).
+- AGREE sections → proceed. **BOUNCED-DOWN clusters** → enter each in RESIDUAL TRIAGE (no individual items are filed) or route into an upcoming charter — and CONFIRM the entry in your NEXT handover's WHAT WE GOT (the loop audits itself).
 - **REJECTED claims** → the row stays undischarged; re-claim only with the receipt the rejection named.
 - DISAGREE on a charter's readiness → that charter waits; apply the scoped design-dry rule.
-- The response's agenda items needing the operator → queue via the desk (DESIGN column) and stop; never schedule the operator.
+- The response's agenda items needing the human → queue via the desk (DESIGN column) and stop; never schedule the human.
 - Note the reconcile commit SHA — it is the as-of line for every brief you write until the next one (room-brief-template.md).
 
 ## After the sitting

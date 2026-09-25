@@ -71,7 +71,7 @@ independently testable deliverable.
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Execution:** subagent-driven | inline — recorded AFTER the operator agrees the
+**Execution:** subagent-driven | inline — recorded AFTER the human agrees the
 execution-shape proposal (see Execution Handoff; `subagent-driven-parallel` is retired —
 parallelism is a phase inside an arc, per SDD's parallel-execution.md)
 
@@ -79,8 +79,8 @@ parallelism is a phase inside an arc, per SDD's parallel-execution.md)
 mode law that governs every ruling gate (canonical: superdev:system-design
 SKILL.md#mode-law). Governs
 how the finishing gate routes an unmet acceptance hint / anchor deviation: autonomous
-files an owned backlog item and closes; human-in-loop pushes the divergence to the
-operator before finishing.
+records an owned residual in the RESIDUALS FILE and closes; human-in-loop pushes the divergence to the
+human before finishing.
 
 **Context pack** — the artifacts downstream workers read; list every path that exists.
 THE FULL-SET CONTRACT (D71): the plan answers to the UNION of the session's documents —
@@ -146,8 +146,8 @@ table into the plan; that split acceptance across two files and let them drift. 
   CLI transcript, file:line), filled into the anchor's §9 receipt column when the real
   surface exists.
 - An unanswered hint is NAMED, never dropped, and routed by the plan's `Mode`:
-  autonomous → file an owned backlog item (naming the UC#/AH# it discharges) and close;
-  human-in-loop → push to the operator before finishing.
+  autonomous → record an owned residual in the RESIDUALS FILE (naming the UC#/AH# it discharges) and close;
+  human-in-loop → push to the human before finishing.
 
 This plan discharges: UC#…, AH#… ]
 
@@ -285,7 +285,7 @@ starting point · the journeys at intent level with the command families they cr
 (INCLUDING neighbouring surfaces this plan does not change — seams are where operators die)
 · the ACTUAL DATA each journey needs and how its availability is verified before the ride ·
 the expectations the evaluator judges against · what is deliberately not ridden. Ideas and
-command families, never exact commands. Task-level checkride steps point at this section
+command families, never exact commands. Checkride steps (only at the plan's finalization points) point at this section
 ("run superdev:cli-checkride over journeys J1–J2") — never a literal command block, and
 never a fixture, stub, or mock path anywhere in the plan's ride instructions.
 
@@ -339,11 +339,11 @@ the log is re-plannable months later; one with silent choices is not.
 
 ## Execution Handoff — the shape proposal, then auto-start
 
-**Always propose the execution shape to the operator before executing** (R26/D28): 2–3
+**Always propose the execution shape to the human before executing** (R26/D28): 2–3
 variants — task/arc count · deliverable count · worker class (Codex long-arc vs
 Sonnet bite-size) · subagents/rooms — each with a recommendation. Small plans may present
-one variant. **The operator's agreement is the flip (D29): execution auto-starts on it** —
-no further proceed-prompts; if the operator steps out, the build runs and their next
+one variant. **The human's agreement is the flip (D29): execution auto-starts on it** —
+no further proceed-prompts; if the human steps out, the build runs and their next
 touchpoint is a desk/report entry, not a question. (D27 arc: this elicitation is HIL while
 choices calibrate; after ~3 consistent choices for the same signature, extract the pattern
 into a protocol note and stop asking.)
@@ -364,7 +364,7 @@ plan time and recorded in the plan header's `Execution:` field:
 
 Then: **REQUIRED SUB-SKILL:** Use superdev:executing-plans (inline, batch execution).
 
-The operator overrides either direction with a word — an explicit request beats the
-rule. A separate/parallel-session execution (the operator takes the plan to another
+The human overrides either direction with a word — an explicit request beats the
+rule. A separate/parallel-session execution (the human takes the plan to another
 session) also uses executing-plans; that is session topology, not plan size, and it is
-always the operator's call, never offered proactively.
+always the human's call, never offered proactively.

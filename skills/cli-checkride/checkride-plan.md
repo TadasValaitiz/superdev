@@ -28,7 +28,7 @@ fixture or a pre-seeded catalogue⟩
 
 | Journey | Service / dataset | Coverage · window · universe · scale | Availability check before the ride | If unavailable |
 |---|---|---|---|---|
-| J1 | ⟨…⟩ | ⟨the operator's scale, from the design's use cases⟩ | ⟨the preflight command / check⟩ | STOP and ask the operator — never a stand-in |
+| J1 | ⟨…⟩ | ⟨the operator's scale, from the design's use cases⟩ | ⟨the preflight command / check⟩ | STOP and ask the human — never a stand-in |
 
 **Expectations the evaluator judges against:** ⟨per journey: the mechanisms, provenance,
 exit classes, remedies, and honesty tiers the operator must see; the operator laws in force

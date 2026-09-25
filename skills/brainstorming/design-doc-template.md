@@ -11,7 +11,7 @@ are **never silently edited to match what got built**. They bend only by an *own
 change:
 
 - **Autonomous build (most work):** when a requirement/use-case must soften, or a slice
-  must defer, **file a backlog item that names the UC#/R# it discharges**, then proceed
+  must defer, **record a residual in the RESIDUALS FILE that names the UC#/R# it discharges**, then proceed
   and close. Development never blocks on the anchor.
 - **Human-in-loop build:** when deviation is *large* (many hints unmet, or a use case
   materially changed), **push the divergence to the human before finishing** — not after.
@@ -174,7 +174,7 @@ The done bar, in two columns filled at two different times:
 - **Receipt (later, at the gate):** ONE piece of re-runnable evidence per hint — a test
   name + output, a CLI transcript, or a file:line — assembled when the real surface
   exists. A claim without a receipt is not an answer. An unanswered hint is NAMED, never
-  papered over, and routed per the anchor's soften-but-own rule (owned backlog item in
+  papered over, and routed per the anchor's soften-but-own rule (owned residual in the RESIDUALS FILE in
   autonomous mode, human pushback in HIL mode).
 
 | # | Acceptance hint (operator terms) | Proves | Lane | Receipt (filled at gate) |

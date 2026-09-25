@@ -20,15 +20,15 @@ Subagent (general-purpose):
     from the plan's checkride plan — plus the neighbouring surfaces the journey crosses]
     **Substrate — ACTUAL DATA ONLY:** [the real services / datasets / store the ride uses:
     service URLs · dataset and coverage · window · universe · scale · the disposable store
-    name. Data preflight result: [what the controller verified, when]. Any step needing
+    name. Data preflight result: [what the ROOM SESSION verified, when]. Any step needing
     data or a service NOT in this list is not run and not substituted: you report
-    DATA-MISSING with exactly what is missing and the operator is asked.]
+    DATA-MISSING with exactly what is missing and the human is asked.]
     **The operator's starting point:** [what the operator has when the journey begins —
     e.g. an empty store and a strategy file they wrote. NOT a committed fixture, NOT a
     pre-seeded catalogue. Your first proposal starts here.]
     **Scenario intent doc:** [path] — journeys and what-good-looks-like; never a script.
     **Checkride plan:** [plan path + section] — journeys, command families, expectations.
-    **Ride ledger:** [LEDGER_PATH] — the controller appends each step; you return each
+    **Ride ledger:** [LEDGER_PATH] — the ROOM SESSION appends each step; you return each
     part as a message.
 
     ## Rules
@@ -55,7 +55,7 @@ Subagent (general-purpose):
     - State the honesty tier of every headline number the output shows.
 ```
 
-## Step message (controller → the same executor, every step)
+## Step message (ROOM SESSION → the same executor, every step)
 
 After a ruling on the executor's proposal:
 

@@ -16,7 +16,7 @@ than none.
 The ONE thing that cost the most time, with evidence (ledger lines, timestamps). Then the next two.
 
 ## 3. Was the design accurate?
-- How many design questions surfaced during build or ride instead of at the design stop?
+- How many design questions surfaced during build or ride instead of at the DESIGN STOP?
   Which should the angles have caught?
 - Were the foundation angles / system-design passages right for this room? Wrong, missing, stale?
 - Did the architecture summary and the human's review happen at the right moment?

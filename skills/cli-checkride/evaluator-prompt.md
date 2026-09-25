@@ -68,16 +68,16 @@ Subagent (general-purpose):
 
     - PASS — you would hand this surface to the operator as-is, and every step ran on
       actual data.
-    - PASS-WITH-EXCEPTIONS — same, but list every operator-authorized exception step with
-      the operator's words; the gate reading this decides with the operator.
+    - PASS-WITH-EXCEPTIONS — same, but list every human-authorized exception step with
+      the human's words; the gate reading this decides with the human.
     - FINDINGS — the blocking findings, ordered; the ride resumes from the earliest blocked
       step after the fix lane.
-    - No verdict exists while the ride is paused on the substrate law; that is a DECIDE
-      for the operator.
+    - No verdict exists while the ride is paused on the substrate law; that is a HIL-NEEDED
+      for the human.
 
-    Then two closing sections: `## Observations → backlog` — every advisory finding, one
-    line each (surface · what · why it matters to the operator), so the controller files
-    them (an observation living only in the ledger is lost); and `## Scenario refresh` —
+    Then two closing sections: `## Observations → RESIDUALS FILE` — every advisory finding, one
+    line each (surface · what · why it matters to the operator), so the ROOM SESSION records
+    them in the RESIDUALS FILE (an observation living only in the ledger is lost); and `## Scenario refresh` —
     the criteria born from this ride's findings, for the scenario intent doc.
 
     Calibration: judge from the ledger's evidence, not taste; cite the command and output
@@ -86,11 +86,11 @@ Subagent (general-purpose):
     findings, let them rule.
 ```
 
-## Step messages (controller → the same evaluator, every step)
+## Step messages (ROOM SESSION → the same evaluator, every step)
 
 ```
 PROPOSAL ⟨n⟩ (executor): ⟨verbatim proposal⟩            → expect a RULING
 RUN ⟨n⟩ (executor): ⟨invocation · stdout · stderr · exit⟩ → expect a JUDGMENT
-OPERATOR RULED: ⟨verbatim operator answer to a STOP⟩       → resume per the ruling
+HUMAN RULED: ⟨verbatim human answer to a STOP⟩       → resume per the ruling
 RIDE END — give the verdict.
 ```

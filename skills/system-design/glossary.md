@@ -17,7 +17,7 @@ One table, one meaning per word, across every skill that touches the development
 | Term | Means |
 |---|---|
 | **residue** | a design-class finding flowing UP by REPORT (D51): room's own files → room report → orchestrator's typed ledger (kinds: discrepancy · insight · duplicate-risk · question) → handover clusters → architect at a checkpoint. Rooms never write ledgers |
-| **residual** | (unchanged, entrenched) a loose end drained before a room/run closes — residual ledger, RES events. *Residue ≠ residual; both stay* |
+| **residual** | (unchanged, entrenched) a loose end drained before a room/run closes — RESIDUALS FILE, RES events. *Residue ≠ residual; both stay* |
 | **marker** | greppable status/deferred-work note: `MIG-MARK[..]` bracket in CODE; three positional plain-word forms in DOCS (claim `**LOCKED:**` · section `**Status:**` · heading `### LOCKED —`, D53/D70); removed/flipped with the fix, never resolved in place |
 | **backlog** | parked open questions awaiting disposition. Rooms never file into it: residuals reach it only through the orchestrator's RESIDUAL TRIAGE (taxonomy.md §5). The word "docket" is retired |
 
@@ -33,15 +33,15 @@ One table, one meaning per word, across every skill that touches the development
 | **handoff** | the milestone-close package, SPLIT (D49/D68): orchestrator's half in `docs/orchestration/handoffs/` (never pruned); the architect's half IS the next milestone's document set coming into existence. Contrast **handover** (per-checkpoint, pruned). ("runway" retired) |
 | **arc** | one broad, role-carried unit of work: one carrying implementer, many files, plan checkpoints inside |
 | **carrying implementer** | the single agent that writes an arc's initial implementation — never parallelised |
-| **quick-fix lane** | a small parallel write scope in the SAME worktree, post-shape: disjoint files, serial commits, follow-up seats |
+| **quick-fix lane** | a small parallel write scope in the SAME worktree, post-shape: disjoint files, serial commits, follow-up roles |
 | **test disposition** | {keep · regenerate · archive-then-rewrite · fix-in-place} — set at brainstorm, refined (never reversed) by the plan |
 | **harvest file** | the business requirements extracted from tests BEFORE archiving; reviewer-signed; the source for rewrite-territory requirement tests |
-| **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like · the actual data it needs · the operator's starting point) in `docs/superdev/scenarios/` — written BEFORE the checkride from the plan's checkride plan and the design's use cases, refreshed after with criteria born from findings, re-driven by the battery; never a replayable script, never carries an expected result number |
-| **battery** | the milestone-close ad-hoc room that walks every scenario intent against the current surface, on actual data under the substrate law, in the checkride's one-step loop |
+| **scenario** | a date-stamped operator-journey INTENT document (goal · journey · what-good-looks-like · the actual data it needs · the operator's starting point) in `docs/superdev/scenarios/` — written BEFORE the checkride from the plan's checkride plan and the design's use cases, refreshed after with criteria born from findings, re-driven by the SWEEP; never a replayable script, never carries an expected result number |
+| **SWEEP** | the milestone-close ad-hoc room that walks every scenario intent against the current surface, on actual data under the substrate law, in the checkride's one-step loop |
 | **foundation item** | an item building the base others consume (often an unblocking kernel); testable and mergeable but usually surface-less — no checkride, but its charter names the downstream item that will exercise it live |
 | **surface item** | an item changing what the operator sees/touches — a checkride plan in its plan, a checkride PASS on actual data, and a scenario written before the ride in its done-bar |
 | **checkride plan** | the plan-time section (writing-plans; template in superdev:cli-checkride `checkride-plan.md`) naming the operator's starting point, the journeys at intent level with the command families they cross, the actual data each needs and how its availability is verified, and the expectations the evaluator judges against — ideas, never a script; reviewed with the plan |
-| **substrate law** | gates (checkride, battery, acceptance receipts) run on ACTUAL DATA at the operator's scale — never fixtures, mocks, stubs, seeded providers, or test-only modes, however labelled; when the real data is unavailable the gate STOPS and asks the operator (a DECIDE in autonomous mode); only the operator authorizes an exception, and no gate closes on a stand-in |
+| **substrate law** | gates (checkride, SWEEP, acceptance receipts) run on ACTUAL DATA at the operator's scale — never fixtures, mocks, stubs, seeded providers, or test-only modes, however labelled; when the real data is unavailable the gate STOPS and asks the human (a HIL-NEEDED in autonomous mode); only the human authorizes an exception, and no gate closes on a stand-in |
 | **domain-model companion** | the standalone `…-domain-model.md` beside an item's spec (brainstorming, `domain-design-template.md`): aggregate model, typed object sketches, identity rules, the I# invariant table with enforcers and owning tasks, delta ledger, CLI↔domain mapping — updated after every ruling that touches a shape |
 | **pipelines companion** | the standalone `…-pipelines.md` beside an item's spec (`pipelines-template.md`): P# pipelines, each a typed Request → Response \| refusal path of P#.n steps (typed transition · pure/effect · refusal boundary · durable effect), transaction boundaries, state evolution, refusal catalogue, recovery — the plan owns every step, the checkride plan drives them |
 | **I# / P#** | invariant and pipeline identifiers, minted in the two companions and cited by the design's §5.0 index and areas, plan tasks (`Invariants preserved` / `Pipeline steps` blocks), the implementer's Read-first, task review, and the checkride plan |
@@ -57,11 +57,11 @@ One table, one meaning per word, across every skill that touches the development
 | **reconcile commit** | the named commit (`docs: reconcile <milestone> architecture authority`) that closes every architect sitting; briefs cite architecture as-of its SHA |
 | **mode law** | HUMAN vs AUTONOMOUS, declared at the co-plan, honored by every ruling gate; reserved forks (money/irreversibility, blast radius, taste) always human; canonical text: system-design SKILL.md#mode-law |
 | **handover** | the per-checkpoint operational document (trio + claims + clusters + facts); pruned on the rolling window. ≠ handoff |
-| **execution proposal** | the orchestrator's celebration-led delivery hypothesis (`docs/orchestration/execution/`), authored via two opposed seats, adjudicated by the five rules; reconcilable, never locked, authorizes no code (D55) |
+| **execution proposal** | the orchestrator's celebration-led delivery hypothesis (`docs/orchestration/execution/`), authored via two opposed roles, adjudicated by the five rules; reconcilable, never locked, authorizes no code (D55) |
 | **celebration** | an operator-visible capability proven by a real journey with refusal/recovery evidence — the proposal's unit |
-| **pointer relay** | the orchestrator forwarding a room's plan-time deviation pointer to the architect immediately — pointers, never paraphrase (D61) |
+| **ASK-ARCHITECT** | a room sending its plan-time deviation pointer to the architect directly (the orchestrator no longer relays) — pointers, never paraphrase (D61) |
 | **pruning window** | at milestone N's close, milestone N−1's operational files are deleted after harvesting; git is the archive (D62) |
-| **rider** | a requirement the operator attaches while picking a fork variant; enters the law with the variant (recorded in the D# Decided-by line) |
+| **rider** | a requirement the human attaches while picking a fork variant; enters the law with the variant (recorded in the D# Decided-by line) |
 | **register law** | conversation economy never applies to deliverables; a deliverable is a teaching document readable without the log (D66) |
 | **full-set contract** | a plan answers to spec + log + ALL angles + census; angle content governs spec silence; contradictions stop planning (D71) |
 
@@ -69,4 +69,4 @@ One table, one meaning per word, across every skill that touches the development
 charter · grounding probe / census · checkride · checkride plan · substrate law · cursor · debrief · gate · room · green light · D# (design) · O# (orchestration method) · R5/RES (room events)
 
 ## The gate ladder (named, never numbered)
-**ruling gate** (operator approval: corpus changes bind only when ruled) · **probe gate** (veto: no *item* charter without a census; ad-hoc probe rooms exempt) · **publish recipe** (mechanical FF-CAS; never blocks for architectural reasons) · **close gate** (veto: room close requires worktree merged+retired and archived tests deleted with manifest kept).
+**ruling gate** (human approval: corpus changes bind only when ruled) · **probe gate** (veto: no *item* charter without a census; ad-hoc probe rooms exempt) · **publish recipe** (mechanical FF-CAS; never blocks for architectural reasons) · **close gate** (veto: room close requires worktree merged+retired and archived tests deleted with manifest kept).

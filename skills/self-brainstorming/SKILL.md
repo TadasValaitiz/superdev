@@ -13,10 +13,10 @@ oracle), and a scripted loop works the AGREED angle agenda one angle at a time �
 one open-ended loop over the whole design. The output is a design ready for human
 review — never a design that pretends it was ratified. WHO ratifies is the
 milestone MODE's call (canonical law: superdev:system-design SKILL.md#mode-law): HUMAN
-mode — the operator, with the gate queuing as a desk DECIDE; AUTONOMOUS mode — the
+mode — the human, with the gate queuing as a HIL-NEEDED; AUTONOMOUS mode — the
 ORCHESTRATOR ratifies (reading the assumptions section first), as a flagged, revisitable
 pick; RESERVED forks (money/irreversibility, blast radius, taste) always wait for the
-operator in both modes.
+human in both modes.
 
 **Invoking this skill is the user's opt-in to multi-agent orchestration** — it is built
 on the Workflow tool. If the Workflow tool is unavailable in the current harness, fall
@@ -30,7 +30,7 @@ identical either way.
 Self-brainstorming produces a SPEC PROPOSAL, not an approved spec. Do NOT invoke
 writing-plans or any implementation skill on the output until a human has ratified the
 assumptions and approved the spec — or, in an explicitly autonomous context where the
-operator has pre-delegated that authority, until you have re-verified every ASSUMPTION
+human has pre-delegated that authority, until you have re-verified every ASSUMPTION
 against evidence and said so in the hand-off.
 </HARD-GATE>
 
@@ -47,7 +47,7 @@ orchestrator/room-mechanics.md. Absent that contract, ignore this section entire
 the Questioner tags each fork **detail** (agent-owned; decide and lock as usual) or
 **holistic** (human-owned: large blast radius, cross-cutting shape, taste, money/
 irreversibility). Holistic forks are decided PROVISIONALLY (status HOLISTIC-PROVISIONAL,
-never plain locked), batched, and surfaced via R-H reports — the picture + the fork in
+never plain locked), batched, and surfaced via BATCHED HIL-NEEDED reports — the picture + the fork in
 prose, never a detail dump — while the loop KEEPS FLOWING; never stall waiting for the
 human. The human enters at checkpoints, rules at altitude, leaves; re-flow whatever their
 redirect touches. Safe by topology: nothing reaches main before the human-approved
@@ -80,7 +80,7 @@ built on hallucinated ground truth is worse than no spec.
 
 ## The phases
 
-You — the session running this skill (the CONTROLLER) — hold the spine. Workflows are
+You — the session running this skill (the ROOM SESSION) — hold the spine. Workflows are
 small: **ONE workflow run per angle**. The angle file is the hand-off between runs, so any
 fresh session can pick up where the last angle file left off, and the architect (and the
 human) can be brought in BETWEEN angles.

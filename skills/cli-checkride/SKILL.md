@@ -1,6 +1,6 @@
 ---
 name: cli-checkride
-description: Use as the validation gate for any branch/area that changed a user-facing surface (CLI or API) — an executor agent drives the real surface live ONE STEP AT A TIME on ACTUAL DATA while an evaluator agent sits in the operator's seat, ruling on each step before it runs and judging it after; missing real data STOPS the ride and asks the operator; the work ITERATES until the evaluator passes the ride. Tests are the floor; the checkride is the gate. Not for trivial/no-surface changes (the finishing gate's receipt cross-check suffices there).
+description: Use as the validation gate for any branch/area that changed a user-facing surface (CLI or API) — an executor agent drives the real surface live ONE STEP AT A TIME on ACTUAL DATA while an evaluator agent sits in the operator's seat, ruling on each step before it runs and judging it after; missing real data STOPS the ride and asks the human; the work ITERATES until the evaluator passes the ride. Tests are the floor; the CHECKRIDE is the gate. Not for trivial/no-surface changes (the finishing gate's receipt cross-check suffices there).
 ---
 
 # CLI Checkride — actual data, one step at a time, judged from the operator's seat
@@ -16,7 +16,7 @@ number honestly labelled SEED-TEST. The next day the operator's real journey (bl
 real data service, six-month window) died four different ways before producing a single
 result: a discovery step that needed source code, a silent forty-minute exit 137, a raw
 traceback where a typed refusal belonged, a refusal naming the wrong remedy. Nothing in that
-ride could have seen any of it. Two failures, both named by the operator: **no pre-planned
+ride could have seen any of it. Two failures, both named by the human: **no pre-planned
 expectations** to judge against, and **riding whatever was at hand** (fixtures, stubs, tests
 that mean nothing in the real world). Every rule below exists so neither can recur.
 
@@ -33,7 +33,7 @@ that mean nothing in the real world). Every rule below exists so neither can rec
   covers those. Scoping is about *which surfaces changed*, never about *how much of the
   operator's journey to ride*: the ride starts where the operator starts and crosses every
   neighbouring surface the journey needs, changed or not — seams are where operators die.
-- **Not** the milestone-close gate. Re-driving a whole milestone's surface on the merged tip, and
+- **Not** the MILESTONE CLOSE GATE. Re-driving a whole milestone's surface on the merged tip, and
   deciding whether it goes to the human, is superdev:milestone-sweep-judge.
 
 ## The substrate law — actual data, or stop and ask
@@ -48,18 +48,18 @@ labelled.
 
 If a step needs data or a service that is not available (service down, no coverage for the
 window, an input that exists only as a fixture), the step is NOT RUN, the ride PAUSES, and
-the OPERATOR is asked what to do — provision the real data · authorize a disclosed exception
-for named steps · defer the step as a named gap. The operator's answer is recorded verbatim
-in the ride ledger before anything else runs. Only the operator can authorize an exception;
+the HUMAN is asked what to do — provision the real data · authorize a disclosed exception
+for named steps · defer the step as a named gap. The human's answer is recorded verbatim
+in the ride ledger before anything else runs. Only the human can authorize an exception;
 an exception step's evidence is labelled EXCEPTION and can never be the only evidence for a
 use case.
 
-AUTONOMOUS mode: the room raises DECIDE to the orchestrator (the question in the operator's
+AUTONOMOUS mode: the room raises HIL-NEEDED to the orchestrator (the question in the human's
 words, what is missing, what it blocks) and the ride stays paused; the item cannot close on
 that gate. Neither the room nor the orchestrator resolves it by picking a stand-in.
 </HARD-GATE>
 
-**Data preflight.** Before either seat is dispatched, the controller verifies that the real
+**Data preflight.** Before either role is dispatched, the ROOM SESSION verifies that the real
 data the checkride plan names actually exists (service reachable, coverage present for the
 window and universe). A preflight failure is the same STOP — earlier and cheaper.
 
@@ -80,9 +80,9 @@ window and universe). A preflight failure is the same STOP — earlier and cheap
    journey needs · the operator's starting point. **No expected result number appears in it**
    (a prewritten number turns the ride into a confirmation exercise). Refreshed AFTER the
    ride with criteria born from findings; date-stamped, append-only. This is what the
-   milestone-close battery re-drives.
+   milestone-close SWEEP re-drives.
 
-## The two seats (separate agents, never one)
+## The two roles (separate agents, never one)
 
 - **EXECUTOR** ([executor-prompt.md](executor-prompt.md)) — proposes each step in the
   operator's words, runs it exactly as approved against the actual-data substrate, and
@@ -126,12 +126,12 @@ to do next. **It is a dialogue, never a script.** Per step:
 
 Mechanics that make the loop real:
 
-- **Both seats stay alive for the whole ride.** Spawn each once; continue the SAME agent
+- **Both roles stay alive for the whole ride.** Spawn each once; continue the SAME agent
   per step (native Claude Code: `Agent` once, then `SendMessage` to it; Codex:
   `spawn_agent`, then `send_input`). Never respawn per step — the accumulated context IS
   the operator's memory of the session. If the harness offers a Workflow tool, the loop may
   run as a workflow (the self-brainstorming precedent) with the same roles and ledger.
-- **The controller relays and keeps the ledger.** Each step's four parts are appended, as
+- **The ROOM SESSION relays and keeps the ledger.** Each step's four parts are appended, as
   they happen, to `docs/superdev/checkrides/<YYYY-MM-DD>-<item>-checkride.md` (header:
   substrate line · data preflight result · date · SHA · scenario path). The ledger IS the
   transcript; a step without all four parts is NOT RUN.
@@ -149,24 +149,24 @@ Mechanics that make the loop real:
 - **Triage every finding at intake, before any fix:** the evaluator proposes one of
   **blocks-publish** (this surface must not ship with it), **blocks-milestone** (may ship in
   a publish another room needs if NAMED in the publish report, fixed before the milestone
-  closes), or **backlog** (the default for experience and polish findings); the room's
-  controller decides; a disputed triage goes to the human. **Honesty and safety findings are
-  never backlog** — an invented or unmeasured number, a remedy that is false or destructive,
+  closes), or **RESIDUAL** (the default for experience and polish findings); the
+  ROOM SESSION decides; a disputed triage goes to the human. **Honesty and safety findings are
+  never RESIDUAL** — an invented or unmeasured number, a remedy that is false or destructive,
   a traceback, a leaked credential, anything that fails open on integrity: at least
   blocks-milestone. Only blocks-publish findings enter the fix lane before the verdict.
 - **PASS** — the evaluator would hand this surface to the operator as-is, and every step ran
-  on actual data. **PASS-WITH-EXCEPTIONS** — same, but one or more steps ran under an
-  operator-authorized exception; each is listed with the operator's words, and the gate
-  that reads the verdict decides with the operator. **FINDINGS** — blocking findings,
+  on actual data. **PASS-WITH-EXCEPTIONS** — same, but one or more steps ran under a
+  human-authorized exception; each is listed with the human's words, and the gate
+  that reads the verdict decides with the human. **FINDINGS** — blocking findings,
   ordered; the ride resumes from the earliest blocked step after the fix lane. **No PASS
   exists for a ride with no actual-data step**, and a ride paused on the substrate law has
-  no verdict at all — it has a DECIDE.
+  no verdict at all — it has a HIL-NEEDED.
 - **Commit the ledger + verdict** with the work — the ride is evidence and must be
   reconstructable later.
 - **Refresh the scenario intent doc** with criteria born from this ride's findings (a new
   dated file when the surface's intent changed; append-only).
-- **File the observations:** every non-blocking, experience-class observation becomes a
-  backlog item (or a residue row when design-class) directly from the evaluator's findings —
+- **Record the observations:** every non-blocking, experience-class observation goes into the
+  RESIDUALS FILE (or a residue row when design-class) directly from the evaluator's findings —
   never left living only inside the ledger.
 
 ## Red flags
@@ -180,7 +180,7 @@ Mechanics that make the loop real:
 | "The plan's literal command block is the ride" | The checkride plan names journeys and expectations, never a script. Derive each step live. |
 | "No checkride plan — I'll ride what changed" | Without expectations there is nothing to judge against. Write the plan and the scenario first. |
 | "I'll compute that value with a one-liner" | If the operator could not get it from the surface, it is an OPERATOR-SURFACE GAP, not a step. |
-| "The data isn't there; I'll seed something similar" | The substrate law: STOP and ask the operator. Only they can authorize an exception. |
+| "The data isn't there; I'll seed something similar" | The substrate law: STOP and ask the human. Only they can authorize an exception. |
 
 ## Relationship to the finishing gate
 
@@ -189,4 +189,4 @@ delegates to a checkride **when the branch changed a user-facing surface**; othe
 lighter receipt check stands — under the same substrate law (a receipt from a stand-in is
 not a receipt). In orchestrated rooms, the checkride is part of the room's DoD, its verdict
 class and substrate line ride the R4 pre-publish report, and a ride paused on missing data
-is the room's DECIDE.
+is the room's HIL-NEEDED.

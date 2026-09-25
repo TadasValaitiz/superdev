@@ -63,9 +63,9 @@ original docs (anchor, domain delta ledger, CLI surface), the code, the decision
 the reports, and any other Context-pack artifact. It returns an acceptance table + a
 divergence table.
 
-- **UNMET acceptance hint:** routed by Mode — autonomous files the drafted owned
-  backlog item (referencing the UC#/AH#) and the branch may close with the gap named;
-  human-in-loop surfaces the pushback package to the operator BEFORE options. Either
+- **UNMET acceptance hint:** routed by Mode — autonomous records the drafted owned
+  residual (referencing the UC#/AH#) in the RESIDUALS FILE and the branch may close with the gap named;
+  human-in-loop surfaces the pushback package to the human BEFORE options. Either
   way the unmet hint is named in the options message, never silently merged as done.
 
 - **BLOCKERS (unlogged deviations):** treat exactly like failing tests — stop. Log
