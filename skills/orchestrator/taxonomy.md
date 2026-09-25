@@ -6,6 +6,10 @@ file and retrospective uses them too. Design-corpus terms (corpus, angle, marker
 superdev:system-design `glossary.md`, which points here for the rest. When a skill and this file disagree,
 this file wins; fix the skill.
 
+**This file grows; it is never forced.** When a skill uses a concept this file does not name, ADD the term here
+(with its meaning) instead of bending the skill into an existing word that does not fit. When a skill's word is
+better than the one here, change this file. Every change to this file is a skill directive the human approves.
+
 ## 1. Roles and places
 
 | Term | Means exactly | Replaces |
