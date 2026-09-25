@@ -6,6 +6,8 @@ file and retrospective uses them too. Design-corpus terms (corpus, angle, marker
 superdev:system-design `glossary.md`, which points here for the rest. When a skill and this file disagree,
 this file wins; fix the skill.
 
+**Terms are written in CAPITALS.** Skills adopt the capitals as they are edited — no mass replacement; the vocabulary converges as the skills improve.
+
 **This file grows; it is never forced.** When a skill uses a concept this file does not name, ADD the term here
 (with its meaning) instead of bending the skill into an existing word that does not fit. When a skill's word is
 better than the one here, change this file. Every change to this file is a skill directive the human approves.
@@ -14,18 +16,18 @@ better than the one here, change this file. Every change to this file is a skill
 
 | Term | Means exactly | Replaces |
 |---|---|---|
-| **human** | The person who leads the architecture and approves in the room graph — the super user: rules reserved forks, says GO, approves destructive steps | "user"; "operator" meaning the authority |
-| **operator** | Someone using a PRODUCT's own commands through Claude Code, in the operator's seat (e.g. a trading operator running the product CLI). A checkride's evaluator judges "from the operator's seat" | — |
-| **orchestrator** | The orchestration room: milestones, room graph, sequencing, merges, gates, grants | "controller" meaning the orchestrator |
-| **architect** | The architect room: owns the design corpus, scores and rules design | "architect" meaning any session running system-design (that is an "architect session") |
-| **room** | An enterable `claude --bg` session with a brief, its own worktree and a closing condition; an **item room** builds one ITEM | — |
+| **HUMAN** | The person who leads the architecture and approves in the room graph — the super user: rules reserved forks, says GO, approves destructive steps | "user"; "operator" meaning the authority |
+| **OPERATOR** | Someone using a PRODUCT's own commands through Claude Code, in the operator's seat (e.g. a trading operator running the product CLI). A checkride's evaluator judges "from the operator's seat" | — |
+| **ORCHESTRATOR** | The orchestration room: milestones, room graph, sequencing, merges, gates, grants | "controller" meaning the orchestrator |
+| **ARCHITECT** | The architect room: owns the design corpus, scores and rules design | "architect" meaning any session running system-design (that is an "architect session") |
+| **ROOM** | An enterable `claude --bg` session with a brief, its own worktree and a closing condition; an **ITEM ROOM** builds one ITEM | — |
 | **ROOM SESSION** | The session running a skill — inside a room, or standalone on an ordinary branch | "the controller", "the room's session" |
-| **subagent** | A headless helper inside a room; never enterable, never messaged by the human | — |
-| **role** | The named job a subagent fills, matching the skill or brief that defines it: implementer · reviewer (also the adversary that plants mutations) · ride executor · ride evaluator · sweep judge · sweep executor · questioner · responder | "seat" |
-| **lane** | A parallel line of work with its own worktree and file set, opened only after a file-conflict map | "lane" meaning a role |
-| **third-party service** | A peer outside the graph (e.g. a data provider the project calls); contract-level requests only, never our file paths | — |
+| **SUBAGENT** | A headless helper inside a room; never enterable, never messaged by the human | — |
+| **ROLE** | The named job a subagent fills, matching the skill or brief that defines it: implementer · reviewer (also the adversary that plants mutations) · ride executor · ride evaluator · sweep judge · sweep executor · questioner · responder | "seat" |
+| **LANE** | A parallel line of work with its own worktree and file set, opened only after a file-conflict map | "lane" meaning a role |
+| **THIRD-PARTY SERVICE** | A peer outside the graph (e.g. a data provider the project calls); contract-level requests only, never our file paths | — |
 
-**Overlap rule:** **human** = authority in the room graph (approvals, rulings, GO). **operator** = using the product
+**Overlap rule:** **HUMAN** = authority in the room graph (approvals, rulings, GO). **OPERATOR** = using the product
 (journeys, the operator's seat, operator-facing refusals and remedies). When the human uses the product themselves:
 "the human, as operator".
 
@@ -83,6 +85,8 @@ it is a parallel line of work that can carry arcs side by side.
 | **DESIGN STOP** | the architect (ARCHITECT-VERDICT), then the human (RULED) |
 | **TEST GATE** | FAST on every publish; the touched area's slow tests |
 | **CHECKRIDE** | the ride evaluator |
+| **CHECKPOINT GATE** | the reviewer, at a plan checkpoint inside an item (an arc's review) |
+| **FINISHING GATE** | the branch's own final check before publish: tests, acceptance receipts, the deviation/acceptance audit |
 | **DESTRUCTIVE-STEP GATE** | the human (or a standing ruling from the human): data drops or deletes, reseeds, schema changes on a shared store |
 | **MILESTONE CLOSE GATE** | the human |
 
@@ -132,15 +136,15 @@ ASK-ARCHITECT. "Stop" alone means only the STOP message.
 
 | Document | Written by | Where | Lives |
 |---|---|---|---|
-| **design corpus** (angles, decision log, index) | architect only | `docs/system-design/` | reconciled; the design authority |
-| **item design files** (census, angle files, design doc, decision log, companions) | the room | the room's specs directory | kept |
+| **DESIGN CORPUS** (angles, decision log, index) | architect only | `docs/system-design/` | reconciled; the design authority |
+| **ITEM DESIGN FILES** (census, angle files, design doc, decision log, companions) | the room | the room's specs directory | kept |
 | **ARCHITECTURE SUMMARY** | the room, at the DESIGN STOP | beside the design doc | kept; lists every design file as a `file://` link |
-| **brief** | orchestrator | `docs/orchestration/milestones/<milestone>/briefs/` | per milestone |
+| **BRIEF** | orchestrator | `docs/orchestration/milestones/<milestone>/briefs/` | per milestone |
 | **MILESTONE SCOPE · plan · map · room graph · cursor** | orchestrator | `docs/orchestration/milestones/<milestone>/` | per milestone |
 | **RESIDUALS FILE** | each room, at ITEM CLOSE | `…/milestones/<milestone>/residuals/<room>.md` | input to RESIDUAL TRIAGE |
 | **RESIDUAL TRIAGE** | orchestrator | `…/milestones/<milestone>/triage.md` | each residual: dropped · merged · carried into the next MILESTONE PLAN |
 | **RETROSPECTIVE** | each room, at ITEM CLOSE (retrospective-template.md) | `…/milestones/<milestone>/retros/<room>.md` | feeds the process-feedback ledger |
-| **hand-off** | the room (item) and the orchestrator (milestone) | `…/milestones/<milestone>/handoffs/` | kept |
+| **HAND-OFF** | the room (item) and the orchestrator (milestone) | `…/milestones/<milestone>/handoffs/` | kept |
 | **ROADMAP · conventions · process-feedback ledger** | orchestrator (the human ratifies the roadmap) | `docs/orchestration/` | project-wide |
 
 **FILING RULE:** NO individual items are ever filed — not by rooms, not by a standalone ROOM SESSION. Every finding

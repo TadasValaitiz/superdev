@@ -59,8 +59,9 @@ what's next · prior entries as a dated stack, newest first — never rewrite, p
 - **RESIDUAL TRIAGE (`triage.md`), before the next milestone starts:** the orchestrator reads every residuals file and
   gives each residual ONE disposition — **dropped** (with why) · **merged** (into another residual) · **carried**
   (into the next MILESTONE PLAN, with its target item). Nothing reaches a shared backlog without this triage.
-- **Residue ≠ residual:** a design-class finding goes to the architect directly by ASK-ARCHITECT; the orchestrator
-  does not keep a residue ledger.
+- **Residue ≠ residual:** a design-class finding goes to the architect directly by ASK-ARCHITECT. The orchestrator
+  still keeps the typed residue ledger (kinds `discrepancy | insight | duplicate-risk | question`, each row citing the
+  report or NOTICE it came from) — its only use is the checkpoint handover's clusters (checkpoint-protocol.md).
 
 ## 4. The process-feedback ledger (`process-feedback.md`, project-wide)
 

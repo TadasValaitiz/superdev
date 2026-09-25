@@ -223,7 +223,7 @@ the second net.
 ## When NOT to use
 
 Single task → standalone path. Independent headless diagnostics → dispatching-parallel-agents.
-Multi-milestone plan inside ONE session → SDD parallel-execution (ROOM SESSION-merge lanes).
+Multi-milestone plan inside ONE session → SDD parallel-execution (single-session merge lanes).
 Rooms are for work where the human needs enterable, context-preserving sessions and
 milestone-level coordination — the machinery costs attention; don't pay it below that scale.
 
