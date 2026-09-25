@@ -22,8 +22,13 @@ that mean nothing in the real world). Every rule below exists so neither can rec
 
 ## When
 
-- **Any branch/area that changed a user-facing surface** (new/renamed commands, changed
-  args/output, API routes) — in a room's DoD, or at an ordinary branch's finishing gate.
+- **When a user-facing surface is FINISHED** (new/renamed commands, changed args/output,
+  API routes) — at the finalization points the plan names (e.g. a CLI family is done and
+  work moves to the next), before the merge that ships it. A checkride is a REGRESSION of the
+  finished surface, not a gate on every lane, fix or arc: a surface a later arc will rework
+  is ridden after that arc. An ordinary single-branch change rides at its finishing gate.
+- **Probing is not a checkride.** While building, the implementer runs and uses the surface
+  constantly — that is development. The checkride is the operator-seat regression at the end.
 - **Not** for trivial/no-surface branches: the deviation auditor's receipt cross-check
   covers those. Scoping is about *which surfaces changed*, never about *how much of the
   operator's journey to ride*: the ride starts where the operator starts and crosses every
