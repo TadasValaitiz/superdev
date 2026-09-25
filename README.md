@@ -17,7 +17,7 @@ From GitHub (any machine):
 ```bash
 claude plugin marketplace add TadasValaitiz/superdev
 claude plugin install superdev@superdev-dev
-claude plugin details superdev        # → 8.3.x, skill inventory
+claude plugin details superdev        # → 8.5.x, skill inventory
 # then, inside any running session:  /reload-plugins
 ```
 

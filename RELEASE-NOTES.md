@@ -1,3 +1,32 @@
+# v8.5.0 — the process update: design stop, angle-by-angle self-brainstorming, the taxonomy (2026-09-25)
+
+Diagnosed from the calibration project's wave-2 retrospective (splits-identity's process retro, the
+orchestrator's process-feedback ledger PF1–PF20, the human's rulings of 2026-09-24/25). Failure: design was
+discovered during build and ride (about 7 reactive architect rulings; a fix lane that grew from 2 to 21 items;
+too many checkrides), the human was consulted on scheduling rather than on semantics, and rooms launched
+without a dependency map. Bottleneck classes: missing stage (no design stop), orchestrator issue (no mapping,
+no foundation gate), context-doc issue (vocabulary drift across skills). Each change below was approved by the
+human directive by directive.
+
+- **self-brainstorming** rebuilt angle by angle: the session proposes 3–5 angles and the human agrees them;
+  ONE small workflow per angle (max 6 rounds); a between-angle check (corpus, ASK-ARCHITECT, the human); the
+  last angle is always TESTING & CLEARANCE; an ARCHITECTURE SUMMARY with every design file as a `file://` link
+  ends at a STOP (workflow-reference.md rewritten for one angle per run).
+- **orchestrator:** room-brief DESIGN STOP (DESIGN-REVIEW → ARCHITECT-VERDICT → design review → R1 → the human
+  approves in the room); FOUNDATION GATE; chartering step 0 = haiku MAPPING; retrospective-template.md (process
+  only) and a RESIDUALS FILE at ITEM CLOSE (rooms never file individual items); per-milestone durable-state
+  layout; graph hygiene in room-mechanics (liveness by commits, resume relaunch, post-sleep, retire check); brief
+  fences inherited at every subagent depth.
+- **taxonomy.md (new):** roles and places, the ladder (MILESTONE → ITEM → ARC → TASK) and scope, process and
+  gates, messages (HIL-NEEDED, ASK-ARCHITECT, …), documents and the FILING RULE, status labels, how rules are
+  written. Terms in CAPITALS; the file grows and is never forced. All skills' retired words aligned
+  (HIL-NEEDED, ROOM SESSION, ROLE, SWEEP, human vs operator, gates in capitals).
+- **system-design:** the room architect never idles — an angle queue; answers rooms directly; HIL-NEEDED.
+- **cli-checkride:** a REGRESSION when a surface is FINISHED, at the plan's finalization points; probing is
+  development; finding triage at intake (BLOCKS-PUBLISH / BLOCKS-MILESTONE / RESIDUAL; honesty and safety never RESIDUAL).
+- **test-clearance:** the test budget — SAFETY NET vs IMPLEMENTATION HELPER, a stable count, clear-first on
+  architecture shifts, a mechanical census, stored formats tested against a real previous-build row.
+
 # v8.4.0 — milestone-sweep-judge: the last gate before the human (2026-09-24)
 
 Built from four milestone sweeps on the calibration project (a judge room plus an executor room,
