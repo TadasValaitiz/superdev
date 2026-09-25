@@ -233,6 +233,11 @@ milestone-level coordination — the machinery costs attention; don't pay it bel
   reporting protocol, fault handling, measured gotchas.
 - [room-brief-template.md](room-brief-template.md) — the spawn contract; standalone vs room
   briefs (the switch, made concrete).
-- [durable-state.md](durable-state.md) — the orchestration graph, cursor, and residual
-  ledger the orchestrator MUST keep as files (compaction survival: re-derive from files +
-  commits, never memory).
+- [durable-state.md](durable-state.md) — the per-milestone layout of `docs/orchestration/`:
+  scope, plan, map, room graph, cursor, residual triage (compaction survival: re-derive from
+  files + commits, never memory).
+- [taxonomy.md](taxonomy.md) — THE vocabulary: roles, the ladder and scope, process and gates,
+  messages, documents, status labels, how rules are written. Every skill, brief, report,
+  residuals file and retrospective uses its words.
+- [retrospective-template.md](retrospective-template.md) — the process-only retrospective every
+  room leaves at ITEM CLOSE.

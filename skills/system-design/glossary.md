@@ -2,6 +2,8 @@
 
 One table, one meaning per word, across every skill that touches the development organisation. Skills link here; none restates it.
 
+**Rooms, messages, process, gates and scope** (human · orchestrator · architect · item · arc · task · DESIGN STOP · HIL-NEEDED · RESIDUALS FILE …): superdev:orchestrator [`taxonomy.md`](../orchestrator/taxonomy.md) is the authority. This glossary keeps the design-corpus terms.
+
 ## Boundless (design side)
 | Term | Means |
 |---|---|
@@ -17,7 +19,7 @@ One table, one meaning per word, across every skill that touches the development
 | **residue** | a design-class finding flowing UP by REPORT (D51): room's own files → room report → orchestrator's typed ledger (kinds: discrepancy · insight · duplicate-risk · question) → handover clusters → architect at a checkpoint. Rooms never write ledgers |
 | **residual** | (unchanged, entrenched) a loose end drained before a room/run closes — residual ledger, RES events. *Residue ≠ residual; both stay* |
 | **marker** | greppable status/deferred-work note: `MIG-MARK[..]` bracket in CODE; three positional plain-word forms in DOCS (claim `**LOCKED:**` · section `**Status:**` · heading `### LOCKED —`, D53/D70); removed/flipped with the fix, never resolved in place |
-| **backlog** | parked open questions awaiting disposition (`docs/backlog/`). The word "docket" is retired |
+| **backlog** | parked open questions awaiting disposition. Rooms never file into it: residuals reach it only through the orchestrator's RESIDUAL TRIAGE (taxonomy.md §5). The word "docket" is retired |
 
 ## Bounded (implementation side), largest → smallest
 | Term | Means |

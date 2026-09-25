@@ -138,8 +138,11 @@ next move if guessing · wrong-vs-redone · touched-world yes/no. The ORCHESTRAT
 (BLOCK / PROCEED-MARKED / FYI); you are blocked on that thread until CLASS arrives. The
 ANSWER reaches you by the operator attaching to YOUR room (the desk points them here; it
 never relays) or by the orchestrator relaying a RULED — record RULED upward (when the operator ruled in your room).
-R5 CLOSE — summary · residual dispositions · proposed cursor text · RETROSPECTIVE (process only,
-   per orchestrator/retrospective-template.md) committed to ⟨retro dir⟩ and its path.
+R5 CLOSE — summary · proposed cursor text · RESIDUALS FILE (taxonomy.md §5 format) committed to
+   ⟨milestone dir⟩/residuals/⟨room⟩.md · RETROSPECTIVE (process only, per
+   orchestrator/retrospective-template.md) committed to ⟨milestone dir⟩/retros/⟨room⟩.md — both paths.
+   You NEVER file backlog items: residuals inside your ITEM SCOPE are closed before R5;
+   everything else goes in the RESIDUALS FILE for the orchestrator's RESIDUAL TRIAGE.
 (Vocabulary mapping, if your project also reads the generic room-communication skill:
 R1 ≙ A1 READY · R3 ≙ HB; STOP-SCOPED / CORRECTION / PEER / HALT are available as defined
 there and mean the same here.)

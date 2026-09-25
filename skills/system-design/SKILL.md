@@ -10,6 +10,8 @@ You are working at the **system level**: boundless, holistic, deliberately light
 1. **The corpus is the law's teaching surface.** Design authority lives in files under `docs/system-design/`, never in a session's memory. Files are truth; messages are pointers with short summaries.
 2. **Who rules is the MODE's call** (below) — but preparation is always yours: you census, draft, present forks in full, and reconcile; you never silently decide what a mode reserves for someone else.
 
+**Vocabulary:** rooms, messages, process, gates and scope use superdev:orchestrator `taxonomy.md` (e.g. DESIGN-REVIEW → ARCHITECT-VERDICT, ASK-ARCHITECT, HIL-NEEDED, FOUNDATION GATE); design-corpus terms use this skill's `glossary.md`.
+
 ## The two invocation modes
 
 - **Solo:** the operator runs `/superdev:system-design` in a project. This session *is* the architect role — same authority, same files.
