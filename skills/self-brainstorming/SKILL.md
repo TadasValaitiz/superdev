@@ -1,16 +1,17 @@
 ---
 name: self-brainstorming
-description: Use when a design needs deep brainstorming but no human respondent is available or the human wants the exploration prepared before engaging — autonomous passes, delegated work, or pre-work for a big fork. Runs a questioner↔responder agent dialogue via the Workflow tool that progressively locks decisions and produces the same two artifacts as brainstorming (rich design doc + decision log), ending at a human ratification gate. Not a replacement for brainstorming when the human is present and engaged — the human is always the better oracle.
+description: Use when a design needs deep brainstorming but no human respondent is available or the human wants the exploration prepared before engaging — autonomous passes, delegated work, or pre-work for a big fork. Works ANGLE BY ANGLE like brainstorming: grounds, proposes an angle agenda the human agrees, then runs a bounded questioner↔responder loop per angle via the Workflow tool, writing each angle's companion as it closes; ends with an architecture summary at a STOP for human review. Not a replacement for brainstorming when the human is present and engaged — the human is always the better oracle.
 ---
 
 # Self-Brainstorming — the question loop without the human
 
-Brainstorming works because the right questions get asked and each answer narrows the
-design. This skill preserves that mechanism when no human is on the other side: one
-agent role asks the questions (the design authority), another answers them from
-evidence (the grounded oracle), and a scripted loop locks decisions round by round
-until the questioner declares saturation. The output is a design ready for human
-ratification — never a design that pretends it was ratified. WHO ratifies is the
+Brainstorming works because the right questions get asked about the right ANGLES, and
+each angle is finished — reconciled and written — before the next opens. This skill
+preserves that mechanism when no human is on the other side: one agent role asks the
+questions (the design authority), another answers them from evidence (the grounded
+oracle), and a scripted loop works the AGREED angle agenda one angle at a time — never
+one open-ended loop over the whole design. The output is a design ready for human
+review — never a design that pretends it was ratified. WHO ratifies is the
 milestone MODE's call (canonical law: superdev:system-design SKILL.md#mode-law): HUMAN
 mode — the operator, with the gate queuing as a desk DECIDE; AUTONOMOUS mode — the
 ORCHESTRATOR ratifies (reading the assumptions section first), as a flagged, revisitable
@@ -58,8 +59,10 @@ milestone close.
 discipline: one question per round, the question that most reduces design uncertainty
 next, 2–3 concrete options attached with trade-offs, ruthless YAGNI. It also owns the
 ratchet: each round it reviews the previous answer and emits `locks` — decisions it now
-considers settled, with rationale and a revisit-when hook. It ends the loop by declaring
-saturation: no remaining unknown would change what gets built.
+considers settled, with rationale and a revisit-when hook. It works ONE angle at a time
+and ends that angle by declaring it reconciled: no remaining unknown in this angle would
+change what gets built. Unknowns that belong to another angle are parked for that angle,
+never chased now; a genuinely new angle is proposed for the agenda, never worked silently.
 
 **The Responder is a grounded oracle, not an imaginative one.** In human brainstorming
 the human supplies ground truth; here the Responder must dig for it: read the codebase,
@@ -75,32 +78,52 @@ evidence tier:
 prevents: two agents confidently converging on invented requirements — a fluent spec
 built on hallucinated ground truth is worse than no spec.
 
-## The loop
+## The phases
 
-State lives in the script, not in the agents: a **decision ledger** (the ratchet) and an
-**assumption queue**. Each round threads the distilled ledger — not the full transcript —
-into both prompts: agents get fresh eyes every round (less anchoring), and the ledger
-stays the single source of truth. Depth scales with the budget/rounds knob: small
-problems saturate in a few rounds; deep ones run until saturation, the round cap, or the
-budget floor — whichever comes first (an unsaturated stop is REPORTED as such, never
-passed off as convergence).
+State lives in the script, not in the agents: the **angle agenda**, a **decision ledger
+per angle** (the ratchet) and an **assumption queue**. Each round threads ONLY the current
+angle's ledger plus the reconciled outcomes of closed angles — never the full transcript,
+never other open angles' detail. That is the token discipline: a round's context is one
+angle wide.
 
 ```
-Explore    → one grounding agent maps current state, constraints, prior art,
-             load-bearing unknowns (this seeds the Questioner)
-Dialogue   → loop: Questioner (locks + next question) ↔ Responder (evidence-tiered
-             answer + alternatives + recommendation)
-Synthesize → one agent writes BOTH artifacts from the ledger, per the brainstorming
-             skill's templates — the design doc in TWO PASSES (shape, then enrichment)
-             and the decision log carrying every lock AND every rejected path
-Review     → dispatch the spec reviewer (skills/brainstorming/
-             spec-document-reviewer-prompt.md) over spec + log; fix blocking issues once
+Ground   → one grounding agent writes the census (same contract as brainstorming step 1:
+           MEASURED / READ / FLAGGED, file:line) and the load-bearing unknowns
+Agenda   → the Questioner proposes 3–5 ANGLES from the census's FLAGGED rows and the use
+           cases (superdev:system-design angle-guide.md#item-angles: one central question ·
+           why it matters · boundaries) — a few, deep; the well-understood shape goes to the
+           domain-model / pipelines companions instead.
+           STOP: the human agrees the agenda (drop · add · reorder) before any angle is
+           worked. In an orchestrated room the human does it in the room; the agreed agenda
+           is recorded in the decision log.
+Angles   → for each agreed angle, in order: Questioner ↔ Responder rounds scoped to THIS
+           angle (round cap per angle; default 6), until the angle is reconciled or capped.
+           CLOSE the angle: state what was reconciled, then WRITE its companion NOW per
+           brainstorming's item-angle-template.md (mental model · journey with LOCKED claims
+           and typed sketches · invariants · cannot-do · collisions) and commit it before
+           the next angle opens. A new angle found mid-way is ADDED to the agenda, never
+           worked silently.
+Shape    → after all angles close: the whole-design shape, composed FROM the angle
+           companions and the domain-model (I#) / pipelines (P#) companions; the design doc
+           indexes every angle, I# and P#.
+Review   → dispatch the spec reviewer (skills/brainstorming/spec-document-reviewer-prompt.md)
+           over the design doc + decision log + census + EVERY angle companion; fix blocking
+           issues once
+Summary  → the architecture summary and the STOP (see The hand-off)
 ```
+
+Why angles, measured in brainstorming: companions written hot, as each angle closes,
+carried ~1,500+ words of teaching detail; the same angles batched to the end became
+~380-word cite-only indexes. One whole-design loop is the batched form, and costs more
+tokens for less design.
 
 The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/workflow-reference.md`.
 
 ## Artifacts (identical contract to brainstorming)
 
+- **Angle companions** — one per agreed angle, `docs/superdev/specs/YYYY-MM-DD-<topic>-angle-NN-<slug>.md`,
+  per `skills/brainstorming/item-angle-template.md`, WRITTEN AND COMMITTED WHEN THE ANGLE
+  CLOSES (never batched to the end). The census is committed at Ground.
 - **Design doc** — `docs/superdev/specs/YYYY-MM-DD-<topic>-design.md`, per
   `skills/brainstorming/design-doc-template.md`: numbered requirements (R#), narrative
   through-line with link-sentences, decisions (D#) with reasoning and revisit-when
@@ -108,7 +131,7 @@ The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/
   `Origin: self-brainstorm run <id>`. The conditional companions apply here too:
   domain-touching work gets the Domain model section (`domain-design-template.md`);
   CLI-touching work gets the separate `…-cli-surface.md` (`cli-surface-template.md`) —
-  the synthesis stage writes them from the ledger like everything else.
+  the Shape stage writes them from the angle companions and ledgers.
 - **Decision log** — same directory, `-decisions.md` suffix, per
   `skills/brainstorming/decision-log-template.md`. Every lock becomes a D# entry
   stamped with the round that produced it; rejected options and reversed locks stay in
@@ -116,20 +139,32 @@ The full script skeleton, schemas, and role prompts: `skills/self-brainstorming/
 
 ## The hand-off (how a run ends)
 
-Report to the ratifying authority (per the mode law; the human in HUMAN mode), leading with what needs them:
+Every run ends at a STOP: no planning or execution follows until the design is reviewed.
+Write an **ARCHITECTURE SUMMARY** beside the design doc (`…-architecture-summary.md`), for the
+human in EVERY mode — autonomy delegates the running, never the look at the design:
 
 1. **Assumptions requiring ratification** — the A# queue, each with what rests on it.
    This comes FIRST; it is the honesty bill for running without an oracle.
-2. Locked decisions (count + the load-bearing ones), rounds run, saturated or capped.
-3. Paths to both artifacts + the reviewer's verdict.
-4. Recommended next step (usually: ratify A#s → approve spec → writing-plans).
+2. **Per angle:** its central question, the core forks (options weighed · what was decided ·
+   why — one short paragraph each), and whether it closed reconciled or capped.
+3. Rounds run per angle; the reviewer's verdict.
+4. **The design files** — census, every angle companion, design doc, decision log, and the
+   domain-model / pipelines / CLI companions — each with its path.
+5. Recommended next step (usually: ratify A#s → approve spec → writing-plans).
+
+Report it to the ratifying authority (per the mode law). Inside an orchestrated room, the
+human reviews the design IN THE ROOM (the context lives there), the design files go to the
+architect for its score and feedback, and the orchestrator gets a one-line notice with
+the summary path.
 
 ## Red flags
 
 | Thought | Reality |
 |---------|---------|
 | "The responder's answer sounds right, lock it" | Sounds-right is not a tier. No evidence cited → ASSUMPTION → provisional. |
-| "We hit the round cap, close enough" | An unsaturated stop is a partial exploration. Say so in the hand-off. |
+| "An angle hit its cap, close enough" | An unsaturated stop is a partial exploration. Say so in the hand-off. |
+| "Skip the agenda stop, the angles are obvious" | The agenda is the human's steering point. Agreed angles are cheap; unagreed angles are where tokens burn. |
+| "I'll write the angle companions at the end" | Batched companions become cite-only indexes. Write each angle as it closes. |
 | "The spec is coherent, skip the reviewer" | Coherent-to-the-authors is exactly what the reviewer exists to test. |
 | "Autonomous context, so skip ratification" | Autonomy delegates the RUNNING, not the truth bar. Re-verify assumptions or leave them flagged. |
 | "Thread the whole transcript for richer context" | The ledger IS the context. Transcript-threading reintroduces anchoring and burns budget. |
