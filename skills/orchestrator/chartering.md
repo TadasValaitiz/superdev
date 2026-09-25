@@ -26,6 +26,13 @@ All types: merges · worktree retired · tests per disposition · residue filed.
 
 ## The best-path algorithm (yours to compute; the operator ratifies at co-plan)
 
+0. **Map first (cheap, fast):** before drawing the DAG, launch parallel `haiku` mapping
+   subagents over the candidate areas, read-only: who OWNS what (modules, commands, stored
+   documents), the SHARED SEAMS (files, types, stored formats two areas both touch), and the
+   DEPENDENCIES between areas (what consumes what). Their maps — plus the architect's
+   foundation confirmation (SKILL.md, the foundation gate) — are the DAG's nodes and edges,
+   and the consumer map + shared seams every brief carries. A room's write surface comes from
+   this map, never granted one request at a time mid-flight.
 1. **DAG:** nodes = candidate items (map-row clusters), edges = bridges.
 2. **Blocking radius** per node = transitive dependents.
 3. **Split high-radius nodes along corpus seams only:** extract the **unblocking kernel** — the minimal foundation item producing what dependents consume — so it merges earliest. A cut with no corpus seam is a design gap → residue for the architect; NEVER an improvised boundary. The architect is not in the loop on splits — it thinks holistically; seams are its product, scheduling is yours.
