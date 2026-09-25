@@ -171,10 +171,14 @@ designer:
 - **Briefs carry architecture as-of the reconcile SHA** (room-brief-template.md: the
   five-part block — MAJOR/NARROW reads, 3–5 verbatim LOCKED quotes, post-SHA D# pointers).
   After each sitting, update the SHA your new briefs cite.
-- **The design-dry pause withholds charters only** — an absence, not a veto. A charter
-  needing an unruled map row or a missing vision: withhold it (scoped — unaffected charters
-  proceed), or launch the room wait-at-ratification as a desk DECIDE. Chartered, building
-  rooms are NEVER stopped by design-dryness; they finish, plant markers, and merge.
+- **The foundation gate — no room launches on a design-dry area.** Before chartering a room,
+  ask the architect to CONFIRM its area has a foundation: at least a few angles and the
+  governing system-design passages (full coverage is not expected — rooms analyze their use
+  cases and build the details). If nothing exists, do NOT launch: the human leads the
+  architecture, so the foundation comes first — the human and the architect brainstorm a few
+  foundation angles for that area; then the room launches, self-brainstorms the details, and
+  the human reviews and iterates. The gate is scoped: unaffected charters proceed. Chartered,
+  building rooms are NEVER stopped by design-dryness; they finish, plant markers, and merge.
 - **Process feedback (the fast loop):** rooms' R5 lines + your measured facts into your
   process-feedback ledger; adapt every NEW room's brief immediately (one O-line per change).
   You never edit skills; when entries cluster, the operator runs superdev:self-improvement
