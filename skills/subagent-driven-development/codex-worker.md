@@ -85,7 +85,8 @@ codex-worker start --name review-b32e --cwd /absolute/project --prompt-file revi
 Creation can also fix Codex config overrides for the worker's life. `--search` enables
 live web search (`web_search="live"`, what `codex --search` sets). A reused worker keeps
 the conversation, so follow-ups can build on earlier answers, and it reads its skills
-once. Every turn still re-sends the growing thread history, including earlier search
+once per live session (a resume after a service restart may read them again). Every
+turn still re-sends the growing thread history, including earlier search
 results, so input tokens rise as the conversation grows. Unrelated questions may be
 cheaper in a fresh worker. `metrics.token_usage` does not yet report per-turn usage.
 `--config KEY=VALUE` is a

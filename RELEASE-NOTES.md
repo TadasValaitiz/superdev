@@ -17,7 +17,7 @@ with codex-cli 0.158.0, is still open and waiting on a decision.
 
 Research callers used one-shot `codex exec --search`, which reloads the plugin's skills on every call. A
 durable named worker can now be created with web search enabled and reused with `run`. It keeps the
-conversation and reads its skills once; it is not a per-turn token saving: every turn re-sends the growing
+conversation and reads its skills once per live session; it is not a per-turn token saving: every turn re-sends the growing
 thread history, so input tokens rise as the conversation grows (corrected in 8.6.2 after a measured
 checkride).
 

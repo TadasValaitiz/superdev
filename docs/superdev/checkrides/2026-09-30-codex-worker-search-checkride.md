@@ -152,3 +152,115 @@
     - 9e: an active-turn refusal with a fixed six-jurisdiction prompt on `research-iso2-e7a1c4` started in the background; the isolated status must show ≥1 active turn before the stop; the stop without `--force` should refuse with exit 3; `wait` for the job. A miss is a TIMING-MISS.
     - 9f restart → 9g resume `run` (search proves the config was re-sent; `commandExecution` checks skills-once) → 9h stop plus post-reads vs 16–18c and the global untouched → 9i `run` after the full stop (auto-restart and resume) → 9j final stop plus post-reads.
     - No `--force`, and no transport args after 9c.
+- **RUN 8a (step13):** `history --name research-5d2b8e` (no `--tail`) → exit 0. It returned ONE turn (turn 2): `requested_tail:1`, `older_available:true`. The default tail is 1, and turns carry only messages, not command or search items.
+- **RUN 8b (step14):** `messages --name research-5d2b8e --tail 2` → exit 0. Two messages, both from turn 2 (a commentary message and the final answer, both `selection:"live"`); `truncated:false`; `latest_cursor` 24.
+- **RUN 9a:** `mkdir -p /private/tmp/cw-iso-e7a1c4/{home,state,rt,work}` → exit 0.
+- **RUN step15:** `lsof -nP -iTCP:4611 -sTCP:LISTEN` → exit 1 with no output (the port is free).
+- **RUN step16:** `ls -la /private/tmp/codex-daemon-501/` → sockets `6c891589…` (19:01, the global service's target) and `a02c5d4d…` (04:56, codex's managed daemon), plus 6 `.lock` files.
+- **RUN step17:** global `daemon status` → ready 8.6.2, pids 51985/52058, 7 idle workers (unchanged).
+- **RUN step18:** `ps -axo pid,ppid,pgid,command | grep -i "[c]odex"` → the full list is in `step18.stdout`. The global chain: codex-worker 51985 (pgid 51985) → node codex 52058 (pgid 52058) → codex 52077 → code-mode-host 54064 (pgid 54064).
+- **RUN step18b (GATE):** isolated `daemon status` → exit 0: `status:"stopped"`, pids null, worker_count 0, migration `incomplete`/`ready:false` (no import of global instances), but `listener:"ws://127.0.0.1:4500"`. The executor stopped on the literal gate rule and did not run step18c or 9c.
+- **JUDGE 8a (evaluator):** OK. `older_available:true` is honest.
+  - With no `--tail` the operator gets 1 turn, and the help shows no default or unit.
+  - **F5 CLOSED as honest:** the 0 was Codex's `durationMs`, and turn 2 read unavailable; the surface can't show the items.
+  - **F12** (advisory, RESIDUAL): item-level evidence (commands run, search queries) is unreachable through status, messages or history; only counts are visible.
+- **JUDGE 8b (evaluator):** OK.
+  - **F13** (advisory, RESIDUAL): `messages` covers only the latest turn but says `truncated:false` with no turn id; `--tail` counts messages here but turns in `history`.
+  - F8 confirmed (`live` vs `explicit_final`), RESIDUAL.
+- **JUDGE 9a, 15–18 (evaluator):** OK. The baselines are good.
+  - The daemon directory is 0700 and the sockets 0600.
+  - A `.lock` left per path is Codex's, and codex-worker must NOT delete it.
+  - The global chain includes `codex-code-mode-host` 54064 in its OWN pgid, so J4 must check for an orphaned code-mode-host after the isolated stop.
+  - Other Codex processes (VS Code, the ChatGPT app, the managed daemon, an interactive codex) must stay untouched.
+- **GATE 18b RULING (evaluator):** PASS on substance. The pids are null, 0 workers and 0 migration sources, so this is a separate empty state home; the 4500 shown is a default for a never-created service. The literal criterion was the evaluator's error. This adds weight to **F2**: defaults and stored values shown as live misled a careful operator into a STOP in this ride.
+  - Order from here: step18c; 9c; 9d (isolated plus global status); 9d-bis (ps, daemon dir, rt listing to record the isolated identities); then 9e onward; and `history --tail 2` before RIDE END.
+- **RUN step18c:** the isolated `rt` was empty.
+- **RUN 9c (step19):** isolated `start --name research-iso-e7a1c4 --cwd …/work … --read-only --search --no-callback --app-server-listen ws://127.0.0.1:4611` → exit 0, stderr empty.
+  - Listener 4611; new session `9fce3bfd…` and thread `01a0f31c-1a21…`; `config {"web_search":"live"}`.
+  - Answer cites the EU Register PDF.
+  - webSearch 2, commandExecution 2, `command_duration_ms` 0, `token_usage` unavailable, wall 23.8 s.
+- **RUN step20:** isolated `daemon status` → ready 8.6.2, pid 97884, app-server 97886, listener 4611, 1 idle worker, empty migration.
+- **RUN step20g:** global `daemon status` is byte-identical to step17 (`diff` exit 0).
+- **RUN step21b:** the daemon directory gained a new socket `376919b0…` and `.lock` (19:18); the 8 other entries are unchanged.
+- **RUN step21c:** the isolated `rt/scw-501-global/`:
+  - `c -> /private/tmp/codex-daemon-501/376919b0…`, `l`, `s`, `s.lock`
+  - also `node-compile-cache/` (84 blobs) and two empty `.tmp*` directories (node/codex temp, via the isolated TMPDIR)
+- **RUN step21a:** the isolated chain is 97884 (pgid 97884, codex-worker serve) → 97886 node (pgid 97886) → 97887 codex (pgid 97886) → **98221 codex-code-mode-host (pgid 98221)**. The global chain is unchanged.
+- **JUDGE 18c, 9c, 20, 20g, 21 (evaluator):** OK, no findings.
+  - The isolated worker and service are fully separate. step20g byte-identical to step17 is the strongest isolation evidence.
+  - step21 is the D197 layout seen live: an owner-only target directly in the 0700 daemon directory.
+  - **Teardown identities to check:**
+    - The isolated link, target and process groups 97884/97886, and **98221 (code-mode-host, its own pgid)**, must be gone.
+    - A left-behind `.lock` is Codex's own.
+    - node-compile-cache and the `.tmp*` directories are ordinary scratch files.
+    - The global chain, target, managed daemon and other Codex processes must be untouched.
+
+### Step 10 (J4, 9e: active-turn stop refusal)
+- **RULE (evaluator):** GO in this exact order:
+  - 9e-0: `work2` directory plus the jurisdictions prompt to `step22.question.md`.
+  - 9e-1 (step22): the isolated `start research-iso2-e7a1c4 … &` in the background (no `--app-server-listen`); record `$!`; never kill it.
+  - 9e-2 (step23): the isolated status must show ≥1 active turn with iso2 active, otherwise a TIMING-MISS.
+  - 9e-3 (step24): the isolated `daemon stop` without `--force`. Expected exit 3, a typed refusal, and an impact report naming iso2 active and iso idle; a `--force` in `next_actions` is a finding.
+  - 9e-4 (step25): `wait`; iso2's turn completed unaffected.
+  - 9e-5 (step26): isolated status showing 0 active, plus `ps`: the isolated chain alive with the same PIDs (the refusal sent no signal).
+- **RUN 9e:** all in one Bash call, with the ISO environment on every command.
+  - **step22:** `start research-iso2-e7a1c4 … &` (the six-jurisdiction prompt), background PID 1974, never signalled.
+  - **step23** (+3 s): isolated status `active_turn_count` 1 (iso2, thread `01a0f31e-88b3…`, turn `01a0f31e-88e9…`); worker_count 2, iso2 active and iso idle.
+  - **step24:** isolated `daemon stop` (no `--force`) → **exit 3**, `-32040 service_busy` "Global service has active work", `retryable:false`. `details.active` names the iso2 thread, session and turn; `workers` shows iso2 active and iso idle. `next_actions`: `daemon status` and `status --name research-iso2-e7a1c4` (no `--force`).
+  - **step25:** `wait` → step22 exit 0. iso2's turn completed unaffected (67.1 s, webSearch 5, commandExecution 2); a six-jurisdiction answer with citations.
+  - **step26:** isolated status ready, the same pids 97884/97886, 2 idle, 0 active. `ps`: the isolated chain (97884/97886/97887/98221) alive with the same PIDs; no new code-mode-host; the global chain unchanged.
+- **JUDGE 9e (evaluator):** OK. The gate guards something real.
+  - step23 is a live inventory at the level of detail J5 needs.
+  - step24 is a typed `service_busy` refusal with a full impact report and inspect-only `next_actions`, with **no `--force` suggested**.
+  - step26 proves no signal was sent; iso2 reused code-mode-host 98221.
+  - **F14** (advisory, RESIDUAL): `retryable:false` next to "before retrying maintenance", and the output doesn't say stop will succeed once active reaches 0.
+
+### Step 11 (J4 9f: isolated restart)
+- **RULE (evaluator):** AMEND. First, **step26b**: inode baselines via `ls -lai` of the daemon directory and of `rt/scw-501-global/`, because the target name is likely a hash of the link path and so the name alone can't prove recreation.
+  - Then **step27** isolated `daemon restart` (no `--force`, no transport args): GO.
+  - Post-reads:
+    - 28a: isolated status (new pids, 4611, 2 idle).
+    - 28b: `ps`. The old 97886/97887 gone; **98221 gone and not re-parented to 1**; the global chain and others' Codex processes untouched.
+    - 28c: the daemon directory: the isolated target has a new inode; the global `6c89…` and managed `a02c…` inodes unchanged.
+    - 28d: the isolated `rt` listing: link `c` recreated.
+    - 28e: global status byte-identical to step17.
+    - 28f: isolated `status --name research-iso-e7a1c4`.
+- **RUN 9f:** (ISO environment, no `--force`, no transport args)
+  - **step26b1/2 (before):** the isolated target `376919b0…` inode 90477493; the link `c` inode 90477494; the global `6c89…` 90468854; the managed `a02c…` 89280726.
+  - **step27:** `daemon restart` → exit 0. `maintenance {action restart, status completed, forced false, inventory [], workers 2 idle, durable_state preserved}`; `service` ready with new pid 8571 / app-server 8573 on 4611.
+  - **step28a:** isolated status ready, 8571/8573, 2 idle.
+  - **step28b:** `ps`: the old 97884/97886/97887 and **98221 all ABSENT** (no orphan). The new chain is 8571 (pgid 8571) → 8573 node (pgid 8573) → 8574 codex; no code-mode-host yet. The global chain and all others' Codex processes are PRESENT and unchanged.
+  - **step28c:** the isolated target recreated under the SAME name `376919b0…` with a new inode 90488398; its `.lock` unchanged (90477492); every other entry unchanged in inode and mtime (global `6c89…` 90468854).
+  - **step28d:** link `c` recreated (inode 90488399) → the same target name; `s` recreated; `l` and `s.lock` unchanged.
+  - **step28e:** global status byte-identical to step17.
+  - **step28f:** `status --name research-iso-e7a1c4` → **exit 3 `-32023 daemon_stopped` "Worker daemon is stopped"**, with `next_actions` `daemon start`, `status --name …`, and raw resume, while the service is ready (step28a).
+  - ROOM SESSION code read: `facade.status` returns `_stopped_fault` whenever the worker is not attached in the current generation. The code dates from 2026-08-19 and is not in this branch's diff.
+- **JUDGE 9f (evaluator):** the restart is OK and is the best CWS-1 evidence: the whole old owned chain is gone including code-mode-host 98221, with no orphan; the target and link were recreated (new inodes); the global target, managed daemon, foreign Codex processes and global status are all untouched.
+  - **F15** (honesty, blocks-milestone, DESIGN-DOC; pre-existing from 2026-08-19; **BLOCKING for the J5 GREEN-LIGHT until disclosed**): after a restart, `status --name` says "Worker daemon is stopped" with `daemon start` as the first remedy while the service is ready. The working remedy `run --name` is missing, and the restart result doesn't say workers become detached.
+  - **ROOM SESSION:** disclosed F15 to supplements-orchestrator as a J5 impact addendum for the human.
+
+### Step 12 (J4 9g: scope F15, then resume)
+- **RULE (evaluator):**
+  - AMEND: first scope F15 with step28g `messages --tail 1` and step28h `history --tail 1` (do the other recovery reads fail too?), then step28i `daemon start` exactly as the remedy says, step28j `status --name` again, and step28k global status vs step17.
+  - Then step29 GO: `run --name research-iso-e7a1c4` with the follow-up "Follow-up on the EU Register entries you cited (IDs 1935 and 1737): which Commission Regulation listed them as non-authorised, with its number and date? One sentence, cite the EUR-Lex URL."
+    - The same session and thread with a new turn; config live.
+    - **webSearch ≥1 proves the config was re-sent on resume**; commandExecution settles "skills once".
+  - Then step30: `status --name` (attached) plus `ps`.
+- **RUN 9g:** (ISO environment)
+  - **step28g:** `messages --name research-iso-e7a1c4 --tail 1` → **exit 1**, `-32603 internal_error`, `details.reason:"AttributeError"`, no next action.
+  - **step28h:** `history --name … --tail 1` → exit 3, the same false `daemon_stopped` as step28f.
+  - **step28i:** `daemon start` (the offered remedy) → exit 0, already ready, the same pids 8571/8573, listener 4611 (nothing global).
+  - **step28j:** `status --name` → still exit 3 `daemon_stopped`: **the remedy is a dead end**.
+  - **step28k:** global status byte-identical to step17.
+  - **step29:** `run --name research-iso-e7a1c4 --prompt-file step29.question.md` → exit 0.
+    - The same session `9fce3bfd…` and thread `01a0f31c-1a21…`, new turn `01a0f324…`, `config {"web_search":"live"}`.
+    - **webSearch 3** (the config was re-sent on resume), commandExecution 1.
+    - The answer cites Commission Regulation (EU) No 432/2012 (EUR-Lex `eli/reg/2012/432/oj`); wall 27.0 s.
+  - **step30:** `status --name` → exit 0, attached true, latest turn `01a0f324…`. `ps`: the isolated chain 8571/8573/8574, plus the new code-mode-host **13449 (pgid 13449)**; the global chain unchanged.
+  - ROOM SESSION root cause for step28g: `facade.messages` catches `UnknownSession`/`SessionDetached` and calls `_stopped_fault(request.name, None)`. `_stopped_fault` then dereferences `record.thread_id` → AttributeError → untyped `internal_error`. Present since 2026-08-19 (631e9df); not in this branch's diff.
+- **JUDGE 9g (evaluator):**
+  - **F16** (honesty/safety, **blocks-publish**; pre-existing from 631e9df, 2026-08-19, but newly reachable): after a restart, `messages --name` fails with an untyped `internal_error: AttributeError`, exit 1, and no remedy.
+  - **F15 upgraded to blocks-publish:** the `daemon start` remedy is a dead end (step28i no-op → step28j still "stopped"). The human may take either as an exception in their own words; if so, the J5 report and the 8.6.2 notes must disclose it.
+  - **step29 meets J4's core promise:** the same session and thread after a restart, config live, **webSearch 3 (config re-sent on resume)**, continuity in the answer. The resume itself is silent (goes under F15's DESIGN-DOC).
+  - The post-resume `commandExecution: 1` question was sent to the ROOM SESSION.
+- **ROOM SESSION out-of-surface read** (Codex session record for thread `01a0f31c-1a21…`): the post-restart turn's one command was `sed -n '1,120p' …/using-superdev/SKILL.md`, a skill **re-read after the resume**. The codex-worker.md and RELEASE-NOTES wording is corrected to "reads its skills once per live session (a resume after a service restart may read them again)".
