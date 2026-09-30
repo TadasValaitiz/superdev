@@ -279,3 +279,21 @@
 - **RUN step32e:** `lsof` 4611 → exit 1, empty (listener freed).
 - **RUN step32f:** global status byte-identical to step17.
 - **RUN step32g:** global `status --name research-5d2b8e` → attached, config live.
+- **JUDGE 9h (evaluator):** OK. The CWS-1 teardown passes on live evidence.
+  - The whole owned chain is gone, including code-mode-host 13449 outside the owned group; nothing is orphaned.
+  - The target, link and control socket are gone and the port freed.
+  - What remains is expected (Codex's `.lock`; codex-worker's `l` and `s.lock`).
+  - Nothing else was touched.
+  - F2 addition: `listener:null` in the stop result vs the configured 4611 in the stopped status.
+- **FIX LANE (ROOM SESSION), commit db2405b:** F15/F16 fixed test-first (the new `WORKER_DETACHED` -32043; `messages` passes the record; `worker_attachment` on completed stop/restart; docs). One test made hermetic (the preflight launcher test assumed port 4500 was free).
+- **ASK (evaluator), answered by the ROOM SESSION:** the fixed code runs in the SERVICE process. The global 51985 runs the pre-fix build labelled 8.6.2, and the trusted preflight is idempotent on an exact version, so the fix needs a distinguishable version.
+- **Evaluator rulings:**
+  - 8.6.3 is the only honest route; 8.6.2 stays the pre-fix checkride build.
+  - It prefers installing 8.6.3 via the trusted preflight INSIDE the isolated environment, so nothing global is armed before J5.
+  - R9 is GO now.
+  - A concern about the literal `run` remedy (a verbatim copy restarts work on a full-access implementer).
+- **FIX LANE follow-up (ROOM SESSION):** the detached remedy now leads with `codex-worker session resume --session <uuid>` ("Re-attach … without starting a turn"). The second action is `run --name <w> --prompt "Report your status; do not start new work."` ("this runs a turn, so replace the prompt…"). Docs updated.
+- **DECIDE requested** from the orchestrator/human: 8.6.3 and install timing.
+
+### Step 14 (J3 carry-over, R9 → step33)
+- **RUN:** global `history --name research-5d2b8e --tail 2` → exit 0. Both turns in order (`01a0f30c-8c62…`, then `01a0f313-eae3…`) with their final answers; `older_available:false`. It closes J3's "both turns visible" (turns carry messages only; F12 stands).

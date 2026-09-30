@@ -585,14 +585,18 @@ class WorkerFacade:
         """The service is serving this request, so an unattached worker is detached, not stopped."""
         if record is None:
             return self._stopped_fault()
-        resume = "run --name %s --prompt %s" % (shlex.quote(name), shlex.quote("Continue where you left off."))
+        run = "run --name %s --prompt %s" % (
+            shlex.quote(name), shlex.quote("Report your status; do not start new work."))
         return FacadeFault(FacadeFaultCode.WORKER_DETACHED,
                            "Worker is detached from this service generation", "worker_detached",
                            details=self._details({}, record),
                            known_ids=self._known(record, name), next_actions=[
-                               {"command": self._command(resume),
-                                "reason": "Resume this worker in the current service generation; "
-                                          "use your own follow-up prompt"}])
+                               {"command": self._command("session resume --session %s" % record.session_id),
+                                "reason": "Re-attach this worker to the current service generation "
+                                          "without starting a turn"},
+                               {"command": self._command(run),
+                                "reason": "Or resume by continuing: this runs a turn, so replace the "
+                                          "prompt with your real follow-up"}])
 
     def _stopped_fault(self):
         return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",

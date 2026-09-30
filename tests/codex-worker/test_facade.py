@@ -1310,12 +1310,16 @@ class FacadeTests(unittest.TestCase):
             },
         ])
 
-    def test_detached_known_worker_uses_exact_literal_run_remedy(self):
+    def test_detached_known_worker_reattaches_without_a_turn_before_offering_run(self):
         record = self._record("detached-exact")
         fault = self._facade()._detached_fault(record.name, record)
         self.assertEqual([shlex.split(action["command"]) for action in fault.next_actions], [
-            ["codex-worker", "run", "--name", "detached-exact", "--prompt", "Continue where you left off."],
+            ["codex-worker", "session", "resume", "--session", record.session_id],
+            ["codex-worker", "run", "--name", "detached-exact", "--prompt",
+             "Report your status; do not start new work."],
         ])
+        self.assertIn("without starting a turn", fault.next_actions[0]["reason"])
+        self.assertIn("runs a turn", fault.next_actions[1]["reason"])
         self.assertNotIn("<", json.dumps(fault.next_actions))
 
     def test_worker_detached_from_this_generation_is_reported_truthfully_with_run_remedy(self):
@@ -1339,7 +1343,9 @@ class FacadeTests(unittest.TestCase):
                 self.assertIn("detached from this service generation", fault.message)
                 self.assertEqual(fault.known_ids["thread_id"], record.thread_id)
                 commands = [shlex.split(action["command"]) for action in fault.next_actions]
-                self.assertEqual(commands[0][:4], ["codex-worker", "run", "--name", record.name])
+                self.assertEqual(commands[0], ["codex-worker", "session", "resume",
+                                               "--session", record.session_id])
+                self.assertEqual(commands[1][:4], ["codex-worker", "run", "--name", record.name])
                 self.assertNotIn(["codex-worker", "daemon", "start"], commands)
 
     def test_worker_unknown_to_fresh_runtime_is_detached_not_stopped(self):
@@ -1379,7 +1385,9 @@ class FacadeTests(unittest.TestCase):
         })
         self.assertEqual([shlex.split(action["command"])
                           for action in result.error.next_actions], [
-            ["codex-worker", "run", "--name", record.name, "--prompt", "Continue where you left off."],
+            ["codex-worker", "session", "resume", "--session", record.session_id],
+            ["codex-worker", "run", "--name", record.name, "--prompt",
+             "Report your status; do not start new work."],
         ])
         worker_cli._validate_wire_recovery_actions({
             "error": {"data": result.error.to_dict()}})
