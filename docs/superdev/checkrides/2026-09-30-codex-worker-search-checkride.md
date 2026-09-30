@@ -137,3 +137,18 @@
   - codex-worker.md now says reuse keeps the conversation and reads skills once, but every turn re-sends the growing history, so input tokens rise; unrelated questions may be cheaper in a fresh worker; `metrics.token_usage` doesn't report usage yet.
   - The RELEASE-NOTES 8.6.0 paragraph was corrected the same way, marked "corrected in 8.6.2".
   - The evaluator re-checks the wording before the verdict.
+- **F11 re-check (evaluator):**
+  - codex-worker.md: accepted. "reads its skills once" is to be proven after the J4 restart (else "once per live session").
+  - RELEASE-NOTES: AMEND "does not make each turn cheaper" (it overclaims the other way; the one-shot baseline wasn't measured) to "it is not a per-turn token saving: every turn re-sends the growing thread history…". Applied by the ROOM SESSION.
+
+### Step 8 (J3: 8a `history` → step13, 8b `messages --tail 2` → step14) and Step 9 (J4 isolated service)
+- **PROPOSE (executor):** J3 reads, and the J4 plan (isolation env on every command; port 4611; baselines; isolated start; an active-turn refusal; stop and after-reads).
+- **RULE (evaluator):**
+  - 8a and 8b: GO.
+  - J4:
+    - 9a+9b: GO as one set, with amendments: `ps -axo pid,ppid,pgid,command | grep -i "[c]odex"`; **step18b** isolated `daemon status` as a GATE (it must show stopped and 0 workers with no global data, else STOP: isolation leak); **step18c** `ls -laR` of the isolated `rt`.
+    - 9c: `--cwd /private/tmp/cw-iso-e7a1c4/work` (new, empty).
+    - 9d: GO.
+    - 9e: an active-turn refusal with a fixed six-jurisdiction prompt on `research-iso2-e7a1c4` started in the background; the isolated status must show ≥1 active turn before the stop; the stop without `--force` should refuse with exit 3; `wait` for the job. A miss is a TIMING-MISS.
+    - 9f restart → 9g resume `run` (search proves the config was re-sent; `commandExecution` checks skills-once) → 9h stop plus post-reads vs 16–18c and the global untouched → 9i `run` after the full stop (auto-restart and resume) → 9j final stop plus post-reads.
+    - No `--force`, and no transport args after 9c.
