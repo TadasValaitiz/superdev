@@ -264,3 +264,18 @@
   - **step29 meets J4's core promise:** the same session and thread after a restart, config live, **webSearch 3 (config re-sent on resume)**, continuity in the answer. The resume itself is silent (goes under F15's DESIGN-DOC).
   - The post-resume `commandExecution: 1` question was sent to the ROOM SESSION.
 - **ROOM SESSION out-of-surface read** (Codex session record for thread `01a0f31c-1a21…`): the post-restart turn's one command was `sed -n '1,120p' …/using-superdev/SKILL.md`, a skill **re-read after the resume**. The codex-worker.md and RELEASE-NOTES wording is corrected to "reads its skills once per live session (a resume after a service restart may read them again)".
+- **DECIDE (supplements-orchestrator, relaying the human under D197: "fix stuff" / "it's important that we fix the process and agree on the tooling"): A.**
+  - Fix F16 (pass the record) and F15 (a typed `worker_detached` fault, "worker is detached from this service generation", remedy `run --name <w> --prompt …`, never `daemon start`; the stop/restart impact says workers become detached), test-first.
+  - Re-ride 28f–28j after one more isolated restart; publish 8.6.2 with both fixed.
+  - J5 stays on HOLD for the human's explicit GREEN-LIGHT.
+
+### Step 13 (J4 9h: isolated stop)
+- **RULE (evaluator):** GO (ruled with 9g).
+- **RUN step31:** `<ISO> daemon stop` → exit 0: `{"action":"stop","status":"completed","forced":false,"listener":null,"inventory":{"items":[]},"workers":{…2 idle…},"durable_state":"preserved"}`.
+- **RUN step32a:** isolated status stopped, pids null, 2 idle in the registry, listener 4611 shown (configured).
+- **RUN step32b:** `ps`: 8571/8573/8574 and **13449 ABSENT**; no process mentions `cw-iso-e7a1c4` (except the executor's own shell); the global chain and all foreign processes PRESENT.
+- **RUN step32c:** the isolated target `376919b0…` (90488398) gone; its `.lock` (90477492) remains; every other entry unchanged.
+- **RUN step32d:** the isolated `c` and `s` gone; `l` and `s.lock` remain.
+- **RUN step32e:** `lsof` 4611 → exit 1, empty (listener freed).
+- **RUN step32f:** global status byte-identical to step17.
+- **RUN step32g:** global `status --name research-5d2b8e` → attached, config live.

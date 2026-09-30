@@ -1,0 +1,119 @@
+total 0
+drwxr-xr-x@ 6 tadas  wheel  192 Sep 30 19:18 .
+drwxr-xr-x@ 6 tadas  wheel  192 Sep 30 19:14 ..
+drwxr-xr-x@ 2 tadas  wheel   64 Sep 30 19:18 .tmpeE9MZy
+drwxr-xr-x@ 2 tadas  wheel   64 Sep 30 19:18 .tmphqiyTX
+drwxr-xr-x@ 3 tadas  wheel   96 Sep 30 19:18 node-compile-cache
+drwx------@ 6 tadas  wheel  192 Sep 30 19:18 scw-501-global
+
+/private/tmp/cw-iso-e7a1c4/rt/.tmpeE9MZy:
+total 0
+drwxr-xr-x@ 2 tadas  wheel   64 Sep 30 19:18 .
+drwxr-xr-x@ 6 tadas  wheel  192 Sep 30 19:18 ..
+
+/private/tmp/cw-iso-e7a1c4/rt/.tmphqiyTX:
+total 0
+drwxr-xr-x@ 2 tadas  wheel   64 Sep 30 19:18 .
+drwxr-xr-x@ 6 tadas  wheel  192 Sep 30 19:18 ..
+
+/private/tmp/cw-iso-e7a1c4/rt/node-compile-cache:
+total 0
+drwxr-xr-x@  3 tadas  wheel    96 Sep 30 19:18 .
+drwxr-xr-x@  6 tadas  wheel   192 Sep 30 19:18 ..
+drwxr-xr-x@ 84 tadas  wheel  2688 Sep 30 19:18 v24.14.1-arm64-cf738c9d-501
+
+/private/tmp/cw-iso-e7a1c4/rt/node-compile-cache/v24.14.1-arm64-cf738c9d-501:
+total 952
+drwxr-xr-x@ 84 tadas  wheel   2688 Sep 30 19:18 .
+drwxr-xr-x@  3 tadas  wheel     96 Sep 30 19:18 ..
+-rw-------@  1 tadas  wheel   2212 Sep 30 19:18 075a7803
+-rw-------@  1 tadas  wheel   1436 Sep 30 19:18 075aa293
+-rw-------@  1 tadas  wheel   1412 Sep 30 19:18 078bcd19
+-rw-------@  1 tadas  wheel   1356 Sep 30 19:18 0b037105
+-rw-------@  1 tadas  wheel   1532 Sep 30 19:18 105cd077
+-rw-------@  1 tadas  wheel   1732 Sep 30 19:18 11c97242
+-rw-------@  1 tadas  wheel   5748 Sep 30 19:18 124463ab
+-rw-------@  1 tadas  wheel   2316 Sep 30 19:18 178059a1
+-rw-------@  1 tadas  wheel   8468 Sep 30 19:18 18e7b200
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 1d36f8c7
+-rw-------@  1 tadas  wheel    892 Sep 30 19:18 20f61ac1
+-rw-------@  1 tadas  wheel   1100 Sep 30 19:18 213e869b
+-rw-------@  1 tadas  wheel   4684 Sep 30 19:18 259fbc66
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 27f86a84
+-rw-------@  1 tadas  wheel    980 Sep 30 19:18 296ff37a
+-rw-------@  1 tadas  wheel   3644 Sep 30 19:18 2ad88cee
+-rw-------@  1 tadas  wheel   2524 Sep 30 19:18 2be89d4b
+-rw-------@  1 tadas  wheel    956 Sep 30 19:18 2cf8f91a
+-rw-------@  1 tadas  wheel    908 Sep 30 19:18 373fb659
+-rw-------@  1 tadas  wheel   2356 Sep 30 19:18 3862ce82
+-rw-------@  1 tadas  wheel    972 Sep 30 19:18 3b666630
+-rw-------@  1 tadas  wheel   5740 Sep 30 19:18 3b8a0805
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 3bbdd3a3
+-rw-------@  1 tadas  wheel   2924 Sep 30 19:18 3dd501a2
+-rw-------@  1 tadas  wheel   3012 Sep 30 19:18 3e6fd030
+-rw-------@  1 tadas  wheel  79716 Sep 30 19:18 3fd4f950
+-rw-------@  1 tadas  wheel    940 Sep 30 19:18 41a77b30
+-rw-------@  1 tadas  wheel   7460 Sep 30 19:18 4279273b
+-rw-------@  1 tadas  wheel   1084 Sep 30 19:18 43f450a9
+-rw-------@  1 tadas  wheel   1572 Sep 30 19:18 4e7a04aa
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 50285b95
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 517a2360
+-rw-------@  1 tadas  wheel   7188 Sep 30 19:18 53fb2a52
+-rw-------@  1 tadas  wheel   1140 Sep 30 19:18 5b50c7f0
+-rw-------@  1 tadas  wheel    908 Sep 30 19:18 6102c2fb
+-rw-------@  1 tadas  wheel  10412 Sep 30 19:18 63a7f049
+-rw-------@  1 tadas  wheel   3436 Sep 30 19:18 69438f1e
+-rw-------@  1 tadas  wheel    932 Sep 30 19:18 6b58b932
+-rw-------@  1 tadas  wheel    940 Sep 30 19:18 6ce9dfd2
+-rw-------@  1 tadas  wheel   2300 Sep 30 19:18 708d0d5b
+-rw-------@  1 tadas  wheel   1244 Sep 30 19:18 7a17fb72
+-rw-------@  1 tadas  wheel   3500 Sep 30 19:18 7aa5e83b
+-rw-------@  1 tadas  wheel   1092 Sep 30 19:18 7ae9bb60
+-rw-------@  1 tadas  wheel   4428 Sep 30 19:18 7dc154f6
+-rw-------@  1 tadas  wheel   1052 Sep 30 19:18 849ac550
+-rw-------@  1 tadas  wheel   3100 Sep 30 19:18 89bedc53
+-rw-------@  1 tadas  wheel   1108 Sep 30 19:18 9011e65c
+-rw-------@  1 tadas  wheel   2340 Sep 30 19:18 9849e4fa
+-rw-------@  1 tadas  wheel    948 Sep 30 19:18 9e49fc91
+-rw-------@  1 tadas  wheel   1316 Sep 30 19:18 a05ba152
+-rw-------@  1 tadas  wheel   1548 Sep 30 19:18 a28aceda
+-rw-------@  1 tadas  wheel   1452 Sep 30 19:18 a8e3459a
+-rw-------@  1 tadas  wheel    956 Sep 30 19:18 a9d638c5
+-rw-------@  1 tadas  wheel   1300 Sep 30 19:18 aa1bc3eb
+-rw-------@  1 tadas  wheel   1244 Sep 30 19:18 aad0e2f0
+-rw-------@  1 tadas  wheel   1012 Sep 30 19:18 aae99487
+-rw-------@  1 tadas  wheel   1172 Sep 30 19:18 ad5a1540
+-rw-------@  1 tadas  wheel   1012 Sep 30 19:18 afd636be
+-rw-------@  1 tadas  wheel    972 Sep 30 19:18 b06599bb
+-rw-------@  1 tadas  wheel   1292 Sep 30 19:18 b1a536ae
+-rw-------@  1 tadas  wheel   1428 Sep 30 19:18 b46d6409
+-rw-------@  1 tadas  wheel   4556 Sep 30 19:18 b6079377
+-rw-------@  1 tadas  wheel   1124 Sep 30 19:18 bf2b52bd
+-rw-------@  1 tadas  wheel   4340 Sep 30 19:18 c34f2bf3
+-rw-------@  1 tadas  wheel   2628 Sep 30 19:18 c5f207fe
+-rw-------@  1 tadas  wheel   2332 Sep 30 19:18 c9f4ea8e
+-rw-------@  1 tadas  wheel   1844 Sep 30 19:18 cdda977e
+-rw-------@  1 tadas  wheel   1028 Sep 30 19:18 d120f861
+-rw-------@  1 tadas  wheel   3796 Sep 30 19:18 d361da38
+-rw-------@  1 tadas  wheel   3564 Sep 30 19:18 d384ade1
+-rw-------@  1 tadas  wheel    908 Sep 30 19:18 d63ce311
+-rw-------@  1 tadas  wheel   1148 Sep 30 19:18 deae1d72
+-rw-------@  1 tadas  wheel   2700 Sep 30 19:18 e1bc3b2f
+-rw-------@  1 tadas  wheel   2012 Sep 30 19:18 e67d433f
+-rw-------@  1 tadas  wheel   1980 Sep 30 19:18 e9795566
+-rw-------@  1 tadas  wheel  13036 Sep 30 19:18 f42cd409
+-rw-------@  1 tadas  wheel   2412 Sep 30 19:18 f510e63e
+-rw-------@  1 tadas  wheel   3548 Sep 30 19:18 f5e9a3db
+-rw-------@  1 tadas  wheel   1420 Sep 30 19:18 f68901f9
+-rw-------@  1 tadas  wheel   2620 Sep 30 19:18 fa8f62d1
+-rw-------@  1 tadas  wheel   4820 Sep 30 19:18 ff74aa1e
+-rw-------@  1 tadas  wheel   8884 Sep 30 19:18 ffb18f39
+
+/private/tmp/cw-iso-e7a1c4/rt/scw-501-global:
+total 0
+drwx------@ 6 tadas  wheel  192 Sep 30 19:18 .
+drwxr-xr-x@ 6 tadas  wheel  192 Sep 30 19:18 ..
+lrwxr-xr-x@ 1 tadas  wheel   94 Sep 30 19:18 c -> /private/tmp/codex-daemon-501/376919b00444a9498a12b21ebee7cd6d7bf8d82d4e67ba204bb2106ec51dbe2f
+-rw-------@ 1 tadas  wheel    0 Sep 30 19:18 l
+srw-------@ 1 tadas  wheel    0 Sep 30 19:18 s
+-rw-------@ 1 tadas  wheel    0 Sep 30 19:18 s.lock
