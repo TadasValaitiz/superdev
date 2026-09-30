@@ -187,6 +187,7 @@ inspection, use the advanced compatibility families: `model list`, `session
 start`/`resume`/`list`/`show`, and `turn start`/`wait`/`status`/`events`/`steer`/
 `interrupt`. Raw `session resume --thread <id> --name <annotation>` repairs a retained
 upstream thread. For a retained wrapper UUID, use `session resume --session <uuid>`.
+That one command is also the ordinary no-turn re-attach offered by `worker_detached`.
 Raw endpoint selection is an expert diagnostic path, not a normal worker recipe.
 The exact raw controls are `turn steer` and `turn interrupt`. `daemon serve` remains a
 hidden foreground supervision/debugging entry point; do not use it for ordinary work.

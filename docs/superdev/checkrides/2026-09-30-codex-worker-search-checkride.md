@@ -297,3 +297,8 @@
 
 ### Step 14 (J3 carry-over, R9 → step33)
 - **RUN:** global `history --name research-5d2b8e --tail 2` → exit 0. Both turns in order (`01a0f30c-8c62…`, then `01a0f313-eae3…`) with their final answers; `older_available:false`. It closes J3's "both turns visible" (turns carry messages only; F12 stands).
+- **JUDGE R9 (evaluator):** OK; **J3 done** (status, messages and history discharged). The turn timestamps agree with the measured wall time.
+  - **F17** (advisory, RESIDUAL): `started_at`/`completed_at` are bare epoch seconds.
+  - `history` requiring attachment is a RESIDUAL design question.
+  - The remedy change is accepted in principle and judged live in R5 (the no-turn re-attach: exit 0, then status attached, history shows no new turn, and the next run still searches).
+  - The doc passage on the `session` family needs reconciling; the ROOM SESSION did so (codex-worker.md: "That one command is also the ordinary no-turn re-attach offered by `worker_detached`").
