@@ -408,16 +408,26 @@ class MaintenanceResult:
                 "reason": self.impact_unavailable_reason,
             }),
             "durable_state": self.durable_state,
+            "worker_attachment": self.worker_attachment,
         }
+
+    @property
+    def worker_attachment(self) -> str:
+        """Completed stop/restart ends every attachment; workers resume on their next `run`."""
+        return "detached_until_next_run" if self.status == "completed" else "unchanged"
 
     @classmethod
     def from_dict(cls, value: JsonObject):
         required = {"action", "status", "forced", "listener", "inventory", "workers",
                     "durable_state"}
-        if not isinstance(value, dict) or set(value) != required:
+        if not isinstance(value, dict) or set(value) not in (required, required | {"worker_attachment"}):
             raise ValueError("invalid MaintenanceResult fields")
         if value["durable_state"] != "preserved":
             raise ValueError("maintenance must preserve durable state")
+        expected_attachment = ("detached_until_next_run" if value["status"] == "completed"
+                               else "unchanged")
+        if value.get("worker_attachment", expected_attachment) != expected_attachment:
+            raise ValueError("maintenance worker attachment is inconsistent with its status")
         unavailable = {
             "availability": "unavailable",
             "reason": "upstream_inventory_unavailable",

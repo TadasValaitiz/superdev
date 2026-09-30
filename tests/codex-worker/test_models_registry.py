@@ -344,6 +344,28 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(self.state_path.read_bytes(), original)
 
 
+class MaintenanceWorkerAttachmentTests(unittest.TestCase):
+    def test_completed_maintenance_says_workers_become_detached(self):
+        from codex_worker.models import ActiveInventory, MaintenanceResult, WorkerImpact
+        for action, listener in (("stop", None), ("restart", "ws://127.0.0.1:4500")):
+            with self.subTest(action=action):
+                result = MaintenanceResult.completed(action, ActiveInventory(), False, listener,
+                                                     WorkerImpact(idle_names=("idle-a1",)))
+                wire = result.to_dict()
+                self.assertEqual(wire["worker_attachment"], "detached_until_next_run")
+                self.assertEqual(MaintenanceResult.from_dict(wire).to_dict(), wire)
+
+    def test_pre_attachment_maintenance_wire_still_parses(self):
+        from codex_worker.models import ActiveInventory, MaintenanceResult, WorkerImpact
+        wire = MaintenanceResult.completed("stop", ActiveInventory(), False, None,
+                                           WorkerImpact()).to_dict()
+        wire.pop("worker_attachment")
+        self.assertEqual(MaintenanceResult.from_dict(wire).status, "completed")
+        wire["worker_attachment"] = "unchanged"
+        with self.assertRaises(ValueError):
+            MaintenanceResult.from_dict(wire)
+
+
 class WorkerConfigRegistryTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()

@@ -174,6 +174,13 @@ then `messages --name` or `history --name`. Do not issue `run` until the prior t
 terminal; it must not overlap an active old turn. Explicitly `interrupt --name` only
 when cancellation is intended.
 
+A service stop or restart, including an automatic generation replacement, detaches
+every worker until its next `run`. The maintenance result says so with
+`worker_attachment: "detached_until_next_run"`. Until then, `status`, `messages` and
+`history` on that worker return the typed `worker_detached` fault. Its remedy is
+`run --name`, which resumes the same thread and re-applies the creation config. Never
+answer `worker_detached` with `daemon start`.
+
 For raw recovery, foreground supervision, live model diagnosis, or cursor-level event
 inspection, use the advanced compatibility families: `model list`, `session
 start`/`resume`/`list`/`show`, and `turn start`/`wait`/`status`/`events`/`steer`/

@@ -829,6 +829,7 @@ class RpcServerTests(unittest.TestCase):
             "workers": {"active_names": [], "idle_names": ["known-idle"],
                         "active_count": 0, "idle_count": 1, "total_count": 1},
             "durable_state": "preserved",
+            "worker_attachment": "detached_until_next_run",
         })
         server._test_thread.join(timeout=1.0)
         self.assertFalse(server._test_thread.is_alive())
@@ -935,6 +936,7 @@ class RpcServerTests(unittest.TestCase):
             -32038: "tool_version_mismatch",
             -32039: "address_in_use", -32040: "service_busy",
             -32041: "legacy_name_conflict", -32042: "service_config_conflict",
+            -32043: "worker_detached",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)

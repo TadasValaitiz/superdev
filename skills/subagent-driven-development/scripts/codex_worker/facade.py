@@ -201,12 +201,13 @@ class WorkerFacade:
             return Err(fault)
 
     def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             status = self.deps.runtime.status(record.session_id)
             if not status.attached:
-                return Err(self._stopped_fault(request.name, record))
+                return Err(self._detached_fault(request.name, record))
             callback = None
             if (self.deps.callback_store is not None
                     and self.deps.callback_store.binding(record.session_id) is not None):
@@ -219,22 +220,23 @@ class WorkerFacade:
                                                 response.latest_turn, callback)
             return Ok(response)
         except (UnknownSession, SessionDetached):
-            return Err(self._stopped_fault(request.name, record))
+            return Err(self._detached_fault(request.name, record))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, request.name))
 
     def messages(self, request: WorkerMessagesRequest) -> Result[WorkerMessagesResponse, FacadeFault]:
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             if not self.deps.runtime.status(record.session_id).attached:
-                return Err(self._stopped_fault(request.name, record))
+                return Err(self._detached_fault(request.name, record))
             items, truncated, cursor = self.deps.runtime.agent_messages(record.session_id, request.tail)
             messages = self.deps.projector.select_completion_messages(items, False)
             return Ok(WorkerMessagesResponse(self._worker(record), messages, request.tail,
                                              len(messages), truncated, cursor))
         except (UnknownSession, SessionDetached):
-            return Err(self._stopped_fault(request.name, None))
+            return Err(self._detached_fault(request.name, record))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, request.name))
 
@@ -296,7 +298,7 @@ class WorkerFacade:
     def limits(self, request: LimitsRequest) -> Result[LimitsResponse, FacadeFault]:
         try:
             if not self.deps.broker.daemon_status()["ready"]:
-                return Err(self._stopped_fault(None, None))
+                return Err(self._stopped_fault())
             return Ok(LimitsResponse("available", NativeCodexProxy(self.deps.broker.codex).rate_limits_read()["rateLimits"]))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, None, limits=True))
@@ -429,7 +431,7 @@ class WorkerFacade:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             status = self.deps.runtime.status(record.session_id)
-            if not status.attached: return Err(self._stopped_fault(request.name, record))
+            if not status.attached: return Err(self._detached_fault(request.name, record))
             turn_id = status.active_turn_id
             if turn_id is None:
                 return Err(self._turn_not_active(record, None))
@@ -455,9 +457,9 @@ class WorkerFacade:
     def _attached_fault(self, record, name):
         try:
             if not self.deps.runtime.status(record.session_id).attached:
-                return self._stopped_fault(name, record)
+                return self._detached_fault(name, record)
         except (UnknownSession, SessionDetached):
-            return self._stopped_fault(name, record)
+            return self._detached_fault(name, record)
         return None
 
     @staticmethod
@@ -579,20 +581,24 @@ class WorkerFacade:
                                {"command": self._command("messages --name %s" % record.name), "reason": "Read retained narration"},
                                {"command": self._command("interrupt --name %s" % record.name), "reason": "Cancel only if deliberate"}])
 
-    def _stopped_fault(self, name, record):
-        if name is None:
-            return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
-                               known_ids=self._known(), next_actions=[
-                                   {"command": self._command("daemon start"),
-                                    "reason": "Start the global service without creating a worker"}])
-        return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+    def _detached_fault(self, name, record):
+        """The service is serving this request, so an unattached worker is detached, not stopped."""
+        if record is None:
+            return self._stopped_fault()
+        resume = "run --name %s --prompt %s" % (shlex.quote(name), shlex.quote("Continue where you left off."))
+        return FacadeFault(FacadeFaultCode.WORKER_DETACHED,
+                           "Worker is detached from this service generation", "worker_detached",
                            details=self._details({}, record),
                            known_ids=self._known(record, name), next_actions=[
+                               {"command": self._command(resume),
+                                "reason": "Resume this worker in the current service generation; "
+                                          "use your own follow-up prompt"}])
+
+    def _stopped_fault(self):
+        return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+                           known_ids=self._known(), next_actions=[
                                {"command": self._command("daemon start"),
-                                "reason": "Start the global service without creating a turn"},
-                               {"command": self._command("status --name %s" % shlex.quote(name)),
-                                "reason": "Inspect the exact durable worker after service start"},
-                               self._raw_resume_action(record.thread_id)])
+                                "reason": "Start the global service without creating a worker"}])
 
     def _turn_not_active(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TURN_NOT_ACTIVE, "Turn is not active", "turn_not_active",

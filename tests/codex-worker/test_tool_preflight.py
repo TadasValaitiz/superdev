@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -433,8 +434,13 @@ class ToolPreflightTests(unittest.TestCase):
         codex.chmod(0o755)
         env = self.env([installed_bin, codex_bin, "/usr/bin", "/bin"])
         env["SPAWN_RECORD"] = str(spawn_record)
+        # A live machine-wide service may hold the default listener; stay hermetic.
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        free_listener = "ws://127.0.0.1:%d" % probe.getsockname()[1]
+        probe.close()
         completed = subprocess.run(
-            [str(launcher), "daemon", "start"],
+            [str(launcher), "daemon", "start", "--app-server-listen", free_listener],
             cwd=self.root,
             env=env,
             text=True,

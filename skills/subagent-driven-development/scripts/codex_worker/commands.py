@@ -92,6 +92,7 @@ class FacadeFaultCode(int, Enum):
     SERVICE_BUSY = -32040
     LEGACY_NAME_CONFLICT = -32041
     SERVICE_CONFIG_CONFLICT = -32042
+    WORKER_DETACHED = -32043
 
 
 FACADE_FAULT_KINDS = {
@@ -123,6 +124,7 @@ FACADE_FAULT_KINDS = {
     FacadeFaultCode.SERVICE_BUSY: "service_busy",
     FacadeFaultCode.LEGACY_NAME_CONFLICT: "legacy_name_conflict",
     FacadeFaultCode.SERVICE_CONFIG_CONFLICT: "service_config_conflict",
+    FacadeFaultCode.WORKER_DETACHED: "worker_detached",
 }
 
 
