@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Protocol, Sequence
+from typing import Callable, Mapping, Optional, Protocol, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from .commands import StrictModel
@@ -68,6 +68,7 @@ class GlobalWorkerServiceDeps:
     current_process_group: Callable[[], int] = os.getpgrp
     signal_process_group: Callable[[int, int], None] = os.killpg
     process_group_exists: Callable[[int], bool] = lambda pgid: _process_group_exists(pgid)
+    codex_daemon_directory: Callable[[], Path] = lambda: _codex_daemon_directory()
 
 
 class ListenerExposure(str, Enum):
@@ -173,15 +174,75 @@ def default_service_deps() -> GlobalWorkerServiceDeps:
     return GlobalWorkerServiceDeps(_spawn_codex, _create_connection, _create_gateway)
 
 
-def _verify_private_socket(path: Path, uid: int) -> os.stat_result:
-    value = os.lstat(str(path))
+def _codex_daemon_directory() -> Path:
+    """codex-cli >= 0.158 binds ``--listen unix://PATH`` here and links PATH to it."""
+    return Path(os.path.realpath("/tmp")) / ("codex-daemon-%d" % os.geteuid())
+
+
+@dataclass(frozen=True)
+class PrivateSocketIdentity:
+    """What readiness verified: the socket inode and, for codex >= 0.158, our link to it."""
+    socket: Tuple[int, int]
+    link: Optional[Tuple[int, int]] = None
+    target: Optional[str] = None
+
+
+def _verify_socket_inode(value: os.stat_result, uid: int) -> None:
     if not stat.S_ISSOCK(value.st_mode):
         raise PermissionError("private Codex path is not a Unix socket")
     if value.st_uid != uid:
         raise PermissionError("private Codex socket is not owned by the service user")
     if stat.S_IMODE(value.st_mode) & 0o077:
         raise PermissionError("private Codex socket must be owner-only")
-    return value
+
+
+def _verify_owner_only_directory(value: os.stat_result, uid: int) -> None:
+    if (not stat.S_ISDIR(value.st_mode) or value.st_uid != uid
+            or stat.S_IMODE(value.st_mode) & 0o077):
+        raise PermissionError("Codex daemon directory must be an owner-only real directory")
+
+
+def _verify_private_socket(path: Path, uid: int, daemon_dir: Path) -> PrivateSocketIdentity:
+    value = os.lstat(str(path))
+    if not stat.S_ISLNK(value.st_mode):
+        _verify_socket_inode(value, uid)
+        return PrivateSocketIdentity((value.st_dev, value.st_ino))
+    target = os.readlink(str(path))
+    if Path(target).parent != daemon_dir:
+        raise PermissionError(
+            "private Codex link must point into the owner-only Codex daemon directory")
+    _verify_owner_only_directory(os.lstat(str(daemon_dir)), uid)
+    socket_value = os.lstat(target)
+    followed = os.stat(str(path))
+    if (followed.st_dev, followed.st_ino) != (socket_value.st_dev, socket_value.st_ino):
+        raise PermissionError("private Codex link target changed during verification")
+    _verify_socket_inode(socket_value, uid)
+    return PrivateSocketIdentity((socket_value.st_dev, socket_value.st_ino),
+                                 (value.st_dev, value.st_ino), target)
+
+
+def _unlink_owned_private_path(path: Path, recorded: Optional[PrivateSocketIdentity],
+                               uid: int, daemon_dir: Path) -> None:
+    """Unlink only the path readiness verified; never a substituted socket, link, or target."""
+    changed = PermissionError("private Codex socket changed after readiness")
+    if recorded is None:
+        raise changed
+    if recorded.link is None:
+        if _verify_private_socket(path, uid, daemon_dir) != recorded:
+            raise changed
+    else:
+        value = os.lstat(str(path))
+        if (not stat.S_ISLNK(value.st_mode) or (value.st_dev, value.st_ino) != recorded.link
+                or os.readlink(str(path)) != recorded.target):
+            raise changed
+        try:
+            target = os.lstat(str(recorded.target))
+        except FileNotFoundError:
+            target = None
+        # A killed codex leaves its target behind; codex rebinds it on the next start.
+        if target is not None and (target.st_dev, target.st_ino) != recorded.socket:
+            raise changed
+    os.unlink(str(path))
 
 
 def _ensure_owner_directory(path: Path) -> None:
@@ -253,7 +314,7 @@ class GlobalWorkerService:
         self._owned_pgid = None  # type: Optional[int]
         self._connection = None  # type: Optional[CodexConnection]
         self._gateway = None  # type: Optional[WebSocketGateway]
-        self._private_socket_identity = None  # type: Optional[os.stat_result]
+        self._private_socket_identity = None  # type: Optional[PrivateSocketIdentity]
         self._stopping = False
 
     @property
@@ -301,7 +362,8 @@ class GlobalWorkerService:
         while True:
             if self.paths.private_codex_socket.exists() or self.paths.private_codex_socket.is_symlink():
                 self._private_socket_identity = _verify_private_socket(
-                    self.paths.private_codex_socket, os.getuid())
+                    self.paths.private_codex_socket, os.getuid(),
+                    self._deps.codex_daemon_directory())
                 return
             if process.poll() is not None:
                 raise RuntimeError("Codex exited before creating its private socket")
@@ -454,14 +516,8 @@ class GlobalWorkerService:
         private_socket = self.paths.private_codex_socket
         if private_socket.exists() or private_socket.is_symlink():
             try:
-                current = _verify_private_socket(private_socket, os.getuid())
-                if (private_socket_identity is None
-                        or (current.st_dev, current.st_ino) != (
-                            private_socket_identity.st_dev,
-                            private_socket_identity.st_ino)):
-                    raise PermissionError(
-                        "private Codex socket changed after readiness")
-                os.unlink(str(private_socket))
+                _unlink_owned_private_path(private_socket, private_socket_identity,
+                                           os.getuid(), self._deps.codex_daemon_directory())
                 self._private_socket_identity = None
             except Exception as exc:
                 errors.append(exc)
