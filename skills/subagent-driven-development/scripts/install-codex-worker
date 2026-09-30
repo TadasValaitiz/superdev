@@ -97,7 +97,8 @@ UV=$(command -v uv 2>/dev/null || true)
   "uv is required when a Codex worker is selected; install uv from https://docs.astral.sh/uv/getting-started/installation/"
 
 set +e
-UV_BIN_OUTPUT=$("$UV" tool dir --bin 2>&1)
+# --color never: uv colours even captured output under FORCE_COLOR, which breaks the path.
+UV_BIN_OUTPUT=$("$UV" tool dir --bin --color never 2>&1)
 UV_BIN_STATUS=$?
 set -e
 [ "$UV_BIN_STATUS" -eq 0 ] || fail \

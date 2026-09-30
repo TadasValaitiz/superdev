@@ -64,6 +64,8 @@ class ToolPreflightTests(unittest.TestCase):
             "FAKE_UV_INSTALL_VERSION": self.expected_version,
         })
         self.base_env.pop("CLAUDE_PLUGIN_ROOT", None)
+        self.base_env.pop("FORCE_COLOR", None)
+        self.base_env.pop("NO_COLOR", None)
 
     def _write_plugin(self, root, manifest_version=None, package_version=None):
         manifest_version = manifest_version or self.expected_version
@@ -90,7 +92,13 @@ class ToolPreflightTests(unittest.TestCase):
             "#!/bin/sh\n"
             "printf '%s\\n' \"$*\" >> \"$FAKE_UV_LOG\"\n"
             "if [ \"$1 $2 $3\" = \"tool dir --bin\" ]; then\n"
-            "  printf '%s\\n' \"$FAKE_UV_BIN\"\n"
+            # Real uv colours even piped output under FORCE_COLOR unless told not to.
+            "  if [ -n \"${FORCE_COLOR:-}\" ] && [ -z \"${NO_COLOR:-}\" ] \\\n"
+            "      && [ \"$4 $5\" != \"--color never\" ]; then\n"
+            "    printf '\\033[36m%s\\033[39m\\n' \"$FAKE_UV_BIN\"\n"
+            "  else\n"
+            "    printf '%s\\n' \"$FAKE_UV_BIN\"\n"
+            "  fi\n"
             "  exit 0\n"
             "fi\n"
             "if [ \"$1 $2\" = \"tool install\" ]; then\n"
@@ -193,6 +201,11 @@ class ToolPreflightTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(version.stdout, "codex-worker %s\n" % self.expected_version)
+
+    def test_forced_colour_environment_does_not_break_uv_bin_discovery(self):
+        completed = self.run_preflight(self.env(FORCE_COLOR="3"))
+        self.assert_ready(completed)
+        self.assertEqual(len(self.install_calls()), 1)
 
     def test_matching_uv_command_is_stable_and_idempotent(self):
         self._write_worker(self.uv_bin, self.expected_version)
