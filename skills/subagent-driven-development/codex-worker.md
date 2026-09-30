@@ -82,9 +82,23 @@ codex-worker start --name review-b32e --cwd /absolute/project --prompt-file revi
   --output-schema review-schema.json
 ```
 
+Creation can also fix Codex config overrides for the worker's life. `--search` enables
+live web search (`web_search="live"`, what `codex --search` sets), so one research worker
+answers many questions without reloading skills per call. `--config KEY=VALUE` is a
+repeatable `codex -c` override: dotted KEY, VALUE parsed as JSON when it parses,
+otherwise a string. The overrides are sent on `thread/start`, re-sent when a detached
+worker is resumed, and returned as `result.worker.config`:
+
+```sh
+codex-worker start --name research-c41d --cwd /absolute/scratch --prompt-file question.md \
+  --read-only --search
+codex-worker run --name research-c41d --prompt "Next question: ..."
+```
+
 The model policy is in [Codex model selection](codex-model-selection.md). `run` accepts
 only the globally unique name, one prompt source, and per-turn output-schema/timeout;
-it cannot change cwd, access, tier, model, effort, goal, callback binding, or listener.
+it cannot change cwd, access, tier, model, effort, config, goal, callback binding, or
+listener.
 Terminal evidence maps to `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT`, or `BLOCKED`.
 
 ## Callback guidance

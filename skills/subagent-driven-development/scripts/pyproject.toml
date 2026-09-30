@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-worker"
-version = "8.5.0"
+version = "8.6.0"
 description = "Local durable Codex app-server worker broker"
 requires-python = ">=3.9"
 dependencies = ["websockets>=15,<16"]

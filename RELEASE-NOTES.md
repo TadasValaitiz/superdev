@@ -1,3 +1,27 @@
+# v8.6.0 — codex-worker: search-enabled, reusable research workers (2026-09-30)
+
+Research callers used one-shot `codex exec --search`, which reloads the plugin's skills (about 84k input
+tokens) on every call. A durable named worker can now be created with web search enabled and reused with `run`.
+
+- **`codex-worker start --search`:** turns on live web search. It is sugar for `web_search="live"`, the
+  override that codex-cli 0.158.0 maps `codex --search` to (`codex-rs/tui/src/startup_orchestration.rs`
+  at tag `rust-v0.158.0`). `tools.web_search` is a settings object (domains, context size, location), not a
+  switch. Without the flag, Codex picks the mode itself: live for full-access threads, cached for read-only
+  ones. `--search` makes it live for both.
+- **`codex-worker start --config KEY=VALUE`:** a repeatable `codex -c` override. KEY is a dotted path; VALUE
+  is parsed as JSON when it parses, otherwise used as a string. Null values, a repeated KEY, and `--search`
+  combined with `--config web_search=...` are refused before any RPC.
+- **Fixed at creation,** like tier, effort and access. The overrides are stored on the worker and sent as
+  `thread/start` `config`. They are sent again as `thread/resume` `config` when a detached worker is
+  resumed (app-server ignores resume config for a thread that is still running). They are returned as
+  `result.worker.config`, which is `null` when there are none. `run` cannot change them, and the
+  `effort_unsupported` retry command keeps them.
+- **Registry schema 3** stores the overrides. It reads schemas 1, 2 and 3 and writes 3. Once 8.6.0 has
+  written the registry, codex-worker 8.5.0 and older refuse it ("unsupported registry schema"). Do not roll
+  the global UV tool back below 8.6.0 while workers exist.
+- **Not added: `--disable-plugin`.** App-server's `disabledPluginIds` is a per-turn field that replaces the
+  thread's list; it is not a creation setting. Any per-worker plugin setting can be passed with `--config`.
+
 # v8.5.0 — the process update: design stop, angle-by-angle self-brainstorming, the taxonomy (2026-09-25)
 
 Diagnosed from the calibration project's wave-2 retrospective (splits-identity's process retro, the
