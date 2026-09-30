@@ -1,0 +1,4 @@
+usage: codex-worker [-h] [--version] [--socket SOCKET] [--pretty]
+                    {start,run,message,status,messages,history,interrupt,steer,goal,limits,daemon,migration,model,session,turn}
+                    ...
+codex-worker: error: unrecognized arguments: --config web_search=disabled

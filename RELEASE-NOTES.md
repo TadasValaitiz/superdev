@@ -15,8 +15,11 @@ with codex-cli 0.158.0, is still open and waiting on a decision.
 
 # v8.6.0 — codex-worker: search-enabled, reusable research workers (2026-09-30)
 
-Research callers used one-shot `codex exec --search`, which reloads the plugin's skills (about 84k input
-tokens) on every call. A durable named worker can now be created with web search enabled and reused with `run`.
+Research callers used one-shot `codex exec --search`, which reloads the plugin's skills on every call. A
+durable named worker can now be created with web search enabled and reused with `run`. It keeps the
+conversation and reads its skills once, but it does not make each turn cheaper. Every turn re-sends the
+growing thread history, so input tokens rise as the conversation grows (corrected in 8.6.2 after a
+measured checkride).
 
 - **`codex-worker start --search`:** turns on live web search. It is sugar for `web_search="live"`, the
   override that codex-cli 0.158.0 maps `codex --search` to (`codex-rs/tui/src/startup_orchestration.rs`
