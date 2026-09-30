@@ -21,6 +21,11 @@ tokens) on every call. A durable named worker can now be created with web search
   the global UV tool back below 8.6.0 while workers exist.
 - **Not added: `--disable-plugin`.** App-server's `disabledPluginIds` is a per-turn field that replaces the
   thread's list; it is not a creation setting. Any per-worker plugin setting can be passed with `--config`.
+- **Live check:** real Codex turns ran through the facade and broker over app-server stdio. With
+  `web_search="live"`, two turns on one read-only thread each ran web searches; with `"disabled"` there were
+  none. **Known issue, older than this release:** the global service cannot start with codex-cli 0.158.0,
+  because its private socket path is now a symlink. See
+  `docs/superdev/backlog/2026-09-30-codex-worker-codex-0158-service-start.md`.
 
 # v8.5.0 — the process update: design stop, angle-by-angle self-brainstorming, the taxonomy (2026-09-25)
 
