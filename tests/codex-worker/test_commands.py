@@ -1,6 +1,8 @@
+import contextlib
 import sys
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development" / "scripts"))
@@ -12,6 +14,7 @@ from codex_worker.commands import (
     MetricAvailability, MetricEvidence, RecoveryView, StartWorkerRequest, Tier, TurnView,
     WorkerMessagesResponse, WorkerStatusResponse, WorkerView,
 )
+from codex_worker.models import RpcFault
 from codex_worker.service_domain import AttachView, MigrationState, MigrationStatusView
 
 
@@ -308,6 +311,49 @@ class CommandModelTests(unittest.TestCase):
             wire["data"]["kind"] = "worker_not_found" if kind != "worker_not_found" else "daemon_stopped"
             with self.assertRaises(ValueError):
                 FacadeFault.from_dict(wire)
+
+
+class TypedFaultExceptionStateTests(unittest.TestCase):
+    """Python >= 3.11 contextlib/unittest assign exception state from Python code."""
+
+    @staticmethod
+    def faults():
+        return [RpcFault(-32602, "Invalid params", "invalid_params"),
+                FacadeFault(FacadeFaultCode.INVALID_PARAMS, "Invalid params", "invalid_params")]
+
+    def test_typed_faults_accept_the_exception_state_python_writes(self):
+        for fault in self.faults():
+            with self.subTest(fault=type(fault).__name__):
+                cause = ValueError("cause")
+                fault.__traceback__ = None
+                fault.__cause__ = cause
+                fault.__context__ = cause
+                fault.__suppress_context__ = True
+                fault.__notes__ = ["note"]
+                self.assertIs(fault.__cause__, cause)
+                self.assertIs(fault.__context__, cause)
+                self.assertTrue(fault.__suppress_context__)
+                self.assertEqual(fault.__notes__, ["note"])
+
+    def test_typed_faults_keep_their_fields_frozen(self):
+        for fault in self.faults():
+            for name in ("message", "kind", "undeclared"):
+                with self.subTest(fault=type(fault).__name__, name=name):
+                    with self.assertRaises(FrozenInstanceError):
+                        setattr(fault, name, "changed")
+            self.assertEqual(fault.message, "Invalid params")
+
+    def test_typed_faults_propagate_unchanged_through_context_managers(self):
+        @contextlib.contextmanager
+        def guarded():
+            yield
+
+        for fault in self.faults():
+            with self.subTest(fault=type(fault).__name__):
+                with self.assertRaises(type(fault)) as caught:
+                    with guarded():
+                        raise fault
+                self.assertIs(caught.exception, fault)
 
 
 if __name__ == "__main__":

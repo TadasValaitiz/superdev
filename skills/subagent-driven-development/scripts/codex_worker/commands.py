@@ -8,7 +8,7 @@ import shlex
 import uuid
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
-from .models import validate_thread_config
+from .models import exception_state_writable, validate_thread_config
 
 JsonObject = Dict[str, Any]
 JsonValue = Any
@@ -760,6 +760,7 @@ class Err(Generic[E]): error: E
 Result = Union[Ok[T], Err[E]]
 
 
+@exception_state_writable
 @dataclass(frozen=True)
 class FacadeFault(Exception):
     code: int; message: str; kind: str; retryable: bool = False; source: str = "codex-worker"; details: JsonObject = None; known_ids: JsonObject = None; next_actions: List[JsonObject] = None

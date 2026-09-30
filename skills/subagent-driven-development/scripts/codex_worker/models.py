@@ -10,6 +10,29 @@ _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _ACTIVE_ORIGINS = frozenset(("worker", "unmapped_tui"))
 
 
+_EXCEPTION_STATE = frozenset((
+    "__traceback__", "__cause__", "__context__", "__suppress_context__", "__notes__"))
+
+
+def exception_state_writable(cls):
+    """Let a frozen dataclass exception accept the state Python itself writes.
+
+    Python >= 3.11 ``contextlib`` (and ``unittest``, ``add_note``) assign exception
+    dunders from Python code, which a frozen dataclass ``__setattr__`` rejects. Apply
+    outside ``@dataclass(frozen=True)``; declared fields stay frozen.
+    """
+    frozen_setattr = cls.__setattr__
+
+    def __setattr__(self, name, value):
+        if name in _EXCEPTION_STATE:
+            object.__setattr__(self, name, value)
+        else:
+            frozen_setattr(self, name, value)
+
+    cls.__setattr__ = __setattr__
+    return cls
+
+
 def _validate_config_value(value: Any) -> None:
     if type(value) in (str, bool, int):
         return
@@ -457,6 +480,7 @@ class SessionRecord:
         return cls(**copied)
 
 
+@exception_state_writable
 @dataclass(frozen=True)
 class RpcFault(Exception):
     code: int
