@@ -55,7 +55,7 @@ service-ownership tests still hold, and a checkride covers stop/restart with the
 
 ## CWS-2: frozen-dataclass faults crash on Python ≥ 3.11
 
-**Status:** Open (small fix)
+**Status:** Fixed in v8.6.1 (`exception_state_writable`).
 **Surface:** every CLI/daemon error path that raises `RpcFault`/`FacadeFault` through a
 `@contextmanager` (for example `acquire_start_lock`).
 
@@ -72,7 +72,7 @@ as well as 3.9.
 
 ## CWS-3: preflight breaks under `FORCE_COLOR`
 
-**Status:** Open (small fix)
+**Status:** Fixed in v8.6.1 (`uv tool dir --bin --color never`).
 **Surface:** `install-codex-worker`
 
 With `FORCE_COLOR=3` in the environment (Claude Code sessions set it), `uv tool dir --bin` prints ANSI

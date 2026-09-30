@@ -1,3 +1,18 @@
+# v8.6.1 — codex-worker: Python 3.11+ faults, preflight under FORCE_COLOR (2026-09-30)
+
+Two small fixes found during the v8.6.0 live check (backlog CWS-2 and CWS-3). CWS-1, the service start
+with codex-cli 0.158.0, is still open and waiting on a decision.
+
+- **Typed faults on Python 3.11+:** `RpcFault` and `FacadeFault` are frozen dataclasses. From 3.11,
+  `contextlib` (and `unittest`, `add_note`) set exception attributes such as `__traceback__` from Python
+  code, and the frozen `__setattr__` refused them. Any typed fault raised through a `@contextmanager` then
+  surfaced as `FrozenInstanceError` instead of a JSON error. A shared `exception_state_writable` decorator
+  now lets those exception attributes through; the declared fields stay frozen. The codex-worker suite
+  now also runs on Python 3.12, where before the test runner itself crashed.
+- **Preflight under `FORCE_COLOR`:** uv colours even captured output when `FORCE_COLOR` is set, and Claude
+  Code sessions set `FORCE_COLOR=3`. `install-codex-worker` then read `uv tool dir --bin` as an
+  ANSI-wrapped path and refused it. It now asks uv for `--color never`.
+
 # v8.6.0 — codex-worker: search-enabled, reusable research workers (2026-09-30)
 
 Research callers used one-shot `codex exec --search`, which reloads the plugin's skills (about 84k input
