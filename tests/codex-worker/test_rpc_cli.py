@@ -299,6 +299,15 @@ class PublicHelpLimitsTests(unittest.TestCase):
                              "inventory is unavailable"):
                 self.assertIn(fragment, help_text)
 
+    def test_start_help_documents_creation_fixed_search_and_config(self):
+        parser = cli.build_parser()
+        with self.assertRaises(SystemExit), contextlib.redirect_stdout(io.StringIO()) as output:
+            parser.parse_args(["start", "--help"])
+        help_text = " ".join(output.getvalue().split())
+        for fragment in ("--search", "--config KEY=VALUE", 'web_search="live"',
+                         "parsed as JSON", "fixed at creation", "run cannot change"):
+            self.assertIn(fragment, help_text)
+
     def test_managed_raw_help_states_no_autostart_boundary(self):
         parser = cli.build_parser()
         for path in (["model", "list"], ["session", "resume"], ["turn", "status"]):
@@ -1586,7 +1595,7 @@ class CliTests(unittest.TestCase):
              {'name': 'build-1', 'prompt': 'go', 'cwd': self.cwd, 'tier': 'medium',
               'model': None, 'effort': 'medium', 'access': 'full', 'goal': None,
               'token_budget': None, 'output_schema': None, 'timeout': None,
-              'no_callback': True, 'callback_capture': None}),
+              'no_callback': True, 'callback_capture': None, 'config': None}),
             (['run', '--name', 'build-1', '--prompt', 'again'], 'worker/run',
              {'name': 'build-1', 'prompt': 'again', 'output_schema': None, 'timeout': None}),
             (['status', '--name', 'build-1'], 'worker/status', {'name': 'build-1'}),
@@ -1619,6 +1628,56 @@ class CliTests(unittest.TestCase):
                                       include_socket=False)
                 self.assert_json_error(result, 2)
         self.assertEqual(self.rpc_calls, [])
+
+    def start_params(self, *extra):
+        self.rpc_calls = []
+        result = self.run_cli(['start', '--name', 'search-1', '--prompt', 'go', '--cwd', self.cwd,
+                               '--no-callback'] + list(extra),
+                              fake_rpc=self.fake_rpc_success, include_socket=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.rpc_calls[0][0], 'worker/start')
+        return self.rpc_calls[0][1]
+
+    def test_start_search_is_sugar_for_live_web_search_config(self):
+        self.assertEqual(self.start_params('--search')['config'], {'web_search': 'live'})
+
+    def test_start_config_values_parse_as_json_else_string(self):
+        params = self.start_params(
+            '--config', 'features.x=true', '--config', 'model_verbosity=low',
+            '--config', 'tools.web_search={"context_size": "high"}', '--config', 'n=3',
+            '--config', 'expr=a=b', '--config', 'quoted="live"', '--config', 'nan=NaN', '--search')
+        self.assertEqual(params['config'], {
+            'features.x': True, 'model_verbosity': 'low',
+            'tools.web_search': {'context_size': 'high'}, 'n': 3, 'expr': 'a=b',
+            'quoted': 'live', 'nan': 'NaN', 'web_search': 'live',
+        })
+
+    def test_start_config_refusals_are_usage_errors_before_rpc(self):
+        rejected = [
+            ['--config', 'no-equals'],
+            ['--config', '=1'],
+            ['--config', 'x=null'],
+            ['--config', 'x={"nested": null}'],
+            ['--config', 'a=1', '--config', 'a=2'],
+            ['--search', '--config', 'web_search=cached'],
+        ]
+        for extra in rejected:
+            with self.subTest(extra=extra):
+                self.rpc_calls = []
+                result = self.run_cli(['start', '--name', 'search-1', '--prompt', 'go',
+                                       '--cwd', self.cwd] + extra,
+                                      fake_rpc=self.fake_rpc_success, include_socket=False)
+                self.assert_json_error(result, 2)
+                self.assertEqual(self.rpc_calls, [])
+
+    def test_run_cannot_change_creation_config(self):
+        for extra in (['--search'], ['--config', 'web_search=live']):
+            with self.subTest(extra=extra):
+                self.rpc_calls = []
+                result = self.run_cli(['run', '--name', 'search-1', '--prompt', 'go'] + extra,
+                                      fake_rpc=self.fake_rpc_success, include_socket=False)
+                self.assert_json_error(result, 2)
+                self.assertEqual(self.rpc_calls, [])
 
     def test_every_common_command_rejects_explicit_socket_before_rpc(self):
         commands = [

@@ -61,12 +61,14 @@ class SessionStartSpec:
     tier: Optional[str] = None
     effort: Optional[str] = None
     annotation_policy: AnnotationPolicy = AnnotationPolicy.LEGACY_MUTABLE
+    config: Optional[JsonObject] = None
 
 
 @dataclass(frozen=True)
 class SessionResumeSpec:
     thread_id: str
     access: AccessMode = AccessMode.FULL
+    config: Optional[JsonObject] = None
 
 
 @dataclass(frozen=True)
@@ -222,11 +224,14 @@ class WorkerBroker:
                 raise _fault(-32602, "common worker start requires name, model, effort, and access",
                              "invalid_params")
             self._validate_model_effort(spec.model, spec.effort)
+        elif spec.config is not None:
+            raise _fault(-32602, "config is a named-worker creation policy", "invalid_params")
         session_id = str(uuid.uuid4())
         try:
             response = self.codex.start_thread(canonical_cwd, model=spec.model,
                                                sandbox=self._thread_sandbox(spec.access),
-                                               allow_provider_model_fallback=False)
+                                               allow_provider_model_fallback=False,
+                                               config=spec.config)
             thread_id, returned_cwd = self._resume_identity(response)
             if returned_cwd != canonical_cwd:
                 raise _fault(-32014, "Codex returned a different working directory", "session_cwd_mismatch",
@@ -237,7 +242,7 @@ class WorkerBroker:
             if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
                 record = self.registry.create_worker(
                     thread_id, canonical_cwd, spec.name, spec.tier, spec.model,
-                    spec.effort, spec.access.value, session_id=session_id)
+                    spec.effort, spec.access.value, session_id=session_id, config=spec.config)
             else:
                 record = self.registry.create(thread_id, canonical_cwd, spec.name, spec.model,
                                               None, session_id=session_id)
@@ -259,7 +264,8 @@ class WorkerBroker:
     def _resume_session_authoritatively(self, spec: SessionResumeSpec) -> JsonObject:
         try:
             response = self.codex.resume_thread(spec.thread_id, approval_policy="never",
-                                                sandbox=self._thread_sandbox(spec.access))
+                                                sandbox=self._thread_sandbox(spec.access),
+                                                config=spec.config)
             thread_id, cwd = self._resume_identity(response)
             if thread_id != spec.thread_id:
                 raise _fault(-32015, "Codex resume returned a different thread", "codex_protocol_error")
@@ -330,6 +336,7 @@ class WorkerBroker:
                 response = self._resume_session_authoritatively(SessionResumeSpec(
                     existing.thread_id,
                     AccessMode(existing.access) if existing.access else AccessMode.FULL,
+                    existing.config,
                 ))
                 thread_id, returned_cwd = self._resume_identity(response)
                 if thread_id != existing.thread_id:

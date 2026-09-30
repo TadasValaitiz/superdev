@@ -1,5 +1,6 @@
 """Python 3.9-compatible wire and domain models."""
 import copy
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -7,6 +8,34 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 JsonObject = Dict[str, Any]
 _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _ACTIVE_ORIGINS = frozenset(("worker", "unmapped_tui"))
+
+
+def _validate_config_value(value: Any) -> None:
+    if type(value) in (str, bool, int):
+        return
+    if type(value) is float and math.isfinite(value):
+        return
+    if isinstance(value, list):
+        for item in value:
+            _validate_config_value(item)
+        return
+    if isinstance(value, dict) and all(isinstance(key, str) and key for key in value):
+        for item in value.values():
+            _validate_config_value(item)
+        return
+    raise ValueError("config values must be finite JSON values without null")
+
+
+def validate_thread_config(config: Optional[JsonObject]) -> None:
+    """Validate creation-time Codex config overrides (dotted keys, like ``codex -c``)."""
+    if config is None:
+        return
+    if not isinstance(config, dict) or not config:
+        raise ValueError("config must be null or a non-empty object")
+    for key, value in config.items():
+        if not isinstance(key, str) or not key or key != key.strip():
+            raise ValueError("config keys must be non-empty strings without surrounding whitespace")
+        _validate_config_value(value)
 
 
 def _validate_recovery_command(command: str) -> None:
@@ -393,6 +422,7 @@ class SessionRecord:
     effort: Optional[str] = None
     tier: Optional[str] = None
     access: Optional[str] = None
+    config: Optional[JsonObject] = None
 
     @property
     def common_policy_complete(self) -> bool:
@@ -402,13 +432,13 @@ class SessionRecord:
         return {"session_id": self.session_id, "thread_id": self.thread_id, "cwd": self.cwd,
                 "created_at": self.created_at, "updated_at": self.updated_at,
                 "name": self.name, "model": self.model, "effort": self.effort,
-                "tier": self.tier, "access": self.access}
+                "tier": self.tier, "access": self.access, "config": copy.deepcopy(self.config)}
 
     @classmethod
     def from_dict(cls, value: JsonObject):
         v1_fields = {"session_id", "thread_id", "cwd", "created_at", "updated_at", "name", "model", "effort"}
-        required = v1_fields | {"tier", "access"}
-        if not isinstance(value, dict) or set(value) not in (v1_fields, required):
+        v2_fields = v1_fields | {"tier", "access"}
+        if not isinstance(value, dict) or set(value) not in (v1_fields, v2_fields, v2_fields | {"config"}):
             raise ValueError("invalid session record")
         strings = ("session_id", "thread_id", "cwd", "created_at", "updated_at")
         if any(not isinstance(value.get(key), str) for key in strings):
@@ -419,9 +449,11 @@ class SessionRecord:
             raise ValueError("invalid worker name")
         if value.get("tier") not in (None, "medium", "very-smart") or value.get("access") not in (None, "full", "read_only"):
             raise ValueError("invalid common policy")
+        validate_thread_config(value.get("config"))
         copied = dict(value)
         copied.setdefault("tier", None)
         copied.setdefault("access", None)
+        copied["config"] = copy.deepcopy(value.get("config"))
         return cls(**copied)
 
 

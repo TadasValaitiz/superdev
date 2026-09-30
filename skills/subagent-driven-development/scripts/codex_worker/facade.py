@@ -1,6 +1,7 @@
 """Transport-independent named-worker orchestration service."""
 from dataclasses import dataclass
 import datetime
+import json
 import os
 import shlex
 import uuid
@@ -130,7 +131,7 @@ class WorkerFacade:
             self.deps.broker.start_session(SessionStartSpec(
                 request.cwd, request.name, model, request.access,
                 request.tier.value if request.tier else None, request.effort,
-                AnnotationPolicy.PRESERVE_WORKER_POLICY))
+                AnnotationPolicy.PRESERVE_WORKER_POLICY, request.config))
             record = self.deps.registry.resolve_name(request.name)
             worker = self._worker(record)
             self._bind_callback(record, request.no_callback, capture)
@@ -375,8 +376,10 @@ class WorkerFacade:
     def _corrected_start_actions(self, request, supported_efforts):
         if not supported_efforts or request.output_schema is not None:
             return []
+        overrides = ["%s=%s" % (key, json.dumps(value, separators=(",", ":")))
+                     for key, value in sorted((request.config or {}).items())]
         dynamic_values = [request.prompt, request.cwd, request.model, request.goal,
-                          supported_efforts[0]]
+                          supported_efforts[0]] + overrides
         if any(isinstance(value, str) and ("\r" in value or "\n" in value)
                for value in dynamic_values):
             return []
@@ -396,6 +399,8 @@ class WorkerFacade:
             args.extend(("--goal", shlex.quote(request.goal)))
         if request.token_budget is not None:
             args.extend(("--token-budget", str(request.token_budget)))
+        for override in overrides:
+            args.extend(("--config", shlex.quote(override)))
         if request.timeout is not None:
             args.extend(("--timeout", str(request.timeout)))
         return [{
@@ -445,7 +450,7 @@ class WorkerFacade:
         attach = build_attach_view(self.deps.listener, record.thread_id)
         return WorkerView(record.name, record.session_id, record.thread_id,
                           record.cwd, Tier(record.tier) if record.tier else None, record.model,
-                          record.effort, AccessMode(record.access), attach.to_dict())
+                          record.effort, AccessMode(record.access), attach.to_dict(), record.config)
 
     def _attached_fault(self, record, name):
         try:

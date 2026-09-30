@@ -89,16 +89,18 @@ class FakeCodex:
             return value
         raise AssertionError("unexpected raw call: %s" % method)
 
-    def start_thread(self, cwd, model=None, sandbox="workspace-write", allow_provider_model_fallback=None):
+    def start_thread(self, cwd, model=None, sandbox="workspace-write", allow_provider_model_fallback=None,
+                     config=None):
         self.start_calls.append({"cwd": cwd, "model": model, "sandbox": sandbox,
-                                 "allowProviderModelFallback": allow_provider_model_fallback})
+                                 "allowProviderModelFallback": allow_provider_model_fallback,
+                                 "config": config})
         if self.start_exception is not None:
             raise self.start_exception
         return self.start_result or {"thread": {"id": "thr-start", "cwd": cwd}, "model": model}
 
-    def resume_thread(self, thread_id, approval_policy="never", sandbox="workspace-write"):
+    def resume_thread(self, thread_id, approval_policy="never", sandbox="workspace-write", config=None):
         self.resume_calls.append({"thread_id": thread_id, "approval_policy": approval_policy,
-                                  "sandbox": sandbox, "cwd": None})
+                                  "sandbox": sandbox, "cwd": None, "config": config})
         result = self.resume_result
         if result is None:
             raise AssertionError("test must provide resume_result")
@@ -662,6 +664,38 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual((record.tier, record.model, record.effort, record.access),
                          ("medium", "fake-model-a", "medium", "full"))
 
+    def test_worker_config_is_sent_on_thread_start_and_persisted(self):
+        from codex_worker.broker import AnnotationPolicy, SessionStartSpec
+        from codex_worker.commands import AccessMode
+        result = self.broker.start_session(SessionStartSpec(
+            self.cwd, "search", "fake-model-a", AccessMode.READ_ONLY, "medium", "medium",
+            AnnotationPolicy.PRESERVE_WORKER_POLICY, config={"web_search": "live"}))
+        self.assertEqual(self.codex.start_calls[-1]["config"], {"web_search": "live"})
+        self.assertEqual(result["session"]["config"], {"web_search": "live"})
+        record = self.registry.resolve(IdentifierSelector(session_id=result["session"]["session_id"]))
+        self.assertEqual(record.config, {"web_search": "live"})
+
+    def test_raw_session_start_refuses_config_it_could_not_persist(self):
+        from codex_worker.broker import SessionStartSpec
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.start_session(SessionStartSpec(self.cwd, None, None,
+                                                       config={"web_search": "live"}))
+        self.assertEqual(caught.exception.kind, "invalid_params")
+        self.assertEqual(self.codex.start_calls, [])
+        self.assertEqual(self.registry.list(), [])
+
+    def test_session_without_config_sends_no_config(self):
+        self.broker.session_start(self.cwd)
+        self.assertIsNone(self.codex.start_calls[-1]["config"])
+
+    def test_existing_worker_resume_reapplies_creation_config(self):
+        record = self.registry.create_worker("thr-search", self.cwd, "search", "medium", "fake-model-a",
+                                             "medium", "read_only", config={"web_search": "live"})
+        self.codex.resume_result = {"thread": {"id": "thr-search", "cwd": self.cwd}}
+        self.broker.session_resume(IdentifierSelector(session_id=record.session_id))
+        self.assertEqual(self.codex.resume_calls[-1]["config"], {"web_search": "live"})
+        self.assertEqual(self.codex.resume_calls[-1]["sandbox"], "read-only")
+
     def test_native_proxy_rejects_malformed_provider_result(self):
         from codex_worker.broker import NativeCodexProxy
         class Raw:
@@ -784,7 +818,8 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(result["session"]["model"], "fake-model-a")
         self.assertEqual(self.codex.start_calls[-1], {"cwd": self.cwd, "model": "fake-model-a",
                                                       "sandbox": "danger-full-access",
-                                                      "allowProviderModelFallback": False})
+                                                      "allowProviderModelFallback": False,
+                                                      "config": None})
         self.assertEqual(SessionRegistry(self.state_path).list()[0].cwd, self.cwd)
 
     def test_raw_thread_recovery_uses_returned_cwd_and_persists_mapping(self):

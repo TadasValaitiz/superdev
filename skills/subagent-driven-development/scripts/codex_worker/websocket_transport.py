@@ -146,7 +146,8 @@ class CodexMethodAdapter:
 
     def start_thread(self, cwd: str, model: Optional[str] = None,
                      sandbox: str = "workspace-write",
-                     allow_provider_model_fallback: Optional[bool] = None) -> JsonObject:
+                     allow_provider_model_fallback: Optional[bool] = None,
+                     config: Optional[JsonObject] = None) -> JsonObject:
         params = {
             "cwd": cwd,
             "approvalPolicy": "never",
@@ -157,15 +158,21 @@ class CodexMethodAdapter:
             params["model"] = model
         if allow_provider_model_fallback is not None:
             params["allowProviderModelFallback"] = allow_provider_model_fallback
+        if config is not None:
+            params["config"] = config
         return self.call("thread/start", params)
 
     def resume_thread(self, thread_id: str, approval_policy: str = "never",
-                      sandbox: str = "workspace-write") -> JsonObject:
-        return self.call("thread/resume", {
+                      sandbox: str = "workspace-write",
+                      config: Optional[JsonObject] = None) -> JsonObject:
+        params = {
             "threadId": thread_id,
             "approvalPolicy": approval_policy,
             "sandbox": sandbox,
-        })
+        }  # type: Dict[str, Any]
+        if config is not None:
+            params["config"] = config
+        return self.call("thread/resume", params)
 
     def start_turn(self, thread_id: str, prompt: str, model: Optional[str] = None,
                    effort: Optional[str] = None,

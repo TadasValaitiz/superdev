@@ -32,6 +32,7 @@ from .instance import (ServiceDeps, ServiceManager)
 from .service_domain import (DEFAULT_PUBLIC_LISTENER, derive_service_paths,
                              validate_public_listener)
 from .version import distribution_version
+from .websocket_transport import strict_json_loads
 
 
 DOCUMENTED_CLIENT_METHODS = {
@@ -107,6 +108,18 @@ def _nonnegative_float(value: str) -> float:
     if parsed < 0 or not math.isfinite(parsed):
         raise argparse.ArgumentTypeError("must be a finite value >= 0")
     return parsed
+
+
+def _config_override(value: str):
+    key, separator, raw = value.partition("=")
+    key = key.strip()
+    if not separator or not key:
+        raise argparse.ArgumentTypeError("must be KEY=VALUE with a non-empty KEY")
+    try:
+        parsed = strict_json_loads(raw)
+    except ValueError:
+        parsed = raw
+    return key, parsed
 
 
 def _absolute_path(value: str) -> str:
@@ -282,6 +295,8 @@ def _add_public_limits(parser: argparse.ArgumentParser) -> None:
     """Attach an explicit operational boundary to every public help surface."""
     generic = ("Uses the one machine-wide service and global worker names. It may replace an "
                "incompatible idle service, but never forces active work or performs cleanup stop.")
+    creation = ("Creation policy (--tier/--model, --effort, --read-only, --search, --config) is "
+                "fixed at creation and reapplied when the worker is resumed; run cannot change it.")
     danger = ("Machine-wide and human-supervised. Active work refuses unless --force is "
               "explicitly supplied. Healthy force reports every measured active turn; "
               "degraded force accepts an unknown global blast radius when inventory is unavailable.")
@@ -296,6 +311,8 @@ def _add_public_limits(parser: argparse.ArgumentParser) -> None:
             boundary = danger
         elif path and path[0] in ("model", "session", "turn"):
             boundary = raw
+        elif path == ["start"]:
+            boundary = generic + "\n  " + creation
         else:
             boundary = generic
         current.epilog = "Limits:\n  %s" % boundary
@@ -319,6 +336,11 @@ def _add_common_commands(families) -> None:
     start.add_argument("--read-only", action="store_true")
     start.add_argument("--goal")
     start.add_argument("--token-budget", type=_positive_int)
+    start.add_argument("--search", action="store_true",
+                       help='enable live web search (codex --search); sugar for --config web_search="live"')
+    start.add_argument("--config", action="append", type=_config_override, metavar="KEY=VALUE",
+                       help="repeatable Codex config override, like codex -c; VALUE is parsed as JSON "
+                            "when it parses, otherwise used as a string")
     start.add_argument("--no-callback", action="store_true")
     start.add_argument("--app-server-listen", type=_public_listener)
     _add_turn_options(start)
@@ -629,7 +651,7 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
                 "access": "read_only" if args.read_only else "full", "goal": args.goal,
                 "token_budget": args.token_budget, "output_schema": _output_schema(args.output_schema),
                 "timeout": args.timeout, "no_callback": args.no_callback,
-                "callback_capture": None}
+                "callback_capture": None, "config": _start_config(args)}
     if method == "worker/run":
         return {"name": args.name, "prompt": _prompt(args), "output_schema": _output_schema(args.output_schema), "timeout": args.timeout}
     if method == "worker/message":
@@ -684,6 +706,19 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
     if method == "turn/interrupt":
         return _selector_params(args, {})
     raise ValueError("undocumented method: %s" % method)
+
+
+def _start_config(args: argparse.Namespace) -> Optional[JsonObject]:
+    config = {}  # type: JsonObject
+    for key, value in args.config or []:
+        if key in config:
+            raise ValueError("--config %s is given more than once" % key)
+        config[key] = value
+    if args.search:
+        if "web_search" in config:
+            raise ValueError("--search already sets web_search; drop --config web_search")
+        config["web_search"] = "live"
+    return config or None
 
 
 def _selector_params(args: argparse.Namespace, extra: JsonObject) -> JsonObject:

@@ -8,6 +8,8 @@ import shlex
 import uuid
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
+from .models import validate_thread_config
+
 JsonObject = Dict[str, Any]
 JsonValue = Any
 WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -344,10 +346,12 @@ class StartWorkerRequest(StrictModel):
     timeout: Optional[float] = None
     no_callback: bool = False
     callback_capture: Optional["CallbackCapture"] = None
+    config: Optional[JsonObject] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_worker_name(self.name); validate_prompt(self.prompt); validate_canonical_cwd(self.cwd)
+        validate_thread_config(self.config)
         if self.tier is not None: _enum(self.tier, Tier, "tier")
         if self.model is not None and (not isinstance(self.model, str) or not self.model): raise ValueError("model must be a non-empty string")
         if (self.tier is None) == (self.model is None): raise ValueError("exactly one of tier or model is required")
@@ -360,12 +364,15 @@ class StartWorkerRequest(StrictModel):
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        existing_fields = {item.name for item in fields(cls)} - {"no_callback", "callback_capture"}
-        if not isinstance(value, dict) or set(value) not in (existing_fields, {item.name for item in fields(cls)}):
+        all_fields = {item.name for item in fields(cls)}
+        existing_fields = all_fields - {"no_callback", "callback_capture", "config"}
+        if not isinstance(value, dict) or set(value) not in (
+                existing_fields, all_fields - {"config"}, all_fields):
             raise ValueError("invalid StartWorkerRequest fields")
         copied = dict(value)
         copied.setdefault("no_callback", False)
         copied.setdefault("callback_capture", None)
+        copied.setdefault("config", None)
         if copied["tier"] is not None:
             copied["tier"] = Tier(copied["tier"])
         copied["access"] = AccessMode(copied["access"])
@@ -512,8 +519,10 @@ def _validate_turn_options(schema: Optional[JsonObject], timeout: Optional[float
 class WorkerView(StrictModel):
     name: str; session_id: str; thread_id: str; cwd: str; tier: Optional[Tier]; model: str; effort: str; access: AccessMode
     attach: Optional[JsonObject] = None
+    config: Optional[JsonObject] = None
     def __post_init__(self) -> None:
         super().__post_init__()
+        validate_thread_config(self.config)
         if not self.session_id or not self.thread_id or not self.model or not self.effort:
             raise ValueError("worker identity and configuration strings must be non-empty")
         try:
@@ -528,11 +537,12 @@ class WorkerView(StrictModel):
 
     @classmethod
     def from_dict(cls, value: JsonObject):
-        legacy_fields = {item.name for item in fields(cls)} - {"attach"}
+        all_fields = {item.name for item in fields(cls)}
         if isinstance(value, dict) and "instance" in value:
             value = {key: item for key, item in value.items() if key != "instance"}
-        if isinstance(value, dict) and set(value) == legacy_fields:
-            value = dict(value, attach=None)
+        if isinstance(value, dict) and set(value) in (all_fields - {"attach", "config"},
+                                                      all_fields - {"config"}):
+            value = dict({"attach": None, "config": None}, **value)
         return super().from_dict(value)
 @dataclass(frozen=True)
 class TurnView(StrictModel): turn_id: str; status: str; error: Optional[JsonObject]

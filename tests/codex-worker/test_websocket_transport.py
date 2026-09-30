@@ -19,6 +19,7 @@ from codex_worker.websocket_transport import (
     CodexCallError,
     CodexConnection,
     CodexConnectionDeps,
+    CodexMethodAdapter,
     CodexTransportError,
     _default_connect,
 )
@@ -399,6 +400,42 @@ class WebSocketTransportTests(unittest.TestCase):
             "/private/codex.sock", "ws://localhost/rpc",
             {"max_size": 1024, "max_queue": 8, "compression": None},
         )])
+
+
+class RecordingAdapter(CodexMethodAdapter):
+    def __init__(self):
+        self.calls = []
+
+    def call(self, method, params=None, timeout=120.0):
+        self.calls.append((method, params))
+        return {"thread": {"id": "thr-1", "cwd": "/private/cwd"}}
+
+
+class ThreadConfigWireTests(unittest.TestCase):
+    def test_thread_start_sends_config_overrides_as_native_config(self):
+        adapter = RecordingAdapter()
+        adapter.start_thread("/private/cwd", model="m", sandbox="read-only",
+                             config={"web_search": "live", "features.x": True})
+        self.assertEqual(adapter.calls, [("thread/start", {
+            "cwd": "/private/cwd", "approvalPolicy": "never", "sandbox": "read-only",
+            "serviceName": "superdev_codex_worker", "model": "m",
+            "config": {"web_search": "live", "features.x": True},
+        })])
+
+    def test_thread_resume_sends_config_overrides_as_native_config(self):
+        adapter = RecordingAdapter()
+        adapter.resume_thread("thr-1", sandbox="read-only", config={"web_search": "live"})
+        self.assertEqual(adapter.calls, [("thread/resume", {
+            "threadId": "thr-1", "approvalPolicy": "never", "sandbox": "read-only",
+            "config": {"web_search": "live"},
+        })])
+
+    def test_absent_config_is_omitted_from_the_wire(self):
+        adapter = RecordingAdapter()
+        adapter.start_thread("/private/cwd")
+        adapter.resume_thread("thr-1")
+        self.assertNotIn("config", adapter.calls[0][1])
+        self.assertNotIn("config", adapter.calls[1][1])
 
 
 if __name__ == "__main__":

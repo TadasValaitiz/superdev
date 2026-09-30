@@ -74,6 +74,7 @@ class _Broker:
         self.calls = []
         self.last_turn_spec = None
         self.turn_specs = []
+        self.start_specs = []
         self.control_fault = None
         self.response_text = "done"
 
@@ -91,8 +92,10 @@ class _Broker:
     def start_session(self, spec):
         self.calls.append("session_start")
         thread_id = "thread-%d" % (len(self.registry.list()) + 1)
+        self.start_specs.append(spec)
         record = self.registry.create_worker(thread_id, spec.cwd, spec.name, spec.tier,
-                                             spec.model, spec.effort, spec.access.value)
+                                             spec.model, spec.effort, spec.access.value,
+                                             config=spec.config)
         self.runtime.attach(record)
         return {"session": record.to_dict(), "attached": True}
 
@@ -364,6 +367,25 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(self.broker.last_turn_spec.access, AccessMode.FULL)
         self.assertEqual(self.broker.last_turn_spec.model, started.value.worker.model)
 
+    def test_start_config_is_creation_policy_persisted_and_surfaced(self):
+        facade = self._facade()
+        started = facade.start(StartWorkerRequest(
+            name="search-a31", prompt="begin", cwd=self.cwd, access=AccessMode.READ_ONLY,
+            config={"web_search": "live"}))
+        self.assertIsInstance(started, Ok)
+        self.assertEqual(self.broker.start_specs[-1].config, {"web_search": "live"})
+        self.assertEqual(self.registry.resolve_name("search-a31").config, {"web_search": "live"})
+        self.assertEqual(started.value.to_dict()["worker"]["config"], {"web_search": "live"})
+        followed = facade.run(RunWorkerRequest(name="search-a31", prompt="continue"))
+        self.assertIsInstance(followed, Ok)
+        self.assertEqual(followed.value.worker.config, {"web_search": "live"})
+
+    def test_start_without_config_surfaces_null_config(self):
+        started = self._facade().start(StartWorkerRequest("plain-a31", "begin", self.cwd))
+        self.assertIsInstance(started, Ok)
+        self.assertIsNone(self.broker.start_specs[-1].config)
+        self.assertIsNone(started.value.to_dict()["worker"]["config"])
+
     def test_start_with_explicit_raw_model_persists_complete_null_tier_policy(self):
         self.broker.model_list = lambda: {"models": [{"id": "raw-model", "is_default": False,
                                                          "supported_efforts": ["high"]}]}
@@ -568,6 +590,22 @@ class FacadeTests(unittest.TestCase):
         ])
         self.assertNotIn("--model", command)
 
+    def test_unsupported_effort_corrected_start_preserves_creation_config(self):
+        self.broker.model_list = lambda: {"models": [{
+            "id": "gpt-5.6-terra", "is_default": True,
+            "supported_efforts": ["low"],
+        }]}
+        config = {"web_search": "live", "tools.web_search": {"context_size": "high"}}
+
+        result = self._facade().start(StartWorkerRequest(
+            name="retry-config", prompt="continue", cwd=self.cwd, effort="high", config=config))
+
+        self.assertIsInstance(result, Err)
+        command = shlex.split(result.error.next_actions[0]["command"])
+        overrides = [command[index + 1] for index, token in enumerate(command) if token == "--config"]
+        from codex_worker import cli
+        self.assertEqual(dict(cli._config_override(item) for item in overrides), config)
+
     def test_unsupported_effort_with_schema_requires_original_file_and_omits_action(self):
         self.broker.model_list = lambda: {"models": [{
             "id": "gpt-5.6-terra", "is_default": True,
@@ -623,7 +661,7 @@ class FacadeTests(unittest.TestCase):
             "name": record.name,
             "session_id": record.session_id, "thread_id": record.thread_id,
             "cwd": self.cwd, "tier": record.tier, "model": record.model,
-            "effort": record.effort, "access": record.access,
+            "effort": record.effort, "access": record.access, "config": record.config,
             "attach": {
                 "listener": "ws://127.0.0.1:4500", "thread_id": record.thread_id,
                 "attach_command": "codex --remote ws://127.0.0.1:4500",

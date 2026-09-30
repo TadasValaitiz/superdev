@@ -135,6 +135,31 @@ class CommandModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly one of tier or model"):
             StartWorkerRequest.from_dict(invalid_wire)
 
+    def test_start_config_is_optional_validated_creation_policy(self):
+        request = StartWorkerRequest("search-a31", "x", self.cwd, config={"web_search": "live"})
+        self.assertEqual(StartWorkerRequest.from_dict(request.to_dict()).config, {"web_search": "live"})
+        for bad in ({}, {"": 1}, {"web_search": None}, ["web_search"]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                StartWorkerRequest("search-a31", "x", self.cwd, config=bad)
+        wire = StartWorkerRequest("search-a31", "x", self.cwd).to_dict()
+        self.assertIsNone(wire["config"])
+        wire.pop("config")
+        self.assertIsNone(StartWorkerRequest.from_dict(wire).config)
+
+    def test_worker_view_surfaces_config_and_reads_pre_config_wire(self):
+        worker = WorkerView("search-a31", self.session_id, "thread", self.cwd, Tier.MEDIUM,
+                            "model", "medium", AccessMode.READ_ONLY, None, {"web_search": "live"})
+        self.assertEqual(worker.to_dict()["config"], {"web_search": "live"})
+        self.assertEqual(WorkerView.from_dict(worker.to_dict()), worker)
+        legacy = worker.to_dict()
+        legacy.pop("config")
+        self.assertIsNone(WorkerView.from_dict(legacy).config)
+        legacy.pop("attach")
+        self.assertIsNone(WorkerView.from_dict(legacy).config)
+        with self.assertRaises(ValueError):
+            WorkerView("search-a31", self.session_id, "thread", self.cwd, Tier.MEDIUM,
+                       "model", "medium", AccessMode.FULL, None, {})
+
     def test_callback_contracts_are_strict_and_keep_capture_secret(self):
         capture = CallbackCapture(
             target_socket="/tmp/cc-socks/123.sock", child_token="a" * 32,

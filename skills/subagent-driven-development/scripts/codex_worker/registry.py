@@ -1,4 +1,5 @@
 """Crash-safe, owner-only session registry."""
+import copy
 import datetime
 import json
 import os
@@ -11,7 +12,7 @@ import shlex
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from .models import IdentifierSelector, SessionRecord
+from .models import IdentifierSelector, JsonObject, SessionRecord, validate_thread_config
 from .service_domain import MigrationStatusView
 
 _WORKER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -49,12 +50,12 @@ def session_to_dict(record: SessionRecord):
     return record.to_dict()
 
 
-def _record(data, schema_version=2):
+def _record(data, schema_version=3):
     if not isinstance(data, dict):
         raise RegistryError("session record must be an object")
     v1_fields = {"session_id", "thread_id", "cwd", "created_at", "updated_at", "name", "model", "effort"}
-    required = v1_fields | {"tier", "access"}
-    expected = v1_fields if schema_version == 1 else required
+    v2_fields = v1_fields | {"tier", "access"}
+    expected = {1: v1_fields, 2: v2_fields}.get(schema_version, v2_fields | {"config"})
     if set(data) != expected:
         raise RegistryError("session record has incorrect fields")
     if any(not isinstance(data[key], str) or not data[key] for key in ("session_id", "thread_id", "cwd", "created_at", "updated_at")):
@@ -77,6 +78,10 @@ def _record(data, schema_version=2):
         raise RegistryError("cwd must be an existing directory")
     if not os.path.isdir(canonical_cwd):
         raise RegistryError("cwd must be absolute")
+    try:
+        validate_thread_config(data.get("config"))
+    except ValueError as exc:
+        raise RegistryError(str(exc)) from exc
     data = dict(data)
     data.setdefault("tier", None)
     data.setdefault("access", None)
@@ -88,7 +93,7 @@ def _record(data, schema_version=2):
 
 
 class SessionRegistry:
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(self, path, migration_path=None):
         self.path = Path(path)
@@ -150,23 +155,23 @@ class SessionRegistry:
                 self._save_locked([])
                 return []
         except (OSError, ValueError, TypeError) as exc:
-            raise RegistryError("invalid registry JSON at %s; expected schema versions 1 or 2" % self.path) from exc
+            raise RegistryError("invalid registry JSON at %s; expected schema versions 1, 2, or 3" % self.path) from exc
         return self._decode(raw)
 
     def _decode(self, raw: bytes) -> List[SessionRecord]:
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (OSError, ValueError, TypeError) as exc:
-            raise RegistryError("invalid registry JSON at %s; expected schema versions 1 or 2" % self.path) from exc
+            raise RegistryError("invalid registry JSON at %s; expected schema versions 1, 2, or 3" % self.path) from exc
         if (not isinstance(payload, dict) or set(payload) != {"schema_version", "sessions"}
                 or type(payload.get("schema_version")) is not int
-                or payload.get("schema_version") not in (1, self.SCHEMA_VERSION)
+                or payload.get("schema_version") not in (1, 2, self.SCHEMA_VERSION)
                 or not isinstance(payload.get("sessions"), list)):
-            raise RegistryError("unsupported registry schema at %s; expected schema versions 1 or 2" % self.path)
+            raise RegistryError("unsupported registry schema at %s; expected schema versions 1, 2, or 3" % self.path)
         try:
             records = [_record(item, payload["schema_version"]) for item in payload["sessions"]]
         except RegistryError as exc:
-            raise RegistryError("invalid registry record at %s; expected schema versions 1 or 2: %s" % (self.path, exc)) from exc
+            raise RegistryError("invalid registry record at %s; expected schema versions 1, 2, or 3: %s" % (self.path, exc)) from exc
         names = [r.name for r in records if r.name is not None]
         if (len({r.session_id for r in records}) != len(records) or len({r.thread_id for r in records}) != len(records)
                 or len(set(names)) != len(names)):
@@ -241,13 +246,15 @@ class SessionRegistry:
             raise RegistryError("unknown session")
         return record
 
-    def create_worker(self, thread_id: str, cwd: str, name: str, tier: Optional[str], model: str, effort: str, access: str, session_id: Optional[str] = None) -> SessionRecord:
-        return self._create(thread_id, cwd, name, tier, model, effort, access, session_id)
+    def create_worker(self, thread_id: str, cwd: str, name: str, tier: Optional[str], model: str, effort: str, access: str, session_id: Optional[str] = None,
+                      config: Optional[JsonObject] = None) -> SessionRecord:
+        return self._create(thread_id, cwd, name, tier, model, effort, access, session_id, config)
 
     def create(self, thread_id: str, cwd: str, name: Optional[str], model: Optional[str], effort: Optional[str], session_id: Optional[str] = None) -> SessionRecord:
         return self._create(thread_id, cwd, name, None, model, effort, None, session_id)
 
-    def _create(self, thread_id: str, cwd: str, name: Optional[str], tier: Optional[str], model: Optional[str], effort: Optional[str], access: Optional[str], session_id: Optional[str] = None) -> SessionRecord:
+    def _create(self, thread_id: str, cwd: str, name: Optional[str], tier: Optional[str], model: Optional[str], effort: Optional[str], access: Optional[str], session_id: Optional[str] = None,
+                config: Optional[JsonObject] = None) -> SessionRecord:
         if not isinstance(thread_id, str) or not thread_id:
             raise RegistryError("thread_id must be a non-empty string")
         if not isinstance(cwd, str) or not cwd:
@@ -267,6 +274,10 @@ class SessionRegistry:
             raise RegistryError("name must match [A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         if tier not in (None, "medium", "very-smart") or access not in (None, "full", "read_only"):
             raise RegistryError("common policy is invalid")
+        try:
+            validate_thread_config(config)
+        except ValueError as exc:
+            raise RegistryError(str(exc)) from exc
         if session_id is not None and (not isinstance(session_id, str) or not session_id):
             raise RegistryError("session_id must be a non-empty UUID")
         sid = session_id if session_id is not None else str(uuid.uuid4())
@@ -278,7 +289,8 @@ class SessionRegistry:
             if any(r.session_id == sid or r.thread_id == thread_id or (name is not None and r.name == name) for r in self._records):
                 raise RegistryConflict("duplicate session, thread, or worker name identifier")
             now = _now()
-            record = SessionRecord(sid, thread_id, canonical_cwd, now, now, name, model, effort, tier, access)
+            record = SessionRecord(sid, thread_id, canonical_cwd, now, now, name, model, effort, tier, access,
+                                   copy.deepcopy(config))
             records = self._records + [record]
             self._save_locked(records)
             self._records = records
@@ -292,7 +304,8 @@ class SessionRegistry:
                 raise RegistryError(label + " must be a non-empty string or null")
         with self._lock:
             current = self.resolve(IdentifierSelector(session_id=session_id))
-            updated = SessionRecord(current.session_id, current.thread_id, current.cwd, current.created_at, _now(), current.name, model, effort, current.tier, current.access)
+            updated = SessionRecord(current.session_id, current.thread_id, current.cwd, current.created_at, _now(), current.name, model, effort, current.tier, current.access,
+                                    current.config)
             records = [updated if r.session_id == session_id else r for r in self._records]
             self._save_locked(records)
             self._records = records

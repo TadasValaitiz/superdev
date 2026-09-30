@@ -54,7 +54,7 @@ class RegistryTests(unittest.TestCase):
             "name": name, "model": "legacy-model", "effort": "medium",
         }]}))
 
-    def test_missing_and_zero_byte_registry_initialize_v2_owner_only(self):
+    def test_missing_and_zero_byte_registry_initialize_current_schema_owner_only(self):
         for seed in (None, b""):
             path = Path(self.cwd) / ("state-%s.json" % ("missing" if seed is None else "empty"))
             if seed is not None:
@@ -62,7 +62,7 @@ class RegistryTests(unittest.TestCase):
             registry = SessionRegistry(path)
             self.assertEqual(registry.list(), [])
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            self.assertEqual(json.loads(path.read_text())["schema_version"], 2)
+            self.assertEqual(json.loads(path.read_text())["schema_version"], 3)
 
     def test_read_existing_is_strictly_read_only_and_replace_all_is_atomic(self):
         registry = SessionRegistry(self.state_path)
@@ -107,7 +107,7 @@ class RegistryTests(unittest.TestCase):
         self.assertFalse(legacy.common_policy_complete)
         registry.create_worker("thr-2", self.cwd, "new-a31", "medium", "gpt-5.6-terra", "medium", "full")
         payload = json.loads(self.state_path.read_text())
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
         self.assertEqual(payload["sessions"][0]["model"], "legacy-model")
 
     def test_common_policy_allows_raw_model_tier_but_requires_access(self):
@@ -127,7 +127,7 @@ class RegistryTests(unittest.TestCase):
         payload["sessions"][0]["name"] = "bad name"
         original = json.dumps(payload).encode()
         self.state_path.write_bytes(original)
-        with self.assertRaisesRegex(ValueError, "state/sessions.json; expected schema versions 1 or 2"):
+        with self.assertRaisesRegex(ValueError, "state/sessions.json; expected schema versions 1, 2, or 3"):
             SessionRegistry(self.state_path)
         self.assertEqual(self.state_path.read_bytes(), original)
 
@@ -268,7 +268,7 @@ class RegistryTests(unittest.TestCase):
     def test_snapshot_is_schema_versioned_and_owner_only(self):
         record = SessionRegistry(self.state_path).create("thr-1", self.cwd, None, "m", "e")
         payload = json.loads(self.state_path.read_text())
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
         self.assertEqual(payload["sessions"][0]["session_id"], record.session_id)
         self.assertEqual(os.stat(self.state_path).st_mode & 0o777, 0o600)
 
@@ -287,7 +287,7 @@ class RegistryTests(unittest.TestCase):
             with self.subTest(label=label):
                 path = Path(self.cwd) / ("%s.json" % label)
                 path.write_bytes(original)
-                with self.assertRaisesRegex(ValueError, "expected schema versions 1 or 2"):
+                with self.assertRaisesRegex(ValueError, "expected schema versions 1, 2, or 3"):
                     SessionRegistry(path)
                 self.assertEqual(path.read_bytes(), original)
 
@@ -342,6 +342,71 @@ class RegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "owner-owned regular file"):
                 SessionRegistry(self.state_path)
         self.assertEqual(self.state_path.read_bytes(), original)
+
+
+class WorkerConfigRegistryTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.cwd = str(Path(self.tempdir.name).resolve())
+        self.state_path = Path(self.cwd) / "state" / "sessions.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_worker_config_is_durable_and_writes_schema_v3(self):
+        registry = SessionRegistry(self.state_path)
+        created = registry.create_worker("thr-1", self.cwd, "search-a1b2", "medium", "m", "medium",
+                                         "read_only", config={"web_search": "live", "features.x": True})
+        self.assertEqual(created.config, {"web_search": "live", "features.x": True})
+        payload = json.loads(self.state_path.read_text())
+        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual(payload["sessions"][0]["config"], {"web_search": "live", "features.x": True})
+        reloaded = SessionRegistry(self.state_path).resolve_name("search-a1b2")
+        self.assertEqual(reloaded.config, {"web_search": "live", "features.x": True})
+        self.assertIsNone(registry.create_worker("thr-2", self.cwd, "plain-c3d4", "medium", "m",
+                                                 "medium", "full").config)
+
+    def test_v2_records_load_without_config_and_upgrade_on_next_write(self):
+        self.state_path.parent.mkdir()
+        self.state_path.write_text(json.dumps({"schema_version": 2, "sessions": [{
+            "session_id": "12345678-1234-5678-1234-567812345678", "thread_id": "thr-1",
+            "cwd": self.cwd, "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+            "name": "old-a1b2", "model": "m", "effort": "medium", "tier": "medium", "access": "full",
+        }]}))
+        registry = SessionRegistry(self.state_path)
+        self.assertIsNone(registry.resolve_name("old-a1b2").config)
+        registry.create_worker("thr-2", self.cwd, "new-c3d4", "medium", "m", "medium", "full")
+        payload = json.loads(self.state_path.read_text())
+        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual([item["config"] for item in payload["sessions"]], [None, None])
+
+    def test_annotation_update_preserves_creation_config(self):
+        registry = SessionRegistry(self.state_path)
+        created = registry.create_worker("thr-1", self.cwd, "search-a1b2", "medium", "m", "medium",
+                                         "full", config={"web_search": "live"})
+        updated = registry.update_annotations(created.session_id, model="m2", effort="high")
+        self.assertEqual(updated.config, {"web_search": "live"})
+
+    def test_invalid_worker_config_is_refused(self):
+        registry = SessionRegistry(self.state_path)
+        for config in ({}, [], {"": 1}, {" web_search": "live"}, {"web_search": None},
+                       {"x": {"nested": None}}, {"x": float("inf")}):
+            with self.subTest(config=config):
+                with self.assertRaises(RegistryError):
+                    registry.create_worker("thr-1", self.cwd, "bad-a1b2", "medium", "m", "medium",
+                                           "full", config=config)
+        self.assertEqual(registry.list(), [])
+
+    def test_v3_record_with_invalid_config_is_refused_on_load(self):
+        self.state_path.parent.mkdir()
+        self.state_path.write_text(json.dumps({"schema_version": 3, "sessions": [{
+            "session_id": "12345678-1234-5678-1234-567812345678", "thread_id": "thr-1",
+            "cwd": self.cwd, "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+            "name": "bad-a1b2", "model": "m", "effort": "medium", "tier": "medium", "access": "full",
+            "config": {},
+        }]}))
+        with self.assertRaisesRegex(RegistryError, "expected schema versions 1, 2, or 3"):
+            SessionRegistry(self.state_path)
 
 
 if __name__ == "__main__":
