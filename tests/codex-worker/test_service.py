@@ -23,6 +23,9 @@ from codex_worker.service import (
     OwnedTeardownError,
     _ensure_owner_directory,
     _spawn_codex,
+    _verify_owner_only_directory,
+    _verify_private_socket,
+    _verify_socket_inode,
 )
 from codex_worker.path_security import unsafe_ancestor
 from codex_worker.service_domain import ServiceConfig, derive_service_paths
@@ -142,6 +145,56 @@ class ServiceHarness:
         process = self.groups[pgid]
         if process.poll() is None:
             process.terminate()
+
+
+class SymlinkProcess(FakeProcess):
+    """codex-cli >= 0.158: binds in its shared daemon directory, links the requested path."""
+
+    def __init__(self, link_path, target_path, mode=0o600, cleanup=True):
+        super().__init__(target_path, mode)
+        self.link_path = link_path
+        self.cleanup = cleanup
+        os.symlink(str(target_path), str(link_path))
+
+    def terminate(self):
+        self.returncode = -15 if self.cleanup else -9
+        self.socket.close()
+        if self.cleanup:
+            for path in (self.link_path, self.socket_path):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+
+
+class SymlinkServiceHarness(ServiceHarness):
+    def __init__(self, daemon_dir, cleanup=True, target_name="a" * 64, link_text=None, mode=0o600):
+        super().__init__()
+        self.daemon_dir = daemon_dir
+        self.cleanup = cleanup
+        self.target_name = target_name
+        self.link_text = link_text
+        self.mode = mode
+
+    def spawn(self, argv, cwd, env):
+        self.argv.append((tuple(argv), cwd, env))
+        link_path = Path(argv[-1][len("unix://"):])
+        target = self.daemon_dir / self.target_name
+        process = SymlinkProcess(link_path, target, self.mode, self.cleanup)
+        if self.link_text is not None:
+            link_path.unlink()
+            os.symlink(self.link_text, str(link_path))
+        self.processes.append(process)
+        self.groups[process.pid] = process
+        return process
+
+    def deps(self):
+        deps = super().deps()
+        return GlobalWorkerServiceDeps(
+            deps.spawn_codex, deps.create_connection, deps.create_gateway,
+            deps.get_process_group, deps.current_process_group,
+            deps.signal_process_group, deps.process_group_exists,
+            codex_daemon_directory=lambda: self.daemon_dir)
 
 
 class FailingCloseHarness(ServiceHarness):
@@ -585,6 +638,150 @@ class GlobalWorkerServiceTests(unittest.TestCase):
         self.assertEqual(caught.exception.cause, "PermissionError")
         self.assertIn("changed after readiness", str(caught.exception.__cause__))
         self.assertTrue(service.paths.private_codex_socket.exists())
+
+    def make_daemon_dir(self, mode=0o700):
+        daemon_dir = Path(tempfile.mkdtemp(prefix="cdd-", dir="/tmp"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(daemon_dir, ignore_errors=True))
+        os.chmod(daemon_dir, mode)
+        return Path(os.path.realpath(daemon_dir))
+
+    def terminate(self, service):
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            lifecycle.terminate_owned(lease)
+
+    def test_start_accepts_codex_symlink_into_owner_only_daemon_directory(self):
+        daemon_dir = self.make_daemon_dir()
+        harness = SymlinkServiceHarness(daemon_dir)
+        service = self.make_service(harness)
+        status = service.start()
+        self.assertTrue(status.ready)
+        self.assertTrue(self.paths.private_codex_socket.is_symlink())
+        self.assertEqual(harness.connections[0][0], "unix://%s" % self.paths.private_codex_socket)
+        self.terminate(service)
+        self.assertEqual(harness.group_signals[0][1], signal.SIGTERM)
+        self.assertFalse(self.paths.private_codex_socket.is_symlink())
+        self.assertFalse((daemon_dir / harness.target_name).exists())
+
+    def test_killed_codex_teardown_unlinks_only_its_own_link(self):
+        daemon_dir = self.make_daemon_dir()
+        harness = SymlinkServiceHarness(daemon_dir, cleanup=False)
+        service = self.make_service(harness)
+        service.start()
+        self.terminate(service)
+        self.assertFalse(self.paths.private_codex_socket.is_symlink())
+        target = daemon_dir / harness.target_name
+        self.assertTrue(stat.S_ISSOCK(os.lstat(target).st_mode))
+
+    def test_symlinked_private_socket_outside_owner_only_daemon_directory_is_refused(self):
+        other = self.make_daemon_dir()
+        cases = {
+            "target outside the daemon directory": lambda d: SymlinkServiceHarness(other),
+            "group-readable daemon directory": lambda d: (os.chmod(d, 0o750), SymlinkServiceHarness(d))[1],
+            "group-accessible target socket": lambda d: SymlinkServiceHarness(d, mode=0o660),
+            "relative link": lambda d: SymlinkServiceHarness(d, link_text="a" * 64),
+            "link to a non-socket": lambda d: ((d / "plain").write_text("x"), os.chmod(d / "plain", 0o600),
+                                               SymlinkServiceHarness(d, link_text=str(d / "plain")))[2],
+        }
+        for index, (label, build) in enumerate(cases.items()):
+            with self.subTest(label):
+                daemon_dir = self.make_daemon_dir()
+                harness = build(daemon_dir)
+                paths = derive_service_paths("darwin", Path(self.temporary.name) / ("s%d" % index),
+                                             Path(self.temporary.name) / ("t%d" % index), os.getuid())
+                deps = harness.deps()
+                deps = GlobalWorkerServiceDeps(
+                    deps.spawn_codex, deps.create_connection, deps.create_gateway,
+                    deps.get_process_group, deps.current_process_group,
+                    deps.signal_process_group, deps.process_group_exists,
+                    codex_daemon_directory=lambda: daemon_dir)
+                service = GlobalWorkerService(paths, self.config, lambda _message: None,
+                                              None, deps, codex_argv=("/opt/bin/codex",))
+                with self.assertRaises(PermissionError):
+                    service.start()
+                self.assertTrue(harness.gateways[0].closed)
+                self.assertIsNotNone(harness.processes[0].poll())
+                self.assertFalse(service.status().ready)
+
+    def test_symlink_daemon_directory_itself_may_not_be_a_link(self):
+        real = self.make_daemon_dir()
+        alias = Path(tempfile.mkdtemp(prefix="cdd-alias-", dir="/tmp"))
+        os.rmdir(alias)
+        os.symlink(str(real), str(alias))
+        self.addCleanup(lambda: os.path.lexists(alias) and os.unlink(alias))
+        self.paths.private_codex_socket.parent.mkdir(parents=True, mode=0o700)
+        target = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        target.bind(str(real / "b"))
+        self.addCleanup(target.close)
+        os.chmod(real / "b", 0o600)
+        os.symlink(str(alias / "b"), str(self.paths.private_codex_socket))
+        with self.assertRaises(PermissionError):
+            _verify_private_socket(self.paths.private_codex_socket, os.getuid(), alias)
+
+    def test_symlink_target_owner_is_verified(self):
+        daemon_dir = self.make_daemon_dir()
+        self.paths.private_codex_socket.parent.mkdir(parents=True, mode=0o700)
+        target = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        target.bind(str(daemon_dir / "c"))
+        self.addCleanup(target.close)
+        os.chmod(daemon_dir / "c", 0o600)
+        os.symlink(str(daemon_dir / "c"), str(self.paths.private_codex_socket))
+        identity = _verify_private_socket(self.paths.private_codex_socket, os.getuid(), daemon_dir)
+        self.assertEqual(identity.target, str(daemon_dir / "c"))
+        with self.assertRaises(PermissionError):
+            _verify_private_socket(self.paths.private_codex_socket, os.getuid() + 1, daemon_dir)
+
+    def test_socket_inode_must_be_owned_by_the_service_user(self):
+        fields = [stat.S_IFSOCK | 0o600, 1, 2, 1, os.getuid() + 1, 0, 0, 0, 0, 0]
+        with self.assertRaisesRegex(PermissionError, "not owned by the service user"):
+            _verify_socket_inode(os.stat_result(fields), os.getuid())
+        fields[4] = os.getuid()
+        _verify_socket_inode(os.stat_result(fields), os.getuid())
+
+    def test_codex_daemon_directory_must_be_owned_by_the_service_user(self):
+        fields = [stat.S_IFDIR | 0o700, 1, 2, 1, os.getuid() + 1, 0, 0, 0, 0, 0]
+        with self.assertRaisesRegex(PermissionError, "owner-only real directory"):
+            _verify_owner_only_directory(os.stat_result(fields), os.getuid())
+        fields[4] = os.getuid()
+        _verify_owner_only_directory(os.stat_result(fields), os.getuid())
+
+    def test_teardown_refuses_to_unlink_a_replacement_link(self):
+        daemon_dir = self.make_daemon_dir()
+        harness = SymlinkServiceHarness(daemon_dir, cleanup=False)
+        service = self.make_service(harness)
+        service.start()
+        link = self.paths.private_codex_socket
+        text = os.readlink(link)
+        harness.processes[0].returncode = -9
+        harness.processes[0].socket.close()
+        link.unlink()
+        os.symlink(text, str(link))
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            with self.assertRaises(OwnedTeardownError) as caught:
+                lifecycle.terminate_owned(lease)
+        self.assertIn("changed after readiness", str(caught.exception.__cause__))
+        self.assertTrue(link.is_symlink())
+
+    def test_teardown_refuses_to_unlink_link_whose_target_was_substituted(self):
+        daemon_dir = self.make_daemon_dir()
+        harness = SymlinkServiceHarness(daemon_dir, cleanup=False)
+        service = self.make_service(harness)
+        service.start()
+        target = daemon_dir / harness.target_name
+        harness.processes[0].returncode = -9
+        harness.processes[0].socket.close()
+        target.unlink()
+        replacement = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        replacement.bind(str(target))
+        os.chmod(target, 0o600)
+        self.addCleanup(replacement.close)
+        lifecycle = service._lifecycle_for_composition()
+        with lifecycle.gate.drain() as lease:
+            with self.assertRaises(OwnedTeardownError) as caught:
+                lifecycle.terminate_owned(lease)
+        self.assertIn("changed after readiness", str(caught.exception.__cause__))
+        self.assertTrue(self.paths.private_codex_socket.is_symlink())
 
     def test_load_bearing_service_seams_and_frozen_status_are_exact(self):
         self.assertEqual(list(inspect.signature(GlobalWorkerService.start).parameters), ["self"])

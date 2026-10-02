@@ -994,7 +994,8 @@ class GlobalServiceManagerTests(unittest.TestCase):
             "durable_state": "preserved",
         }
         result = self.manager.restart(force=True)
-        self.assertEqual(result["maintenance"], self.maintenance)
+        self.assertEqual(result["maintenance"],
+                         dict(self.maintenance, worker_attachment="detached_until_next_run"))
         self.assertEqual(result["service"]["status"], "ready")
         self.assertEqual(result["maintenance"]["inventory"]["items"][0]["turn_id"],
                          "tui-turn")

@@ -141,8 +141,8 @@ class WorkerFacade:
                         record.thread_id, request.goal, "active", request.token_budget)
                 except BaseException as exc:
                     return Err(self._effect_fault(exc, record, request.name))
-            prompt = (self._initial_prompt(request.prompt, record)
-                      if capture is not None and capture.claude_config_dir is not None else request.prompt)
+            prompt = (self._initial_prompt(request.prompt, record, capture)
+                      if not request.no_callback and capture is not None else request.prompt)
             return self._start_and_wait(record, worker, prompt, request.output_schema,
                                         request.timeout)
         except BaseException as exc:
@@ -201,12 +201,13 @@ class WorkerFacade:
             return Err(fault)
 
     def status(self, request: WorkerStatusRequest) -> Result[WorkerStatusResponse, FacadeFault]:
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             status = self.deps.runtime.status(record.session_id)
             if not status.attached:
-                return Err(self._stopped_fault(request.name, record))
+                return Err(self._detached_fault(request.name, record))
             callback = None
             if (self.deps.callback_store is not None
                     and self.deps.callback_store.binding(record.session_id) is not None):
@@ -219,22 +220,23 @@ class WorkerFacade:
                                                 response.latest_turn, callback)
             return Ok(response)
         except (UnknownSession, SessionDetached):
-            return Err(self._stopped_fault(request.name, record))
+            return Err(self._detached_fault(request.name, record))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, request.name))
 
     def messages(self, request: WorkerMessagesRequest) -> Result[WorkerMessagesResponse, FacadeFault]:
+        record = None
         try:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             if not self.deps.runtime.status(record.session_id).attached:
-                return Err(self._stopped_fault(request.name, record))
+                return Err(self._detached_fault(request.name, record))
             items, truncated, cursor = self.deps.runtime.agent_messages(record.session_id, request.tail)
             messages = self.deps.projector.select_completion_messages(items, False)
             return Ok(WorkerMessagesResponse(self._worker(record), messages, request.tail,
                                              len(messages), truncated, cursor))
         except (UnknownSession, SessionDetached):
-            return Err(self._stopped_fault(request.name, None))
+            return Err(self._detached_fault(request.name, record))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, request.name))
 
@@ -296,7 +298,7 @@ class WorkerFacade:
     def limits(self, request: LimitsRequest) -> Result[LimitsResponse, FacadeFault]:
         try:
             if not self.deps.broker.daemon_status()["ready"]:
-                return Err(self._stopped_fault(None, None))
+                return Err(self._stopped_fault())
             return Ok(LimitsResponse("available", NativeCodexProxy(self.deps.broker.codex).rate_limits_read()["rateLimits"]))
         except BaseException as exc:
             return Err(self._effect_fault(exc, None, None, limits=True))
@@ -429,7 +431,7 @@ class WorkerFacade:
             record = self._resolve_policy(request.name)
             if isinstance(record, FacadeFault): return Err(record)
             status = self.deps.runtime.status(record.session_id)
-            if not status.attached: return Err(self._stopped_fault(request.name, record))
+            if not status.attached: return Err(self._detached_fault(request.name, record))
             turn_id = status.active_turn_id
             if turn_id is None:
                 return Err(self._turn_not_active(record, None))
@@ -455,9 +457,9 @@ class WorkerFacade:
     def _attached_fault(self, record, name):
         try:
             if not self.deps.runtime.status(record.session_id).attached:
-                return self._stopped_fault(name, record)
+                return self._detached_fault(name, record)
         except (UnknownSession, SessionDetached):
-            return self._stopped_fault(name, record)
+            return self._detached_fault(name, record)
         return None
 
     @staticmethod
@@ -476,14 +478,55 @@ class WorkerFacade:
                             self._command("interrupt --name %s" % name),
                             self._raw_resume_command(record.thread_id))
 
-    def _initial_prompt(self, prompt, record):
-        block = (
-            "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker message --name %s --message \"<prose>\"\n"
-            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
-            "This command does not wait for a reply; Claude may later use steer or run."
-        ) % shlex.quote(record.name)
-        return prompt + "\n\n" + block
+    def _initial_prompt(self, prompt, record, capture):
+        command = "codex-worker message --name %s" % shlex.quote(record.name)
+        lines = [
+            "Codex-to-Claude callback context:",
+            "Worker name: %s" % json.dumps(record.name),
+            "Creation cwd: %s" % json.dumps(record.cwd),
+            "Wrapper session ID: %s" % json.dumps(record.session_id),
+            "Codex thread ID: %s" % json.dumps(record.thread_id),
+            "These IDs are distinct from the Claude Code origin session below.",
+        ]
+        if capture.target_socket is not None:
+            lines.append("Claude origin session ID: %s" % json.dumps(capture.claude_session_id))
+            lines.append("Claude origin agent name: %s" % (
+                json.dumps(capture.claude_agent_name) if capture.claude_agent_name
+                else "unavailable (unnamed origin); do not guess a name"))
+            lines.extend([
+                "Reply to the stored Claude origin, pinned at worker creation:",
+                command + ' --message "<prose>"',
+            ])
+            if capture.claude_agent_name:
+                lines.extend([
+                    "Optional named one-send route (resolves the currently live agent; "
+                    "never changes the stored origin):",
+                    command + " --cc-agent-name %s --message \"<prose>\"" %
+                    shlex.quote(capture.claude_agent_name),
+                ])
+        else:
+            lines.extend([
+                "No default Claude origin was captured; automatic completion callbacks are unavailable.",
+                "Only send if the dispatch brief supplies an exact Claude agent name; never guess it:",
+                command + " --cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>' "
+                '--message "<prose>"',
+            ])
+        lines.extend([
+            "For long reports, write a durable file on the shared filesystem first; send only "
+            "a short status and its existing absolute path:",
+            command + ' --message "DONE: report /absolute/path/to/report.md; <short status>"'
+            if capture.target_socket is not None else
+            command + " --cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>' "
+            '--message "DONE: report /absolute/path/to/report.md; <short status>"',
+            "Use a real path readable by Claude, not the example placeholder. "
+            "--message-file sends file contents, not a file reference; keep those contents short.",
+            "Continue working: this command does not wait for a reply.",
+            "A written result proves a local write, not delivered or acknowledged; on failure "
+            "report the error and recover with status/messages/history by worker name.",
+            "Never expose callback tokens, socket paths or credentials in prompts or reports. "
+            "Claude may later use steer or run to reply to this Codex worker.",
+        ])
+        return prompt + "\n\n" + "\n".join(lines)
 
     def _command(self, suffix):
         return "codex-worker %s" % suffix
@@ -579,20 +622,28 @@ class WorkerFacade:
                                {"command": self._command("messages --name %s" % record.name), "reason": "Read retained narration"},
                                {"command": self._command("interrupt --name %s" % record.name), "reason": "Cancel only if deliberate"}])
 
-    def _stopped_fault(self, name, record):
-        if name is None:
-            return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
-                               known_ids=self._known(), next_actions=[
-                                   {"command": self._command("daemon start"),
-                                    "reason": "Start the global service without creating a worker"}])
-        return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+    def _detached_fault(self, name, record):
+        """The service is serving this request, so an unattached worker is detached, not stopped."""
+        if record is None:
+            return self._stopped_fault()
+        run = "run --name %s --prompt %s" % (
+            shlex.quote(name), shlex.quote("Report your status; do not start new work."))
+        return FacadeFault(FacadeFaultCode.WORKER_DETACHED,
+                           "Worker is detached from this service generation", "worker_detached",
                            details=self._details({}, record),
                            known_ids=self._known(record, name), next_actions=[
+                               {"command": self._command("session resume --session %s" % record.session_id),
+                                "reason": "Re-attach this worker to the current service generation "
+                                          "without starting a turn"},
+                               {"command": self._command(run),
+                                "reason": "Or resume by continuing: this runs a turn, so replace the "
+                                          "prompt with your real follow-up"}])
+
+    def _stopped_fault(self):
+        return FacadeFault(FacadeFaultCode.DAEMON_STOPPED, "Worker daemon is stopped", "daemon_stopped",
+                           known_ids=self._known(), next_actions=[
                                {"command": self._command("daemon start"),
-                                "reason": "Start the global service without creating a turn"},
-                               {"command": self._command("status --name %s" % shlex.quote(name)),
-                                "reason": "Inspect the exact durable worker after service start"},
-                               self._raw_resume_action(record.thread_id)])
+                                "reason": "Start the global service without creating a worker"}])
 
     def _turn_not_active(self, record, turn_id):
         return FacadeFault(FacadeFaultCode.TURN_NOT_ACTIVE, "Turn is not active", "turn_not_active",

@@ -1,0 +1,7 @@
+total 0
+90477472 drwx------@ 6 tadas  wheel  192 Sep 30 19:18 .
+90475843 drwxr-xr-x@ 8 tadas  wheel  256 Sep 30 19:22 ..
+90477494 lrwxr-xr-x@ 1 tadas  wheel   94 Sep 30 19:18 c -> /private/tmp/codex-daemon-501/376919b00444a9498a12b21ebee7cd6d7bf8d82d4e67ba204bb2106ec51dbe2f
+90477473 -rw-------@ 1 tadas  wheel    0 Sep 30 19:18 l
+90477501 srw-------@ 1 tadas  wheel    0 Sep 30 19:18 s
+90477500 -rw-------@ 1 tadas  wheel    0 Sep 30 19:18 s.lock

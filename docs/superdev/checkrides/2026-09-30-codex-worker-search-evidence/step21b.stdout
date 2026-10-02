@@ -1,0 +1,13 @@
+total 0
+drwx------@  12 tadas  wheel   384 Sep 30 19:18 .
+drwxrwxrwt  111 root   wheel  3552 Sep 30 19:18 ..
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 15:45 153c08428421bb76b04b354ce9b2b376bcbfdfad96708a01315a9066bef0647c.lock
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 18:45 194b183f0ffb0289997f510c076a7bf117a431de321d46de47fab507cc8c296e.lock
+srw-------@   1 tadas  wheel     0 Sep 30 19:18 376919b00444a9498a12b21ebee7cd6d7bf8d82d4e67ba204bb2106ec51dbe2f
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 19:18 376919b00444a9498a12b21ebee7cd6d7bf8d82d4e67ba204bb2106ec51dbe2f.lock
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 18:49 484b2147d1340e83fc62eebd8aee321fffc366ed2113099427c863d2767e467f.lock
+srw-------@   1 tadas  wheel     0 Sep 30 19:01 6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 15:44 6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc.lock
+-rw-r--r--@   1 tadas  wheel     0 Sep 30 18:45 9b259d823983ffdae3103f28370ba8eed25dff31395a68e9e0c02752a5ac46b3.lock
+srw-------@   1 tadas  wheel     0 Sep 30 04:56 a02c5d4d3c202a9bec2c758e3cc24115de170c6439dc77d9bdfee87226cd93c4
+-rw-r--r--@   1 tadas  wheel     0 Sep 28 13:23 a02c5d4d3c202a9bec2c758e3cc24115de170c6439dc77d9bdfee87226cd93c4.lock

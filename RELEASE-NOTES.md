@@ -1,3 +1,72 @@
+# v8.6.4 — codex-worker: remote plugin discovery and explicit Claude reply context (2026-10-02)
+
+- **Remote flickering:** the worker bridge and internal connection capped JSON-RPC
+  messages at 4 MiB, but the real Codex 0.160.0 `plugin/list` response measured about
+  12 MiB. That disconnected remote clients during startup plugin discovery. The
+  shared bounded limit is now 64 MiB with two buffered wire frames; the separate
+  pending approval queue retains its 16-entry bound. Plugins remain enabled. Regression tests require
+  a 12 MiB catalog followed by another RPC on the same connection. A temporary
+  production gateway against the existing real Codex server forwarded two actual
+  12,045,570-byte catalogs plus follow-up requests without disconnecting.
+- **Callback brief gap — prompt/context boundary:** worker initialization previously
+  supplied only its own name and an unspecified Claude name override. It now carries
+  the verified Claude origin agent name and session ID, worker name, cwd, wrapper
+  session UUID, Codex thread ID, concrete pinned reply command, and a shell-quoted
+  exact named override when available. Names are revalidated against the live Claude
+  registry, never trusted from caller display metadata. Control characters and
+  excessively long names are refused. Legacy captures still decode.
+  Root-only captures explicitly lack a default recipient; disabled callbacks inject
+  no guidance. Credentials are never injected; `written` is not delivery.
+- **Skill reference:** `skills/subagent-driven-development/codex-worker.md` requires
+  explicit callback context in the launch brief and separates pinned callbacks from
+  one-send live name resolution. Long reports stay on the shared filesystem; messages
+  carry a short status and an existing absolute path, not file contents.
+  Behavioral baseline/review identified the missing
+  origin name, session identity, root-only caveat and write-vs-delivery caveat.
+- **Touched boundaries:** `websocket_transport.py`, `commands.py`,
+  `claude_transport.py`, `facade.py` under
+  `skills/subagent-driven-development/scripts/codex_worker/`, the callback reference
+  above, and their gateway/transport/facade/Claude transport regressions.
+- **Scope:** private transport architecture and default public listener are unchanged;
+  the manual server on port 4501 is not stopped or reconfigured. This patch addresses
+  flickering and reply clarity, not the previously discussed native-WS migration.
+- **Existing suite issue:** the unchanged 8.6.3 baseline already fails seven assertions
+  in `SddModelSelectionTests.test_self_brainstorm_workflow_pins_every_agent_role_to_native_tiers`;
+  they expect an older self-brainstorm workflow shape. They remain outside this patch.
+  With that one known failing test excluded, all 646 remaining tests passed, with
+  ResourceWarning promoted to errors. Focused transport/callback regressions pass.
+
+# v8.6.3 — codex-worker: service start under codex-cli 0.158, truthful detached workers (2026-10-02)
+
+The codex-worker service had not been able to start since codex-cli 0.158.0 arrived (backlog CWS-1). The
+human ruled option 1 (D197): accept codex's symlinked private socket, but only under owner-only rules. A
+live checkride of `start --search` → `run` → stop/restart then found two older defects that this fix made
+reachable again, and the human ruled to fix them too (DECIDE A). 8.6.2 was the pre-fix build installed for
+that checkride and was never published.
+
+- **Service start under codex-cli 0.158 (CWS-1):**
+  - `codex app-server --listen unix://PATH` now makes PATH a symlink into `/private/tmp/codex-daemon-<uid>/`.
+  - The service accepts the link only if its target sits directly in that owner-only real directory and is
+    an owner-only socket owned by the user. `lstat` of the link, `lstat` of the target, and `os.stat`
+    through the link must all agree.
+  - The service records the identity of both the link and the target. Teardown still signals only its own
+    Codex process group, then unlinks only its own unchanged link. A killed codex's stale target is left for
+    codex, which rebinds it.
+  - Measured live: Codex's listener and its `codex-code-mode-host` both exit with the owned group, and no
+    orphan is left.
+- **Detached workers are reported truthfully (F15):** after a stop or restart, every worker is detached
+  until it is re-attached.
+  - `status`, `messages`, `history`, `goal` and `steer` now return the new typed fault
+    `worker_detached` (-32043), "Worker is detached from this service generation". It used to report
+    "Worker daemon is stopped", with a `daemon start` remedy that went nowhere.
+  - The first remedy is `session resume --session <uuid>`, which re-attaches without starting a turn.
+    `run` is offered second, with a reason saying that it runs a turn.
+  - Completed stop/restart results now carry `worker_attachment: "detached_until_next_run"`.
+- **`messages` on a detached worker no longer crashes (F16):** it used to fail with an untyped
+  `AttributeError` (exit 1). It now returns the typed fault.
+- **Docs:** codex-worker.md now documents the detached state and the no-turn re-attach. The reuse wording
+  now says a worker reads its skills once *per live session*, and that it is not a per-turn token saving.
+
 # v8.6.1 — codex-worker: Python 3.11+ faults, preflight under FORCE_COLOR (2026-09-30)
 
 Two small fixes found during the v8.6.0 live check (backlog CWS-2 and CWS-3). CWS-1, the service start
@@ -15,8 +84,11 @@ with codex-cli 0.158.0, is still open and waiting on a decision.
 
 # v8.6.0 — codex-worker: search-enabled, reusable research workers (2026-09-30)
 
-Research callers used one-shot `codex exec --search`, which reloads the plugin's skills (about 84k input
-tokens) on every call. A durable named worker can now be created with web search enabled and reused with `run`.
+Research callers used one-shot `codex exec --search`, which reloads the plugin's skills on every call. A
+durable named worker can now be created with web search enabled and reused with `run`. It keeps the
+conversation and reads its skills once per live session; it is not a per-turn token saving: every turn re-sends the growing
+thread history, so input tokens rise as the conversation grows (corrected in 8.6.2 after a measured
+checkride).
 
 - **`codex-worker start --search`:** turns on live web search. It is sugar for `web_search="live"`, the
   override that codex-cli 0.158.0 maps `codex --search` to (`codex-rs/tui/src/startup_orchestration.rs`

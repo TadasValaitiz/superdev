@@ -1,0 +1,1 @@
+Follow-up on the EFSA opinion you cited (EFSA Journal 2011;9(6):2238): what L-theanine doses and population did it consider, and why was the evidence judged insufficient? Two sentences, cite the EFSA URL.

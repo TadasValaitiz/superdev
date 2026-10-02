@@ -7,7 +7,7 @@ v8.6.0: `service.py` is byte-identical from 8.1.0 (2dd410f) to 8.6.0.
 
 ## CWS-1: the private Codex socket path is now a symlink
 
-**Status:** Open. Needs a design decision.
+**Status:** Fixed in v8.6.3 (D197 option 1; checkride `docs/superdev/checkrides/2026-09-30-codex-worker-search-checkride.md`).
 **Surface:** `codex-worker start` / `run` / `daemon start` (global service startup)
 
 **Observed.** `codex-worker start --name research-f876 --cwd /private/tmp/codex-research-f876 --read-only

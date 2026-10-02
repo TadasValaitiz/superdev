@@ -7,7 +7,7 @@ import socket
 import stat
 import subprocess
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -91,7 +91,7 @@ class ClaudeTransport:
             raise _fault(FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
                          "Claude callback config root is not canonical")
         if capture.target_socket is None:
-            return capture
+            return replace(capture, claude_agent_name=None)
         if not _pid_socket_basename_matches(capture.target_socket, capture.claude_pid):
             raise _fault(FacadeFaultCode.CALLBACK_TARGET_STALE,
                          "Captured Claude callback socket does not match its PID")
@@ -103,7 +103,8 @@ class ClaudeTransport:
             raise _fault(FacadeFaultCode.CALLBACK_TARGET_STALE,
                          "Captured Claude callback target no longer matches its live identity")
         self._safe_live_socket(capture.target_socket)
-        return capture
+        name = matches[0].get("name")
+        return replace(capture, claude_agent_name=name if isinstance(name, str) and name else None)
 
     def encode_user_line(self, binding: CallbackBinding, event: CallbackEvent) -> str:
         event_object = {
@@ -255,7 +256,8 @@ class ClaudeTransport:
                     or not Path(record["messagingSocketPath"]).is_absolute()
                     or not _pid_socket_basename_matches(record["messagingSocketPath"], record["pid"])
                     or ("name" in record and record["name"] is not None
-                        and (not isinstance(record["name"], str) or not record["name"]))):
+                        and (not isinstance(record["name"], str) or not record["name"]
+                             or len(record["name"]) > 1024 or not record["name"].isprintable()))):
                 raise _fault(FacadeFaultCode.CALLBACK_TARGET_UNSAFE,
                              "Claude callback registry contains a malformed record")
             records.append(record)

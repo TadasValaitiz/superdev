@@ -219,12 +219,12 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(event.schema, "codex-worker.claude-callback/v1")
         self.assertEqual(event.event, "worker_message")
         self.assertEqual(event.payload, {"message": "progress"})
-        expected_block = (
-            "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker message --name message-a --message \"<prose>\"\n"
-            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
-            "This command does not wait for a reply; Claude may later use steer or run.")
-        self.assertEqual(self.broker.turn_specs[0].prompt, "caller prose\n\n" + expected_block)
+        prompt = self.broker.turn_specs[0].prompt
+        self.assertTrue(prompt.startswith("caller prose\n\nCodex-to-Claude callback context:"))
+        self.assertIn('codex-worker message --name message-a --message "<prose>"', prompt)
+        self.assertIn('Claude origin session ID: "claude-session"', prompt)
+        self.assertIn("unavailable (unnamed origin); do not guess a name", prompt)
+        self.assertNotIn("--cc-agent-name", prompt)
         facade.run(RunWorkerRequest("message-a", "follow-up"))
         self.assertEqual(self.broker.turn_specs[1].prompt, "follow-up")
 
@@ -242,9 +242,53 @@ class FacadeTests(unittest.TestCase):
         prompt = self.broker.turn_specs[0].prompt
         self.assertIn("codex-worker message --name root-only", prompt)
         self.assertNotIn(instance, prompt)
-        self.assertIn("Optional one-send override: --cc-agent-name <name>.", prompt)
-        unsafe_record = type("Record", (), {"name": "root only; $(unsafe)"})()
-        self.assertIn("--name 'root only; $(unsafe)'", facade._initial_prompt("x", unsafe_record))
+        self.assertIn("No default Claude origin was captured", prompt)
+        self.assertIn("never guess it", prompt)
+        self.assertIn("--cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>'", prompt)
+        unsafe_record = type("Record", (), {"name": "root only; $(unsafe)",
+                            "session_id": "wrapper", "thread_id": "thread", "cwd": self.cwd})()
+        self.assertIn("--name 'root only; $(unsafe)'",
+                      facade._initial_prompt("x", unsafe_record, root_only))
+        named = CallbackCapture("/tmp/claude.sock", "a" * 32, "origin", 42,
+                                "measured", self.cwd, "Claude's room; $(unsafe)")
+        named_prompt = facade._initial_prompt("x", unsafe_record, named)
+        override = next(line for line in named_prompt.splitlines()
+                        if "--cc-agent-name" in line)
+        parsed = shlex.split(override)
+        self.assertEqual(parsed[parsed.index("--cc-agent-name") + 1], named.claude_agent_name)
+
+    def test_callback_brief_identifies_both_sides_without_credentials(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-origin-123",
+                                  42, "measured", self.cwd, "build-orchestrator-7ac2")
+        self.assertIsInstance(facade.start(StartWorkerRequest(
+            "implement-91fa", "task", self.cwd, callback_capture=capture)), Ok)
+        record = self.registry.resolve_name("implement-91fa")
+        prompt = self.broker.turn_specs[0].prompt
+        for identity in (record.name, record.cwd, record.session_id, record.thread_id,
+                         "claude-origin-123", "build-orchestrator-7ac2"):
+            self.assertIn(identity, prompt)
+        self.assertIn('codex-worker message --name implement-91fa --message "<prose>"', prompt)
+        self.assertIn("--cc-agent-name build-orchestrator-7ac2", prompt)
+        self.assertIn("written", prompt)
+        self.assertIn("delivered", prompt)
+        self.assertIn("durable file on the shared filesystem first", prompt)
+        self.assertIn("--message-file sends file contents, not a file reference", prompt)
+        self.assertNotIn(capture.child_token, prompt)
+        self.assertNotIn(capture.target_socket, prompt)
+
+    def test_no_callback_keeps_task_prompt_unchanged(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport))
+        self.assertIsInstance(facade.start(StartWorkerRequest(
+            "disabled-with-capture", "task only", self.cwd,
+            no_callback=True)), Ok)
+        self.assertEqual(self.broker.turn_specs[0].prompt, "task only")
 
     def test_null_and_disabled_callback_starts_do_not_inject_proactive_guidance(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade
@@ -1073,7 +1117,7 @@ class FacadeTests(unittest.TestCase):
                 facade.goal_set(GoalSetRequest("guarded", objective="x")),
                 facade.goal_show(GoalShowRequest("guarded"))):
             self.assertIsInstance(result, Err)
-            self.assertEqual(result.error.code, FacadeFaultCode.DAEMON_STOPPED)
+            self.assertEqual(result.error.code, FacadeFaultCode.WORKER_DETACHED)
         self.broker.daemon_status = lambda: {"ready": False}
         limits = facade.limits(LimitsRequest())
         self.assertIsInstance(limits, Err)
@@ -1260,9 +1304,9 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(collision, Err)
         self.assertEqual(collision.error.code, FacadeFaultCode.WORKER_NAME_EXISTS)
         self.runtime.detach_all(__import__("codex_worker.models", fromlist=["ErrorDetail"]).ErrorDetail("stopped"))
-        stopped = facade.status(WorkerStatusRequest("occupied"))
-        self.assertIsInstance(stopped, Err)
-        self.assertEqual(stopped.error.code, FacadeFaultCode.DAEMON_STOPPED)
+        detached = facade.status(WorkerStatusRequest("occupied"))
+        self.assertIsInstance(detached, Err)
+        self.assertEqual(detached.error.code, FacadeFaultCode.WORKER_DETACHED)
 
     def test_post_upstream_registry_fault_preserves_raw_recovery_ids(self):
         facade = self._facade()
@@ -1310,18 +1354,67 @@ class FacadeTests(unittest.TestCase):
             },
         ])
 
-    def test_stopped_known_worker_uses_exact_start_status_and_attach_actions(self):
-        record = self._record("stopped-exact")
-        fault = self._facade()._stopped_fault(record.name, record)
+    def test_detached_known_worker_reattaches_without_a_turn_before_offering_run(self):
+        record = self._record("detached-exact")
+        fault = self._facade()._detached_fault(record.name, record)
         self.assertEqual([shlex.split(action["command"]) for action in fault.next_actions], [
-            ["codex-worker", "daemon", "start"],
-            ["codex-worker", "status", "--name", "stopped-exact"],
-            ["codex", "--remote", "ws://127.0.0.1:4500", "resume", record.thread_id],
+            ["codex-worker", "session", "resume", "--session", record.session_id],
+            ["codex-worker", "run", "--name", "detached-exact", "--prompt",
+             "Report your status; do not start new work."],
         ])
+        self.assertIn("without starting a turn", fault.next_actions[0]["reason"])
+        self.assertIn("runs a turn", fault.next_actions[1]["reason"])
         self.assertNotIn("<", json.dumps(fault.next_actions))
 
-    def test_fresh_runtime_missing_known_worker_preserves_ids_and_runnable_stopped_actions(self):
-        record = self._record("stopped-fresh-runtime")
+    def test_worker_detached_from_this_generation_is_reported_truthfully_with_run_remedy(self):
+        from codex_worker.models import ErrorDetail
+        record = self._record("detached-a31")
+        self.runtime.detach_all(ErrorDetail("service restarted"))
+        facade = self._facade()
+        results = {
+            "status": facade.status(WorkerStatusRequest(record.name)),
+            "messages": facade.messages(WorkerMessagesRequest(record.name, 1)),
+            "history": facade.history(WorkerHistoryRequest(record.name, 1)),
+            "goal_show": facade.goal_show(GoalShowRequest(record.name)),
+            "steer": facade.steer(SteerWorkerRequest(record.name, "focus")),
+        }
+        for label, result in results.items():
+            with self.subTest(label):
+                self.assertIsInstance(result, Err)
+                fault = result.error
+                self.assertEqual((fault.code, fault.kind),
+                                 (FacadeFaultCode.WORKER_DETACHED, "worker_detached"))
+                self.assertIn("detached from this service generation", fault.message)
+                self.assertEqual(fault.known_ids["thread_id"], record.thread_id)
+                commands = [shlex.split(action["command"]) for action in fault.next_actions]
+                self.assertEqual(commands[0], ["codex-worker", "session", "resume",
+                                               "--session", record.session_id])
+                self.assertEqual(commands[1][:4], ["codex-worker", "run", "--name", record.name])
+                self.assertNotIn(["codex-worker", "daemon", "start"], commands)
+
+    def test_worker_unknown_to_fresh_runtime_is_detached_not_stopped(self):
+        record = self._record("fresh-detached")
+        self.runtime.status = lambda unused_session: (_ for _ in ()).throw(
+            UnknownSession("fresh runtime has no attachment"))
+        for result in (self._facade().status(WorkerStatusRequest(record.name)),
+                       self._facade().messages(WorkerMessagesRequest(record.name, 1))):
+            self.assertIsInstance(result, Err)
+            self.assertEqual(result.error.kind, "worker_detached")
+
+    def test_messages_for_worker_unknown_to_fresh_runtime_is_a_typed_fault_with_ids(self):
+        record = self._record("messages-fresh-runtime")
+        self.runtime.status = lambda unused_session: (_ for _ in ()).throw(
+            UnknownSession("fresh runtime has no attachment"))
+
+        result = self._facade().messages(WorkerMessagesRequest(record.name, 1))
+
+        self.assertIsInstance(result, Err)
+        self.assertNotEqual(result.error.kind, "internal_error")
+        self.assertEqual(result.error.known_ids["thread_id"], record.thread_id)
+        self.assertEqual(result.error.known_ids["session_id"], record.session_id)
+
+    def test_fresh_runtime_missing_known_worker_preserves_ids_and_runnable_detached_actions(self):
+        record = self._record("detached-fresh-runtime")
         self.runtime.status = lambda unused_session: (_ for _ in ()).throw(
             UnknownSession("fresh runtime has no attachment"))
 
@@ -1329,16 +1422,16 @@ class FacadeTests(unittest.TestCase):
 
         self.assertIsInstance(result, Err)
         self.assertEqual((result.error.code, result.error.kind),
-                         (FacadeFaultCode.DAEMON_STOPPED, "daemon_stopped"))
+                         (FacadeFaultCode.WORKER_DETACHED, "worker_detached"))
         self.assertEqual(result.error.known_ids, {
             "name": record.name, "session_id": record.session_id,
             "thread_id": record.thread_id, "turn_id": None,
         })
         self.assertEqual([shlex.split(action["command"])
                           for action in result.error.next_actions], [
-            ["codex-worker", "daemon", "start"],
-            ["codex-worker", "status", "--name", record.name],
-            ["codex", "--remote", "ws://127.0.0.1:4500", "resume", record.thread_id],
+            ["codex-worker", "session", "resume", "--session", record.session_id],
+            ["codex-worker", "run", "--name", record.name, "--prompt",
+             "Report your status; do not start new work."],
         ])
         worker_cli._validate_wire_recovery_actions({
             "error": {"data": result.error.to_dict()}})
