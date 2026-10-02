@@ -22,6 +22,7 @@ class FakeCodex:
         self.thread_id = "thr-fake"
         self.thread_number = 0
         self.thread_cwds = {}
+        self.thread_names = {}
         self.turn_number = 0
         self.active_turn = None
         self.active_turns = {}
@@ -232,13 +233,21 @@ class FakeCodex:
                                                         os.environ.get(
                                                             "FAKE_CODEX_RESUME_CWD",
                                                             os.getcwd()))}})
+        elif method == "thread/name/set":
+            if self.option("name_set_failure", False):
+                self.send({"id": request_id, "error": {
+                    "code": -32600, "message": "native title rejected"}})
+            else:
+                self.thread_names[message["params"]["threadId"]] = message["params"]["name"]
+                self.response(request_id, {})
         elif method == "thread/list":
             self.inventory_reads += 1
             data = []
             for thread_id in sorted(self.thread_cwds):
                 status = ({"type": "active", "activeFlags": []}
                           if thread_id in self.active_turns else {"type": "idle"})
-                data.append({"id": thread_id, "status": status})
+                data.append({"id": thread_id, "status": status,
+                             "name": self.thread_names.get(thread_id)})
             ambiguous = self.option("ambiguous_inventory_thread")
             read_limit = self.option("ambiguous_inventory_reads", 0)
             self.ambiguous_inventory_active = (
@@ -275,6 +284,7 @@ class FakeCodex:
                       if has_active else {"type": "idle"})
             self.response(request_id, {"thread": {
                 "id": thread_id, "status": status, "turns": turns,
+                "name": self.thread_names.get(thread_id),
             }})
         elif method == "turn/start":
             self.thread_id = message["params"]["threadId"]

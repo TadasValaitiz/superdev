@@ -31,7 +31,7 @@ Use this routing table:
 
 | SDD tier | Work | Codex model |
 |---|---|---|
-| `medium` | Normal implementation, routine integration/debugging, ordinary task review, and diligent execution | `gpt-5.6-terra` |
+| `medium` | Normal implementation, routine integration/debugging, ordinary task review, and diligent execution | `gpt-6.1-sol` |
 | `very smart` | Architecture, difficult/high-risk work, escalation, and every design/final gate | `gpt-5.6-sol` |
 
 Inspect the dispatch tool's current model list and select an explicit supported effort

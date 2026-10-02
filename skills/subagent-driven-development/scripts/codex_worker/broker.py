@@ -239,6 +239,18 @@ class WorkerBroker:
                                  session_id, thread_id, None,
                                  {"expected_cwd": canonical_cwd,
                                   "returned_cwd": returned_cwd}))
+            if spec.name is not None:
+                try:
+                    self.codex.call("thread/name/set", {
+                        "threadId": thread_id, "name": spec.name})
+                except CodexCallError as exc:
+                    # Persist only a raw recovery record. A complete worker policy
+                    # would let a later run bypass the failed initial naming.
+                    record = self.registry.create(
+                        thread_id, canonical_cwd, spec.name, spec.model,
+                        None, session_id=session_id)
+                    self.runtime.attach(record)
+                    raise self._with_record_identity(self._codex_fault(exc), record) from exc
             if spec.annotation_policy == AnnotationPolicy.PRESERVE_WORKER_POLICY:
                 record = self.registry.create_worker(
                     thread_id, canonical_cwd, spec.name, spec.tier, spec.model,

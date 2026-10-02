@@ -35,7 +35,7 @@ from .service_domain import (MigrationResolveView, MigrationStatusView,
 from .websocket_gateway import ServiceBusyError
 
 
-_TIER_MODELS = {Tier.MEDIUM: "gpt-5.6-terra", Tier.VERY_SMART: "gpt-5.6-sol"}
+_TIER_MODELS = {Tier.MEDIUM: "gpt-6.1-sol", Tier.VERY_SMART: "gpt-5.6-sol"}
 
 @runtime_checkable
 class RegistryPort(Protocol):

@@ -1,3 +1,33 @@
+# v8.6.5 — codex-worker: model default and native worker titles (2026-10-02)
+
+- New workers default to `gpt-6.1-sol` with `medium` reasoning effort. The
+  explicit `very-smart` tier remains `gpt-5.6-sol`; live `--model` and `--effort`
+  overrides remain available. Existing workers retain their creation policy.
+- Named thread creation now calls Codex `thread/name/set` with the exact worker
+  name before the first turn. Anonymous threads and resumed conversations are not
+  renamed. If naming fails, start refuses success and preserves the durable worker
+  and upstream IDs for inspection/recovery in an incomplete raw-session record;
+  both immediate start and later named run refuse to start a turn. Native naming
+  precedes complete registry publication. A registry-write failure or concurrent
+  same-name creation collision can leave an upstream titled thread; existing
+  raw-ID recovery remains available and no user thread is deleted.
+- Runtime mappings, native Codex dispatch guidance and model-selection reference
+  now agree. Regression tests cover the default, persisted follow-up policy,
+  exact native naming, anonymous creation and recoverable naming failure.
+- This does not alter transport, plugin enablement, or the manual server on 4501.
+  The pre-existing self-brainstorm workflow assertion failure noted below remains
+  outside this patch.
+- Verification: all 651 remaining worker tests passed with ResourceWarning treated
+  as errors after excluding that single documented baseline failure. An initial
+  concurrent-start timing failure passed in its isolated rerun and the subsequent
+  full serial rerun. Independent review found no remaining issues; native naming
+  ordering and failure/reload refusal have real-process CLI receipts.
+- Live checkride PASS on a separate real authenticated Codex service: default
+  creation completed with `gpt-6.1-sol`/`medium`, the native remote agent view showed
+  the exact worker title, and follow-up retained the thread and policy. Only the
+  disposable service was stopped; the existing 4500 and manual 4501 listeners
+  stayed unchanged. Three advisory CLI observations are recorded in the scenario.
+
 # v8.6.4 — codex-worker: remote plugin discovery and explicit Claude reply context (2026-10-02)
 
 - **Remote flickering:** the worker bridge and internal connection capped JSON-RPC

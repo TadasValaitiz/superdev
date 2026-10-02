@@ -92,7 +92,7 @@ class ClaudeEvidenceTests(unittest.TestCase):
             worker = {
                 "name": "claude-live-a31f09", "session_id": "session-1",
                 "thread_id": "thread-1", "cwd": str(cwd.resolve()),
-                "tier": "medium", "model": "gpt-5.6-terra", "effort": "medium",
+                "tier": "medium", "model": "gpt-6.1-sol", "effort": "medium",
                 "access": "full", "attach": {"listener": "ws://127.0.0.1:4777",
                     "thread_id": "thread-1", "attach_command": "codex --remote ws://127.0.0.1:4777",
                     "resume_command": "codex --remote ws://127.0.0.1:4777 resume thread-1"},

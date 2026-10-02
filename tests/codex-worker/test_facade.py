@@ -79,7 +79,7 @@ class _Broker:
         self.response_text = "done"
 
     def model_list(self):
-        return {"models": [{"id": "gpt-5.6-terra", "is_default": True,
+        return {"models": [{"id": "gpt-6.1-sol", "is_default": True,
                              "supported_efforts": ["medium"]}]}
 
     def daemon_status(self):
@@ -404,7 +404,7 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(self.broker.calls[:3], ["session_start", "goal_set", "turn_start"])
         persisted = self.registry.resolve_name("build-a31")
         self.assertEqual((persisted.tier, persisted.model, persisted.effort, persisted.access),
-                         ("medium", "gpt-5.6-terra", "medium", "full"))
+                         ("medium", "gpt-6.1-sol", "medium", "full"))
         followed = facade.run(RunWorkerRequest(name="build-a31", prompt="continue"))
         self.assertIsInstance(followed, Ok)
         self.assertEqual(followed.value.worker.thread_id, started.value.worker.thread_id)
@@ -440,6 +440,16 @@ class FacadeTests(unittest.TestCase):
         self.assertTrue(record.common_policy_complete)
         self.assertIsNone(record.tier)
         self.assertEqual((record.model, record.effort), ("raw-model", "high"))
+
+    def test_very_smart_tier_keeps_its_explicit_model_and_medium_effort(self):
+        from codex_worker.commands import Tier
+        self.broker.model_list = lambda: {"models": [{
+            "id": "gpt-5.6-sol", "is_default": False, "supported_efforts": ["medium"]}]}
+        result = self._facade().start(StartWorkerRequest(
+            name="review-smart", prompt="begin", cwd=self.cwd, tier=Tier.VERY_SMART))
+        self.assertIsInstance(result, Ok)
+        self.assertEqual((result.value.worker.model, result.value.worker.effort),
+                         ("gpt-5.6-sol", "medium"))
 
     def test_start_validates_and_persists_binding_before_exact_turn_observation(self):
         capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-session", 42,
@@ -619,7 +629,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_unsupported_effort_corrected_start_preserves_tier_selection(self):
         self.broker.model_list = lambda: {"models": [{
-            "id": "gpt-5.6-terra", "is_default": True,
+            "id": "gpt-6.1-sol", "is_default": True,
             "supported_efforts": ["low"],
         }]}
 
@@ -636,7 +646,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_unsupported_effort_corrected_start_preserves_creation_config(self):
         self.broker.model_list = lambda: {"models": [{
-            "id": "gpt-5.6-terra", "is_default": True,
+            "id": "gpt-6.1-sol", "is_default": True,
             "supported_efforts": ["low"],
         }]}
         config = {"web_search": "live", "tools.web_search": {"context_size": "high"}}
@@ -652,7 +662,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_unsupported_effort_with_schema_requires_original_file_and_omits_action(self):
         self.broker.model_list = lambda: {"models": [{
-            "id": "gpt-5.6-terra", "is_default": True,
+            "id": "gpt-6.1-sol", "is_default": True,
             "supported_efforts": ["low"],
         }]}
 
@@ -664,7 +674,7 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(result, Err)
         self.assertEqual(result.error.next_actions, [])
         self.assertEqual(result.error.details, {
-            "model": "gpt-5.6-terra",
+            "model": "gpt-6.1-sol",
             "supported_efforts": ["low"],
             "schema_retry": {
                 "required_option": "--output-schema",
@@ -675,7 +685,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_unsupported_effort_multiline_values_omit_unpasteable_action(self):
         self.broker.model_list = lambda: {"models": [{
-            "id": "gpt-5.6-terra", "is_default": True,
+            "id": "gpt-6.1-sol", "is_default": True,
             "supported_efforts": ["low"],
         }]}
 
@@ -876,7 +886,7 @@ class FacadeTests(unittest.TestCase):
         self.assertIsInstance(result, Ok)
         record = self.registry.resolve_name("schema")
         self.assertEqual(self.broker.last_turn_spec, TurnStartSpec(
-            record.session_id, "begin", "gpt-5.6-terra", "medium",
+            record.session_id, "begin", "gpt-6.1-sol", "medium",
             AccessMode.FULL, schema))
         self.assertEqual(result.value.structured_output, {"answer": "yes"})
 
@@ -1233,7 +1243,7 @@ class FacadeTests(unittest.TestCase):
         result = self._facade().start(StartWorkerRequest("catalog-model", "go", self.cwd))
         self.assertIsInstance(result, Err)
         self.assertEqual(result.error.code, FacadeFaultCode.MODEL_UNAVAILABLE)
-        self.assertEqual(result.error.details["model"], "gpt-5.6-terra")
+        self.assertEqual(result.error.details["model"], "gpt-6.1-sol")
         self.assertEqual(len(starts), 1)
         self.assertEqual(self.registry.list(), [])
 

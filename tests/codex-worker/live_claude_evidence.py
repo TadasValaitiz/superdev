@@ -191,7 +191,7 @@ def validate(transcript: Path, cwd: Path, cli: str) -> Json:
     assert start_worker["cwd"] == str(cwd.resolve()), start_worker
     assert start_worker == run_worker, (start_worker, run_worker)
     assert start_worker.get("attach", {}).get("listener", "").startswith("ws://127.0.0.1:"), start_worker
-    assert start_worker["tier"] == "medium" and start_worker["model"] == "gpt-5.6-terra"
+    assert start_worker["tier"] == "medium" and start_worker["model"] == "gpt-6.1-sol"
     assert start_worker["effort"] == "medium" and start_worker["access"] == "full"
     assert re.search(r"-[A-Za-z0-9]{6,}$", start_worker["name"]), start_worker["name"]
     history = next(result for result, command in successful

@@ -204,6 +204,40 @@ class FacadeIntegrationTests(unittest.TestCase):
         captures = [json.loads(line) for line in self.capture.read_text(encoding="utf-8").splitlines()]
         self.assertIn(thread_id, [row["params"].get("threadId") for row in captures
                                   if row.get("method") == "thread/resume"])
+        names = [row for row in captures if row.get("method") == "thread/name/set"]
+        self.assertEqual([row["params"] for row in names],
+                         [{"threadId": thread_id, "name": "restart-1"}])
+        starts = [row for row in captures if row.get("method") == "thread/start"]
+        turns = [row for row in captures if row.get("method") == "turn/start"]
+        self.assertEqual(len(turns), 2)
+        self.assertLess(starts[0]["seq"], names[0]["seq"])
+        self.assertLess(names[0]["seq"], turns[0]["seq"])
+
+    def test_native_name_failure_keeps_ids_and_blocks_later_run(self):
+        self.set_scenario({"name_set_failure": True})
+        created = self.command(["start", "--name", "name-fails", "--prompt", "never-send",
+                                "--cwd", str(ROOT), "--model", "fake-model-a"])
+        self.assertEqual(created.returncode, 3, created.stdout + created.stderr)
+        fault = json.loads(created.stdout)["error"]["data"]
+        self.assertEqual(fault["kind"], "codex_failure")
+        self.assertEqual(fault["details"]["method"], "thread/name/set")
+        self.assertEqual(fault["known_ids"]["name"], "name-fails")
+        self.assertTrue(fault["known_ids"]["session_id"])
+        self.assertEqual(fault["known_ids"]["thread_id"], "thr-fake")
+        self.assertTrue(any("resume thr-fake" in action["command"]
+                            for action in fault["next_actions"]))
+        for restart in (False, True):
+            if restart:
+                stopped = self.command(["daemon", "stop"])
+                self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
+            continued = self.command(["run", "--name", "name-fails", "--prompt", "never-send"])
+            self.assertEqual(continued.returncode, 3, continued.stdout + continued.stderr)
+            refusal = json.loads(continued.stdout)["error"]["data"]
+            self.assertEqual(refusal["kind"], "registry_error")
+            self.assertEqual(refusal["details"]["policy_state"], "incomplete_legacy")
+            self.assertEqual(refusal["known_ids"]["thread_id"], "thr-fake")
+        self.assertEqual([row for row in self.captures()
+                          if row.get("method") == "turn/start"], [])
 
     def test_section_10_name_and_model_refusals_preserve_registry_state(self):
         created = self.command(["start", "--name", "stable", "--prompt", "first",

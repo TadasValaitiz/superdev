@@ -5,10 +5,10 @@ Claude Code routing remains in `SKILL.md`; this does not choose Codex by default
 
 | SDD tier | Codex model | Use |
 |---|---|---|
-| `medium` | `gpt-5.6-terra` | Default normal implementation, integration/debugging, and ordinary review. |
+| `medium` | `gpt-6.1-sol` | Default normal implementation, integration/debugging, and ordinary review. |
 | `very-smart` | `gpt-5.6-sol` | Explicit elevation for difficult, high-risk, architecture, or final-gate work. |
 
-`medium` → `gpt-5.6-terra`; `very smart` → `gpt-5.6-sol`. These are the only
+`medium` → `gpt-6.1-sol`; `very smart` → `gpt-5.6-sol`. These are the only
 operator-facing tiers. The default effort is `medium`; it is independent of the tier
 and never inherits from `CLAUDE_EFFORT`.
 

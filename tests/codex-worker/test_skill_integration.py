@@ -253,7 +253,7 @@ class CodexWorkerSkillIntegrationTests(unittest.TestCase):
     def test_model_policy_keeps_two_tiers_and_medium_default_effort(self):
         text = MODEL_POLICY.read_text(encoding="utf-8").lower()
         for fragment in (
-            "`medium` | `gpt-5.6-terra`",
+            "`medium` | `gpt-6.1-sol`",
             "`very-smart` | `gpt-5.6-sol`",
             "default effort is `medium`",
             "never inherits from `claude_effort`",
@@ -315,10 +315,10 @@ class SddModelSelectionTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text.lower() if fragment.startswith("main-") else text)
 
-    def test_codex_appendix_defines_only_sol_and_terra_tier_mappings(self):
+    def test_codex_appendix_defines_explicit_two_tier_mappings(self):
         text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()
         self.assertIn("`very smart` → `gpt-5.6-sol`", text)
-        self.assertIn("`medium` → `gpt-5.6-terra`", text)
+        self.assertIn("`medium` → `gpt-6.1-sol`", text)
 
     def test_codex_appendix_requires_live_effort_validation_and_no_fallback(self):
         text = MODEL_REFERENCE.read_text(encoding="utf-8").lower()

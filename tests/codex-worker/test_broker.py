@@ -34,6 +34,7 @@ class FakeCodex:
         self.start_result = None
         self.resume_result = None
         self.start_exception = None
+        self.name_exception = None
         self.start_calls = []
         self.resume_calls = []
         self.turn_start_calls = []
@@ -63,6 +64,10 @@ class FakeCodex:
     def call(self, method, params, timeout=120.0):
         self.call_timeouts.append((method, timeout))
         self.calls.append((method, dict(params)))
+        if method == "thread/name/set":
+            if self.name_exception is not None:
+                raise self.name_exception
+            return {}
         if method == "thread/list":
             value = self.thread_pages.get(params.get("cursor"))
             if isinstance(value, BaseException):
@@ -663,6 +668,56 @@ class WorkerBrokerTests(unittest.TestCase):
         record = self.registry.resolve(IdentifierSelector(session_id=result["session"]["session_id"]))
         self.assertEqual((record.tier, record.model, record.effort, record.access),
                          ("medium", "fake-model-a", "medium", "full"))
+        self.assertEqual(self.codex.calls, [
+            ("thread/name/set", {"threadId": record.thread_id, "name": "common"})])
+        self.assertEqual(self.codex.turn_start_calls, [])
+
+    def test_anonymous_start_does_not_set_a_native_title(self):
+        self.broker.session_start(self.cwd)
+        self.assertEqual(self.codex.calls, [])
+
+    def test_native_title_failure_preserves_recoverable_worker_without_starting_turn(self):
+        from codex_worker.broker import AnnotationPolicy, SessionStartSpec
+        from codex_worker.commands import AccessMode
+        self.codex.name_exception = CodexCallError(
+            "upstream_error", "thread/name/set", {"message": "title rejected"})
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.start_session(SessionStartSpec(
+                self.cwd, "common", "fake-model-a", AccessMode.FULL, "medium", "medium",
+                AnnotationPolicy.PRESERVE_WORKER_POLICY))
+        fault = caught.exception
+        record = self.registry.list()[0]
+        self.assertEqual(fault.details["session_id"], record.session_id)
+        self.assertEqual(fault.details["thread_id"], record.thread_id)
+        self.assertEqual(fault.details["method"], "thread/name/set")
+        self.assertEqual(fault.details["attach"]["thread_id"], record.thread_id)
+        self.assertEqual(self.codex.turn_start_calls, [])
+        self.assertFalse(record.common_policy_complete)
+        # A later run, including after registry reload, must not bypass naming.
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        from codex_worker.commands import Err, RunWorkerRequest
+        for registry in (self.registry, SessionRegistry(self.state_path)):
+            result = WorkerFacade(FacadeDeps(
+                registry, self.broker, self.runtime, None, lambda: 1.0)).run(
+                    RunWorkerRequest(name="common", prompt="must not start"))
+            self.assertIsInstance(result, Err)
+            self.assertEqual(result.error.kind, "registry_error")
+            self.assertEqual(result.error.details["policy_state"], "incomplete_legacy")
+            self.assertEqual(result.error.known_ids["thread_id"], record.thread_id)
+        self.assertEqual(self.codex.turn_start_calls, [])
+
+    def test_naming_failure_and_recovery_persistence_failure_preserve_upstream_ids(self):
+        self.codex.name_exception = CodexCallError(
+            "upstream_error", "thread/name/set", {"message": "title rejected"})
+        with mock.patch("codex_worker.registry.os.replace", side_effect=OSError("disk full")):
+            with self.assertRaises(RpcFault) as caught:
+                self.broker.session_start(self.cwd, name="worker", model="fake-model-a")
+        fault = caught.exception
+        self.assertEqual(fault.kind, "registry_error")
+        self.assertEqual(fault.details["thread_id"], "thr-start")
+        UUID(fault.details["session_id"])
+        self.assertEqual(fault.details["durable_state"], "not_persisted")
+        self.assertEqual(self.codex.turn_start_calls, [])
 
     def test_worker_config_is_sent_on_thread_start_and_persisted(self):
         from codex_worker.broker import AnnotationPolicy, SessionStartSpec
@@ -1174,6 +1229,8 @@ class WorkerBrokerTests(unittest.TestCase):
             "codex --remote ws://127.0.0.1:4500 resume thr-start",
         )
         self.assertIn("session resume --thread thr-start", fault.recovery)
+        self.assertIn(("thread/name/set", {"threadId": "thr-start", "name": "worker"}),
+                      self.codex.calls)
 
     def test_raw_resume_persistence_failure_exposes_unpersisted_upstream_identity(self):
         self.codex.resume_result = {"thread": {"id": "thr-recovered", "cwd": self.cwd}}

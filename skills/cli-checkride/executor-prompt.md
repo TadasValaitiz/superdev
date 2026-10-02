@@ -9,7 +9,7 @@ Two message shapes: the SPAWN message (once, creates the agent) and the STEP mes
 Subagent (general-purpose):
   description: "Checkride executor: drive the ⟨area⟩ surface live, one step at a time"
   model: [MEDIUM tier (`medium`) — diligence over brilliance; the EVALUATOR carries the judgment.
-          Native Claude Code: sonnet. Explicit Codex worker: gpt-5.6-terra after live
+          Native Claude Code: sonnet. Explicit Codex worker: gpt-6.1-sol after live
           model/effort validation per subagent-driven-development/codex-model-selection.md.]
   prompt: |
     You are the CHECKRIDE EXECUTOR. You demonstrate; you do not judge, fix, or substitute.
