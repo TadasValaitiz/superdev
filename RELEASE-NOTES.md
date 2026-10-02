@@ -1,3 +1,34 @@
+# v8.6.3 — codex-worker: service start under codex-cli 0.158, truthful detached workers (2026-10-02)
+
+The codex-worker service had not been able to start since codex-cli 0.158.0 arrived (backlog CWS-1). The
+human ruled option 1 (D197): accept codex's symlinked private socket, but only under owner-only rules. A
+live checkride of `start --search` → `run` → stop/restart then found two older defects that this fix made
+reachable again, and the human ruled to fix them too (DECIDE A). 8.6.2 was the pre-fix build installed for
+that checkride and was never published.
+
+- **Service start under codex-cli 0.158 (CWS-1):**
+  - `codex app-server --listen unix://PATH` now makes PATH a symlink into `/private/tmp/codex-daemon-<uid>/`.
+  - The service accepts the link only if its target sits directly in that owner-only real directory and is
+    an owner-only socket owned by the user. `lstat` of the link, `lstat` of the target, and `os.stat`
+    through the link must all agree.
+  - The service records the identity of both the link and the target. Teardown still signals only its own
+    Codex process group, then unlinks only its own unchanged link. A killed codex's stale target is left for
+    codex, which rebinds it.
+  - Measured live: Codex's listener and its `codex-code-mode-host` both exit with the owned group, and no
+    orphan is left.
+- **Detached workers are reported truthfully (F15):** after a stop or restart, every worker is detached
+  until it is re-attached.
+  - `status`, `messages`, `history`, `goal` and `steer` now return the new typed fault
+    `worker_detached` (-32043), "Worker is detached from this service generation". It used to report
+    "Worker daemon is stopped", with a `daemon start` remedy that went nowhere.
+  - The first remedy is `session resume --session <uuid>`, which re-attaches without starting a turn.
+    `run` is offered second, with a reason saying that it runs a turn.
+  - Completed stop/restart results now carry `worker_attachment: "detached_until_next_run"`.
+- **`messages` on a detached worker no longer crashes (F16):** it used to fail with an untyped
+  `AttributeError` (exit 1). It now returns the typed fault.
+- **Docs:** codex-worker.md now documents the detached state and the no-turn re-attach. The reuse wording
+  now says a worker reads its skills once *per live session*, and that it is not a per-turn token saving.
+
 # v8.6.1 — codex-worker: Python 3.11+ faults, preflight under FORCE_COLOR (2026-09-30)
 
 Two small fixes found during the v8.6.0 live check (backlog CWS-2 and CWS-3). CWS-1, the service start
