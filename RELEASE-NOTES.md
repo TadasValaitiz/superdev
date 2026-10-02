@@ -1,3 +1,41 @@
+# v8.6.4 — codex-worker: remote plugin discovery and explicit Claude reply context (2026-10-02)
+
+- **Remote flickering:** the worker bridge and internal connection capped JSON-RPC
+  messages at 4 MiB, but the real Codex 0.160.0 `plugin/list` response measured about
+  12 MiB. That disconnected remote clients during startup plugin discovery. The
+  shared bounded limit is now 64 MiB with two buffered wire frames; the separate
+  pending approval queue retains its 16-entry bound. Plugins remain enabled. Regression tests require
+  a 12 MiB catalog followed by another RPC on the same connection. A temporary
+  production gateway against the existing real Codex server forwarded two actual
+  12,045,570-byte catalogs plus follow-up requests without disconnecting.
+- **Callback brief gap — prompt/context boundary:** worker initialization previously
+  supplied only its own name and an unspecified Claude name override. It now carries
+  the verified Claude origin agent name and session ID, worker name, cwd, wrapper
+  session UUID, Codex thread ID, concrete pinned reply command, and a shell-quoted
+  exact named override when available. Names are revalidated against the live Claude
+  registry, never trusted from caller display metadata. Control characters and
+  excessively long names are refused. Legacy captures still decode.
+  Root-only captures explicitly lack a default recipient; disabled callbacks inject
+  no guidance. Credentials are never injected; `written` is not delivery.
+- **Skill reference:** `skills/subagent-driven-development/codex-worker.md` requires
+  explicit callback context in the launch brief and separates pinned callbacks from
+  one-send live name resolution. Long reports stay on the shared filesystem; messages
+  carry a short status and an existing absolute path, not file contents.
+  Behavioral baseline/review identified the missing
+  origin name, session identity, root-only caveat and write-vs-delivery caveat.
+- **Touched boundaries:** `websocket_transport.py`, `commands.py`,
+  `claude_transport.py`, `facade.py` under
+  `skills/subagent-driven-development/scripts/codex_worker/`, the callback reference
+  above, and their gateway/transport/facade/Claude transport regressions.
+- **Scope:** private transport architecture and default public listener are unchanged;
+  the manual server on port 4501 is not stopped or reconfigured. This patch addresses
+  flickering and reply clarity, not the previously discussed native-WS migration.
+- **Existing suite issue:** the unchanged 8.6.3 baseline already fails seven assertions
+  in `SddModelSelectionTests.test_self_brainstorm_workflow_pins_every_agent_role_to_native_tiers`;
+  they expect an older self-brainstorm workflow shape. They remain outside this patch.
+  With that one known failing test excluded, all 646 remaining tests passed, with
+  ResourceWarning promoted to errors. Focused transport/callback regressions pass.
+
 # v8.6.3 — codex-worker: service start under codex-cli 0.158, truthful detached workers (2026-10-02)
 
 The codex-worker service had not been able to start since codex-cli 0.158.0 arrived (backlog CWS-1). The

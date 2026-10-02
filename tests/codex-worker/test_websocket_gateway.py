@@ -233,6 +233,49 @@ class GatewayTests(unittest.TestCase):
         first_thread.join(1)
         second_thread.join(1)
 
+    def test_large_message_limit_uses_small_frame_queue(self):
+        self.assertEqual(self.factory.binds[0][2:], (64 * 1024 * 1024, 2))
+
+    def test_oversized_backend_message_closes_bridge(self):
+        frontend, backend, thread = self.bridge()
+        self.addCleanup(frontend.close)
+        with mock.patch("codex_worker.websocket_gateway.MAX_FRAME_BYTES", 64):
+            backend.inject(json.dumps({"id": 1, "result": "x" * 65}))
+            deadline = time.monotonic() + 1
+            while not frontend.closed:
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.001)
+            self.assertEqual(frontend.sent, [])
+        thread.join(1)
+
+    def test_large_plugin_catalog_and_followup_survive_on_same_bridge(self):
+        frontend, backend, thread = self.bridge()
+        self.addCleanup(frontend.close)
+        catalog = json.dumps({"id": 1, "result": {"catalog": "x" * (12 * 1024 * 1024)}})
+        backend.inject(catalog)
+        deadline = time.monotonic() + 3
+        while not frontend.sent and not frontend.closed:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(len(frontend.sent), 1)
+        self.assertTrue(frontend.sent[0] == catalog, "catalog must be forwarded unchanged")
+        request = '{"id":2,"method":"thread/list","params":{}}'
+        response = '{"id":2,"result":{"data":[]}}'
+        frontend.inject(request)
+        deadline = time.monotonic() + 3
+        while request not in backend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        backend.inject(response)
+        while response not in frontend.sent:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertFalse(frontend.closed)
+        self.assertFalse(backend.closed)
+        self.assertEqual(len(self.factory.backends), 1)
+        frontend.close()
+        thread.join(1)
+
     def test_ready_clears_when_server_loop_exits_unexpectedly(self):
         self.assertTrue(self.gateway.ready)
         self.factory.servers[0].shutdown()

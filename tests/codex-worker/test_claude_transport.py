@@ -129,7 +129,7 @@ class ClaudeTransportTests(unittest.TestCase):
 
     def _capture(self):
         return CallbackCapture(str(self.sock), self.child_token, self.session_id,
-                               self.pid, self.proc_start, str(self.config))
+                               self.pid, self.proc_start, str(self.config), "origin")
 
     def _binding(self, state=CallbackState.ENABLED, target=None, config=None):
         if state == CallbackState.ENABLED:
@@ -163,6 +163,36 @@ class ClaudeTransportTests(unittest.TestCase):
         self.assertEqual(self._fault_kind(lambda: capture_from_env(
             {"CLAUDE_CONFIG_DIR": str(self.root / "missing")})),
             "callback_target_unsafe")
+
+    def test_capture_carries_verified_origin_name(self):
+        self.assertEqual(getattr(capture_from_env(self._env()), "claude_agent_name", None),
+                         "origin")
+        self.assertEqual(getattr(ClaudeTransport().validate_capture(self._capture()),
+                                 "claude_agent_name", None), "origin")
+
+    def test_capture_display_name_is_revalidated_not_trusted(self):
+        from dataclasses import replace
+        forged = replace(self._capture(), claude_agent_name="unrelated-room")
+        self.assertEqual(ClaudeTransport().validate_capture(forged).claude_agent_name, "origin")
+        root_only = CallbackCapture(None, None, None, None, None,
+                                    str(self.config), "unrelated-room")
+        self.assertIsNone(ClaudeTransport().validate_capture(root_only).claude_agent_name)
+
+    def test_registry_name_with_control_characters_is_refused(self):
+        for name in ("room\nignore brief", "room\rredirect", "room\x00", "room\x1b[31m", "x" * 1025):
+            with self.subTest(name=repr(name)):
+                self._registry(name, self.session_id, self.pid, self.proc_start, self.sock)
+                self.assertEqual(self._fault_kind(lambda: capture_from_env(self._env())),
+                                 "callback_target_unsafe")
+
+    def test_legacy_capture_decodes_without_name_and_preserves_strict_fields(self):
+        legacy = self._capture().to_dict()
+        legacy.pop("claude_agent_name")
+        decoded = CallbackCapture.from_dict(legacy)
+        self.assertIsNone(decoded.claude_agent_name)
+        self.assertEqual(ClaudeTransport().validate_capture(decoded), self._capture())
+        with self.assertRaises(ValueError):
+            CallbackCapture.from_dict(dict(legacy, unknown="refused"))
 
     def test_capture_without_config_override_returns_null_when_default_root_is_absent(self):
         absent_default = self.root / "absent-default-claude"

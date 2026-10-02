@@ -141,8 +141,8 @@ class WorkerFacade:
                         record.thread_id, request.goal, "active", request.token_budget)
                 except BaseException as exc:
                     return Err(self._effect_fault(exc, record, request.name))
-            prompt = (self._initial_prompt(request.prompt, record)
-                      if capture is not None and capture.claude_config_dir is not None else request.prompt)
+            prompt = (self._initial_prompt(request.prompt, record, capture)
+                      if not request.no_callback and capture is not None else request.prompt)
             return self._start_and_wait(record, worker, prompt, request.output_schema,
                                         request.timeout)
         except BaseException as exc:
@@ -478,14 +478,55 @@ class WorkerFacade:
                             self._command("interrupt --name %s" % name),
                             self._raw_resume_command(record.thread_id))
 
-    def _initial_prompt(self, prompt, record):
-        block = (
-            "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker message --name %s --message \"<prose>\"\n"
-            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
-            "This command does not wait for a reply; Claude may later use steer or run."
-        ) % shlex.quote(record.name)
-        return prompt + "\n\n" + block
+    def _initial_prompt(self, prompt, record, capture):
+        command = "codex-worker message --name %s" % shlex.quote(record.name)
+        lines = [
+            "Codex-to-Claude callback context:",
+            "Worker name: %s" % json.dumps(record.name),
+            "Creation cwd: %s" % json.dumps(record.cwd),
+            "Wrapper session ID: %s" % json.dumps(record.session_id),
+            "Codex thread ID: %s" % json.dumps(record.thread_id),
+            "These IDs are distinct from the Claude Code origin session below.",
+        ]
+        if capture.target_socket is not None:
+            lines.append("Claude origin session ID: %s" % json.dumps(capture.claude_session_id))
+            lines.append("Claude origin agent name: %s" % (
+                json.dumps(capture.claude_agent_name) if capture.claude_agent_name
+                else "unavailable (unnamed origin); do not guess a name"))
+            lines.extend([
+                "Reply to the stored Claude origin, pinned at worker creation:",
+                command + ' --message "<prose>"',
+            ])
+            if capture.claude_agent_name:
+                lines.extend([
+                    "Optional named one-send route (resolves the currently live agent; "
+                    "never changes the stored origin):",
+                    command + " --cc-agent-name %s --message \"<prose>\"" %
+                    shlex.quote(capture.claude_agent_name),
+                ])
+        else:
+            lines.extend([
+                "No default Claude origin was captured; automatic completion callbacks are unavailable.",
+                "Only send if the dispatch brief supplies an exact Claude agent name; never guess it:",
+                command + " --cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>' "
+                '--message "<prose>"',
+            ])
+        lines.extend([
+            "For long reports, write a durable file on the shared filesystem first; send only "
+            "a short status and its existing absolute path:",
+            command + ' --message "DONE: report /absolute/path/to/report.md; <short status>"'
+            if capture.target_socket is not None else
+            command + " --cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>' "
+            '--message "DONE: report /absolute/path/to/report.md; <short status>"',
+            "Use a real path readable by Claude, not the example placeholder. "
+            "--message-file sends file contents, not a file reference; keep those contents short.",
+            "Continue working: this command does not wait for a reply.",
+            "A written result proves a local write, not delivered or acknowledged; on failure "
+            "report the error and recover with status/messages/history by worker name.",
+            "Never expose callback tokens, socket paths or credentials in prompts or reports. "
+            "Claude may later use steer or run to reply to this Codex worker.",
+        ])
+        return prompt + "\n\n" + "\n".join(lines)
 
     def _command(self, suffix):
         return "codex-worker %s" % suffix

@@ -112,7 +112,20 @@ class WebSocketTransportTests(unittest.TestCase):
             "initialize", "initialized", "thread/read",
         ])
         self.assertTrue(all(not frame.endswith("\n") for frame in factory.connections[0].sent))
-        self.assertEqual(factory.calls, [("unix:///private/codex.sock", MAX_FRAME_BYTES, 16)])
+        self.assertEqual(factory.calls, [("unix:///private/codex.sock", MAX_FRAME_BYTES, 2)])
+
+    def test_large_plugin_catalog_does_not_reconnect_or_break_followup(self):
+        payload = "x" * (12 * 1024 * 1024)
+
+        def responder(message):
+            if message.get("method") == "plugin/list":
+                return {"id": message["id"], "result": {"catalog": payload}}
+            return success_responder(message)
+
+        client, factory = self.make_client([responder])
+        self.assertEqual(client.call("plugin/list", {}, timeout=3), {"catalog": payload})
+        self.assertEqual(client.call("thread/list", {}, timeout=1), {"method": "thread/list"})
+        self.assertEqual(len(factory.connections), 1)
 
     def test_non_finite_outbound_value_is_refused_without_serializing_a_frame(self):
         client, factory = self.make_client()

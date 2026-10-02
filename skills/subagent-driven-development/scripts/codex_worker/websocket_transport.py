@@ -11,8 +11,13 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from .models import JsonObject
 
 
-MAX_FRAME_BYTES = 4 * 1024 * 1024
-MAX_INCOMING_QUEUE = 16
+# The live Codex 0.160.0 plugin/list response measured 12,045,570 UTF-8 bytes.
+# A 4 MiB cap disconnects remote TUIs during plugin discovery. Keep a finite
+# message bound with headroom, shared by broker, gateway and WebSocket library.
+MAX_FRAME_BYTES = 64 * 1024 * 1024
+# Two buffered wire frames provide backpressure without a 16 x 64 MiB multiplier.
+MAX_INCOMING_QUEUE = 2
+MAX_APPROVAL_QUEUE = 16
 MAX_READ_RETRIES = 2
 MAX_INITIALIZE_RECONNECTS = 1
 OVERLOAD_CODE = -32001
@@ -297,7 +302,7 @@ class CodexConnection(CodexMethodAdapter):
         self._close_error = None  # type: Optional[CodexTransportError]
         self._socket = None  # type: Optional[TextConnection]
         self._reader = None  # type: Optional[threading.Thread]
-        self._approval_queue = queue.Queue(maxsize=MAX_INCOMING_QUEUE)  # type: queue.Queue
+        self._approval_queue = queue.Queue(maxsize=MAX_APPROVAL_QUEUE)  # type: queue.Queue
         self._approval_worker = threading.Thread(
             target=self._approval_loop,
             name="codex-websocket-approval",

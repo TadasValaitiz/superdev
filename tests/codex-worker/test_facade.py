@@ -219,12 +219,12 @@ class FacadeTests(unittest.TestCase):
         self.assertEqual(event.schema, "codex-worker.claude-callback/v1")
         self.assertEqual(event.event, "worker_message")
         self.assertEqual(event.payload, {"message": "progress"})
-        expected_block = (
-            "You may broadcast a non-blocking update to Claude and continue working:\n"
-            "codex-worker message --name message-a --message \"<prose>\"\n"
-            "Use --message-file for long text. Optional one-send override: --cc-agent-name <name>.\n"
-            "This command does not wait for a reply; Claude may later use steer or run.")
-        self.assertEqual(self.broker.turn_specs[0].prompt, "caller prose\n\n" + expected_block)
+        prompt = self.broker.turn_specs[0].prompt
+        self.assertTrue(prompt.startswith("caller prose\n\nCodex-to-Claude callback context:"))
+        self.assertIn('codex-worker message --name message-a --message "<prose>"', prompt)
+        self.assertIn('Claude origin session ID: "claude-session"', prompt)
+        self.assertIn("unavailable (unnamed origin); do not guess a name", prompt)
+        self.assertNotIn("--cc-agent-name", prompt)
         facade.run(RunWorkerRequest("message-a", "follow-up"))
         self.assertEqual(self.broker.turn_specs[1].prompt, "follow-up")
 
@@ -242,9 +242,53 @@ class FacadeTests(unittest.TestCase):
         prompt = self.broker.turn_specs[0].prompt
         self.assertIn("codex-worker message --name root-only", prompt)
         self.assertNotIn(instance, prompt)
-        self.assertIn("Optional one-send override: --cc-agent-name <name>.", prompt)
-        unsafe_record = type("Record", (), {"name": "root only; $(unsafe)"})()
-        self.assertIn("--name 'root only; $(unsafe)'", facade._initial_prompt("x", unsafe_record))
+        self.assertIn("No default Claude origin was captured", prompt)
+        self.assertIn("never guess it", prompt)
+        self.assertIn("--cc-agent-name '<exact-Claude-agent-name-from-dispatch-brief>'", prompt)
+        unsafe_record = type("Record", (), {"name": "root only; $(unsafe)",
+                            "session_id": "wrapper", "thread_id": "thread", "cwd": self.cwd})()
+        self.assertIn("--name 'root only; $(unsafe)'",
+                      facade._initial_prompt("x", unsafe_record, root_only))
+        named = CallbackCapture("/tmp/claude.sock", "a" * 32, "origin", 42,
+                                "measured", self.cwd, "Claude's room; $(unsafe)")
+        named_prompt = facade._initial_prompt("x", unsafe_record, named)
+        override = next(line for line in named_prompt.splitlines()
+                        if "--cc-agent-name" in line)
+        parsed = shlex.split(override)
+        self.assertEqual(parsed[parsed.index("--cc-agent-name") + 1], named.claude_agent_name)
+
+    def test_callback_brief_identifies_both_sides_without_credentials(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport))
+        capture = CallbackCapture("/tmp/claude.sock", "a" * 32, "claude-origin-123",
+                                  42, "measured", self.cwd, "build-orchestrator-7ac2")
+        self.assertIsInstance(facade.start(StartWorkerRequest(
+            "implement-91fa", "task", self.cwd, callback_capture=capture)), Ok)
+        record = self.registry.resolve_name("implement-91fa")
+        prompt = self.broker.turn_specs[0].prompt
+        for identity in (record.name, record.cwd, record.session_id, record.thread_id,
+                         "claude-origin-123", "build-orchestrator-7ac2"):
+            self.assertIn(identity, prompt)
+        self.assertIn('codex-worker message --name implement-91fa --message "<prose>"', prompt)
+        self.assertIn("--cc-agent-name build-orchestrator-7ac2", prompt)
+        self.assertIn("written", prompt)
+        self.assertIn("delivered", prompt)
+        self.assertIn("durable file on the shared filesystem first", prompt)
+        self.assertIn("--message-file sends file contents, not a file reference", prompt)
+        self.assertNotIn(capture.child_token, prompt)
+        self.assertNotIn(capture.target_socket, prompt)
+
+    def test_no_callback_keeps_task_prompt_unchanged(self):
+        from codex_worker.facade import FacadeDeps, WorkerFacade
+        facade = WorkerFacade(FacadeDeps(self.registry,
+            self.broker, self.runtime, __import__("codex_worker.projection", fromlist=["x"]),
+            lambda: 1.0, self.callback_store, self.callback_dispatcher, self.callback_transport))
+        self.assertIsInstance(facade.start(StartWorkerRequest(
+            "disabled-with-capture", "task only", self.cwd,
+            no_callback=True)), Ok)
+        self.assertEqual(self.broker.turn_specs[0].prompt, "task only")
 
     def test_null_and_disabled_callback_starts_do_not_inject_proactive_guidance(self):
         from codex_worker.facade import FacadeDeps, WorkerFacade

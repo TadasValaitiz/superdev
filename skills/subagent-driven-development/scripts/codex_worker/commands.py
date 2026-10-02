@@ -284,6 +284,10 @@ def _check_contract(value: Any) -> None:
         for pid in (value.daemon_pid, value.codex_pid):
             if pid is not None and (type(pid) is not int or pid <= 0): raise ValueError("pid must be positive")
     if name == "CallbackCapture":
+        if value.claude_agent_name is not None and (
+                not value.claude_agent_name or len(value.claude_agent_name) > 1024
+                or not value.claude_agent_name.isprintable()):
+            raise ValueError("claude_agent_name must be bounded printable single-line text")
         if not Path(value.claude_config_dir).is_absolute():
             raise ValueError("claude_config_dir must be absolute")
         route = (value.target_socket, value.child_token, value.claude_session_id,
@@ -403,6 +407,14 @@ class CallbackCapture(StrictModel):
     claude_pid: Optional[int]
     claude_proc_start: Optional[str]
     claude_config_dir: str
+    claude_agent_name: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, value: JsonObject):
+        # Older callers captured the pinned route without its display name.
+        if isinstance(value, dict) and "claude_agent_name" not in value:
+            value = dict(value, claude_agent_name=None)
+        return super().from_dict(value)
 
 
 @dataclass(frozen=True)

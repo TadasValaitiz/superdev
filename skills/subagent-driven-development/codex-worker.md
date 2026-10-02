@@ -119,17 +119,65 @@ The automatic terminal callback is the normal no-poll completion path. Continue 
 other work; do not pause or wait for a reply. If a callback is absent or unsuccessful,
 recover the authoritative result with `status/messages/history` by name.
 
-Initialization gives a worker this global proactive form and its collision-resistant
-readable worker name; a random suffix avoids global clashes:
+Every Codex room's **launch brief** carries a callback context block, not merely
+"reply to Claude": verified Claude origin agent name and Claude session ID when available
+(explicitly unavailable otherwise), exact globally
+unique Codex worker name, explicit creation cwd, and the concrete reply command. The
+originating Claude room supplies its own identity; never infer the recipient from the
+live agent list. The worker adds the returned wrapper session UUID and Codex thread ID
+to its handoff (they are separate from each other and from the Claude session ID).
+
+Initialization gives each worker its collision-resistant readable worker name; a
+random suffix avoids global clashes. Generic syntax is
+`codex-worker message --name <name>`; fill that slot with the actual worker name in
+the launch brief, never leave it as a placeholder for the worker to guess.
+
+For example, a Claude room named `build-orchestrator-7ac2` dispatching worker
+`implement-a31f` gives this concrete proactive reply command:
 
 ```sh
-codex-worker message --name <name> --message-file update.md
+codex-worker message --name implement-a31f --message-file update.md
 ```
 
 `--message` is the short-text alternative. The command does not pause, steer, or
 interrupt. It does not wait for Codex. `written` proves a local write, never `delivered`.
 `--cc-agent-name` redirects one-send proactive delivery only and never changes the
 stored origin. Never pass or expose callback credentials in prompts or reports.
+
+**Shared-filesystem handoff:** write long reports, diffs and evidence to durable files
+first, then send a short status and the existing absolute path. The recipient reads the
+file; do not paste a transcript into the message. For example, after writing the actual
+report at `/absolute/project/.superdev/sdd/implement-a31f-report.md`:
+
+```sh
+codex-worker message --name implement-a31f --message "DONE: report /absolute/project/.superdev/sdd/implement-a31f-report.md; tests passed; ready for review"
+```
+
+Substitute the real readable path and measured status. `--message-file` reads and sends
+the file's **contents**, not its path, so it does not bypass message-size limits. Use
+that option for a short prepared message, not to transport a large report. Small pings
+and actionable summaries remain inline; bulky context lives in files. The automatic
+terminal callback remains the completion signal; report paths belong in the worker's
+short final summary as well as any proactive handoff.
+Oversized automatic terminal callbacks already fall back to a durable completion
+artifact and a short reference containing its absolute path, SHA-256 and byte count.
+
+The worker automatically receives its worker/wrapper/thread identities, captured
+Claude session ID, and the verified Claude origin name when available. The default
+command above uses the **pinned origin captured at creation**, not a name lookup. For
+an intentional one-send name lookup, the exact command for that example is:
+
+```sh
+codex-worker message --name implement-a31f --cc-agent-name build-orchestrator-7ac2 --message-file update.md
+```
+
+That named route resolves the currently live agent, so it is not a replacement for the
+pinned route. If only a safe Claude config root was captured, there is **no default
+recipient or automatic completion callback**: the launch brief must provide an exact
+Claude agent name for an explicit one-send route, or the worker reports that callback
+routing is unavailable. An unnamed but fully captured origin can still use its pinned
+default route. With `--no-callback`, no callback guidance is injected and sends are
+refused. Never guess a missing name or treat `written` as delivery/acknowledgement.
 
 ## Coordinate active work
 
