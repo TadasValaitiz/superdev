@@ -359,3 +359,6 @@
   - **R0b5:** only `codex` (0.160.0) is on the isolated PATH.
   - **R0b8:** global still 8.6.5.
   - The executor stopped and asked for a ruling on creating `$ISO/home/.local/bin` (omitted from the setup).
+- **JUDGE R0 (evaluator):** R0a and the global baselines OK. Positive CWS-3 evidence: under `FORCE_COLOR=3` the preflight's message printed a clean path, with no ANSI.
+  - **F20** (blocks-milestone, DESIGN-DOC, pre-existing since 8.1.x): the trusted preflight can't make a first install on a home without `~/.local/bin`. It checks `[ -d ]` before `uv tool install`, which would create the directory. Fix direction: validate the path's shape (absolute, no control characters), then create the directory or check after the install, with a runnable remedy. The gate itself must stay.
+  - **Fixture RULING:** GO for `mkdir -p $ISO/home/.local/bin`, as fixture parity with the operator's real `~/.local/bin` (exists, `drwxr-xr-x … Oct 6 11:55`). Re-run to new ids `rr-R0b3r…R0b8r`; keep the failed evidence.
