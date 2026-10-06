@@ -451,3 +451,67 @@
   - Final post-reads: 88596/88597/88598 and code-mode-host **89446 GONE**; the target gone; `c` and `s` gone; 4612 free; global unchanged (8.6.5/98477/98478/4500).
   - Leftovers: zero-byte `$ISO/rt/scw-501-global/l` and `s.lock`, and Codex's `de4d481c….lock`.
 - **End state:** an empty isolated registry; nothing running.
+
+## VERDICT (evaluator, 2026-10-06): FINDINGS
+
+**Blocks publishing (no human exception):**
+- **F22 (upgraded):** after the no-turn re-attach, the recovery reads present an empty or partial snapshot as the whole truth. `rr-R7m` returned `messages:[]`, `truncated:false`, `latest_cursor:null` for a worker with two turns; `rr-R5b` showed `latest_turn:null`; `rr-R5d` behaved differently after the first re-attach. Honesty, introduced by cbd9dde.
+- **J5 not ridden:** the supervised global stop and restart was never ridden on any build. 8.6.5 reached the global service outside the ride. The machine-wide install of 8.6.6 and the global `retire research-5d2b8e` need a supervised J5 or the human's exception.
+
+**Before the milestone:**
+- **F21:** the creation window is unproven; needs a deterministic test holding a start between thread/start and turn/start.
+- **F25 (new):** named reads on a stopped service start it again by themselves (`rr-R8b`), so any room's read undoes a supervised stop.
+- **F23:** cwd-missing workers show as idle.
+- **F6:** token usage misattributed and not collected.
+- **F2:** the stopped state shows stored and default values as live.
+- **F9:** the run refusals give no reason or remedy.
+- **F20:** the preflight fails on a fresh home.
+
+**Discharged on live evidence:**
+- CWS-1 readiness and teardown/restart (0.158/8.6.2 and 0.160/8.6.6)
+- CWS-2 (Python 3.14)
+- CWS-3
+- F15 and F16
+- F19 (the reload with a missing cwd)
+- F18 (`retire` on all four paths)
+- the active-work gates on 0.160
+- config fixed at creation and re-applied on resume (both resume routes)
+- F11 and F5
+
+**Journeys:**
+
+| Journey | Status |
+|---|---|
+| J1 | DISCHARGED |
+| J2 | DISCHARGED |
+| J3 | DISCHARGED |
+| J4 | DISCHARGED on 8.6.6/0.160 (carrying F22, F21, F23, F25) |
+| J5 | NOT RIDDEN |
+
+**Live risk outside 8.6.6:** the global 8.6.5 service loads the registry strictly; `/private/tmp/cw-ride-5d2b8e` survives only because it was touched.
+
+**Process notes:**
+- The J5 HOLD was invisible to the session that installed 8.6.5.
+- The ride's own plan put a durable cwd under `/tmp`.
+- Evaluator calibration errors (the step-18b gate; the `worker_attachment` expectation on a refusal) are corrected in the record.
+
+The residuals and scenario refresh are recorded in the RESIDUALS FILE section below and in the scenario doc refresh.
+
+## Observations → RESIDUALS FILE
+
+| ID | Surface | Observation | Why it matters to the operator |
+|---|---|---|---|
+| F3 | `daemon status` | The migration block carries an unactionable conflict and is about 80% provenance. | It buries the fields the operator needs. |
+| F4 | `start --help` | `--timeout` has no unit; `--no-callback` and `--timeout` have no help text. | The operator has to guess. |
+| F7 | `start`/`run` result | No "fixed for life", and no notice that it started the shared service. | The scenario promise is met only in `--help`. |
+| F8 | `messages`/`run` | `selection` is `explicit_final` in one place, `live` in another, and undocumented. | The operator can't explain it. |
+| F10 | `worker_name_exists` | Offers the raw TUI resume instead of `run --name` or a new name. | Steers towards the expert path. |
+| F12 | `history`/`messages` | No item-level evidence (commands, search queries). | A skill re-read was visible only out of surface. |
+| F13 | `messages` | The latest-turn scope is unlabelled; `--tail` means messages here, turns in `history`. | Misleads about completeness. |
+| F14 | `service_busy`/`turn_active` | `retryable:false` next to "retrying"; nothing says when a retry will succeed. | Mixed signals. |
+| F17 | `history` | Timestamps are bare epoch seconds. | Hard to read. |
+| F24 | `worker_cwd_missing` | The only remedy is to forget the worker. | The docs should explain reading the thread via `resume_command`. |
+| — | `history` | Documented as "durable read-back" but needs the worker to be attached. | A design question. |
+| — | `worker_not_found` | The remedy `start --help` is weak. | Harmless. |
+| — | Coverage | A cold-start `run` on a stopped service was not observed separately. | The same `ensure_running` path. |
+| — | Codex `.lock` files | They accumulate in `/private/tmp/codex-daemon-<uid>/`, one per listen path. | Codex owns them; codex-worker correctly never deletes them. |
