@@ -302,3 +302,25 @@
   - `history` requiring attachment is a RESIDUAL design question.
   - The remedy change is accepted in principle and judged live in R5 (the no-turn re-attach: exit 0, then status attached, history shows no new turn, and the next run still searches).
   - The doc passage on the `session` family needs reconciling; the ROOM SESSION did so (codex-worker.md: "That one command is also the ordinary no-turn re-attach offered by `worker_detached`").
+
+## Resume, 2026-10-06 (fix re-ride)
+- **DECIDE (supplements-orchestrator D362, provisional; the human may override): option 1.** Install 8.6.3 via the trusted preflight INSIDE the isolated environment only and re-ride the fix there. The machine-wide install is the first step of a supervised J5 window; J5 and any machine-wide replacement of the 8.6.2 global service stay on HOLD for the human's GREEN-LIGHT.
+- **Branch:** 22f892a (8.6.3 = CWS-1 + F15 + F16 + the no-turn re-attach remedy).
+- **Environment drift since 09-30:**
+  - **codex-cli is now 0.160.0.**
+  - macOS periodic cleanup removed parts of `/private/tmp/cw-iso-e7a1c4` (`state`, `work`, `work2`), so its registry can no longer load (the worker cwds are gone). The re-ride uses a FRESH isolated environment.
+  - The global service is now pid 11784 (it was replaced or restarted since 09-30), 8.6.2, 8 workers, 0 active.
+- **ROOM SESSION development probe on codex-cli 0.160.0** (not a ride step): `app-server --listen unix://PATH` still makes PATH a symlink into `/private/tmp/codex-daemon-501/<sha>`; the target is an owner-only socket in the 0700 directory; SIGTERM to the owned group removes the link and the target. Same layout as 0.158.
+- **Evaluator re-ride RULING (2026-10-06):** GO with amendments (one wrapper for the ISO environment; keep the active-turn refusal on codex 0.160; R6b missing-cwd worker; R8b/R8c stopped-path variants). Plus an **ASK**: what showed that the old isolated registry "can't load"?
+- **ROOM SESSION answer and URGENT finding (F19):**
+  - The original statement was a code inference (`registry._record`: `Path(cwd).resolve(strict=True)` → `RegistryError("cwd must be an existing directory")`, which fails the whole registry load; daemon.log line 293 shows this exact failure on a legacy registry).
+  - Then checked against the LIVE global registry with a **read-only** `SessionRegistry.read_existing()` using the installed 8.6.5 code. Result: **"LOAD FAILS: invalid registry record … cwd must be an existing directory"**; file unchanged.
+  - Cause: the ride's global worker `research-5d2b8e` has cwd `/private/tmp/cw-ride-5d2b8e`, which macOS periodic `/tmp` cleanup deleted.
+  - The running global service (8.6.5, pid 98477, started 2026-10-02 16:08, **40 workers, 2 active**) loaded the registry before the deletion. Its NEXT start (any restart, crash, reboot or generation replacement) would have failed for every room.
+  - **Mitigation (ROOM SESSION, its own directory):** `mkdir /private/tmp/cw-ride-5d2b8e` (empty). Re-check: "LOADS OK: 40 records", no record with a missing cwd, registry file unchanged.
+  - **Not a permanent fix:** the directory can be cleaned again, and any room's worker whose worktree cwd is later removed bricks the registry the same way.
+- **Version drift (ROOM SESSION facts):**
+  - Another session built on this branch: 22f892a is an ancestor of `fix/codex-worker-private-websocket` c2e26b1 (8.6.5, the primary checkout).
+  - The machine-wide tool is **8.6.5** (installed 2026-10-02 15:33), and the global service runs 8.6.5. So the machine-wide install and global generation replacement happened outside this ride.
+  - This branch's unpublished 8.6.3 is superseded, and origin/main is still 8.6.1.
+  - The re-ride is PAUSED pending orchestrator direction on what to ride and publish.
