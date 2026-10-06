@@ -403,3 +403,10 @@
   - `status` → attached true, `active_turn_id` null, **`latest_turn` null** (the restarted runtime holds no turn history).
   - `history --tail 5` → only the R2 turn, `returned` 1 (no new turn).
   - `messages --tail 1` → R2's answer, **`latest_cursor` null**.
+- **JUDGE R3–R5 (evaluator):** OK. **F15 and F16 DISCHARGED live** on 8.6.6 and codex 0.160.
+  - The restart impact carries `worker_attachment`.
+  - Teardown is clean (code-mode-host 51435 gone; new inodes; global untouched).
+  - All six detached reads are typed `worker_detached` with a no-turn remedy (no `daemon start`, no exit 1).
+  - The no-turn re-attach works (no turn run).
+  - **F22** (blocks-milestone, honesty/labelling, introduced with the no-turn re-attach path): after the re-attach, `status.latest_turn` and `messages.latest_cursor` are bare `null` although history has a completed turn. Fix direction: fill from durable history, or label as unavailable and point to `history`.
+  - R6: GO.
