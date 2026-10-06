@@ -1,0 +1,2 @@
+COMMAND   PID  USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+Python  98477 tadas    4u  IPv4 0xa71e6b5aa3b28190      0t0  TCP 127.0.0.1:4500 (LISTEN)

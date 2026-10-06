@@ -617,3 +617,48 @@ these files and codex-worker correctly never touches them. It is the same "`/tmp
 > 3. If any post-read fails: STOP. Don't publish. Send HIL-NEEDED with the evidence; the HUMAN rules.
 
 - **Room note (install under a live service):** `uv tool install --reinstall` rebuilds the tool environment that the running 8.6.5 service was loaded from. Every module its restart path imports inside a function (`.models`, `.projection`, `.service_domain`, `.migration`, `.registry`) was already imported when the service started, so those imports come from `sys.modules`, not the replaced files. The post-reads judge the outcome.
+
+### J5 RULE (evaluator): GO for W1–W5 as one ruling, with amendments
+1. W0 captures the environment and the code identity.
+2. W3 adds `readlink` and the interpreter.
+3. W4a takes two reads ~5 s apart with 0 active and the same names (F21).
+4. A generation already replaced by another room counts as an automatic replacement, judged the same way.
+
+- Hard-FAIL post-read criteria are set per read (e1–e6). Foreign movement is reported, not judged. W6 is judged separately.
+- Room answer to the process note: `origin` has no `dev` branch, only `main`. The dev-first rule in CLAUDE.md is about upstream PRs, and the human named `main` (D368).
+
+### W0: global baseline (executor, read-only; `j5-W0*`, all exit 0, stderr empty)
+- **W0a environment:**
+  - `HOME=/Users/tadas`
+  - `TMPDIR=/var/folders/mg/j_vvh_2x33g9hxtv1v0rs1400000gn/T/`
+  - no XDG_STATE_HOME, CODEX_HOME, CODEX_WORKER_INSTANCE or CLAUDE_PLUGIN_ROOT
+  - PATH without `cw-iso`
+- **W0g code identity:** HEAD 3313341; `git diff --stat d63075a HEAD -- skills/` and `git status --porcelain -- skills/` are both empty.
+- **W0f:** the symlink is unchanged (Oct 2 15:33) and reports 8.6.5.
+- **W0e:** 98477 LISTENs on 127.0.0.1:4500.
+- **W0h `daemon status`:** ready, 8.6.5, 98477/98478, :4500, **3 active turns** (c2-1461-8b1e, recheck-ca4a, ride-eval-6915), 43 workers.
+- **W0b ps (protected and reference set):**
+  - Global chain 98477(ppid 1) > 98478 > 98479 > code-mode-host 111 (own pgid). The first three started Oct 2 16:08:43; 111 started 16:08:52.
+  - Managed daemon 17915 (pid-update-loop, Sep 28) > 51463 (`--managed-daemon`, Oct 6 10:40).
+  - VS Code app-servers 23549 and 24223 (Sep 28).
+  - ChatGPT app app-server 95401 (Oct 1) and 81500.
+  - Leftover `fake-codex app-server` helpers 81880 and 81883 (ppid 1, Oct 2 10:45), not ours. Reported only.
+  - A TUI attached to the global listener: 58032/58033 `codex --remote ws://127.0.0.1:4500 agents` (Oct 5 09:24). **A restart drops its connection.** That is inherent to the approved restart and reported.
+  - Other rooms' in-flight codex-worker clients 2045 and 66153; an orphaned client 53554 (ppid 1).
+- **W0c daemon dir:**
+  - Global socket `6c89…` inode 94656460 (Oct 2 16:08).
+  - Managed `a02c…` inode 95951440 (Oct 6 10:40).
+  - Locks `8143…`, `87ae…`, `a02c…` and `de4d…` (the isolated ride's). No `6c89….lock`.
+- **W0d `scw-501-global`:** `c` (94656461) → `/private/tmp/codex-daemon-501/6c89…`, `s` 94656468, `l` 95747164.
+- Room check against the W0 criteria: PASS (environment, code identity, every capture).
+
+### Window launch (room), 2026-10-06T09:44:48Z
+- The window runs as one detached script, `$E/j5-window.sh`, launched by the room in the background.
+  - **Why:** an agent tool timeout must never cut a `daemon restart` mid-way, between the old service's stop and the new one's launch.
+  - **Deadlines:** quiet wait 80 min, restart 20 min.
+  - **Fail-closed:** any status read that isn't `ready` with 0 active counts as not quiet.
+  - The log is at `$E/j5-window.log`.
+- **Observation (new, F26 candidate):**
+  - The first W1 poll (09:44:53Z) got exit 3 with `-32020 codex_failure` and `"active inventory turn identity is ambiguous"`, `retryable:false`, `next_actions:[]`.
+  - **Cause:** a race with a turn transition. c2-1461-8b1e finished and c3-1461-2d7c started. The inventory listed a thread active while `thread/read` had no in-progress turn.
+  - The gate fails closed (safe), but a transient state is labelled not retryable, with no remedy (the F14 class). The next polls were normal (3 active).
