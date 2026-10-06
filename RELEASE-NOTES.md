@@ -1,3 +1,17 @@
+# v8.6.7 — codex-worker: re-attach reloads the last turn (2026-10-06)
+
+Checkride finding F22, which blocked publishing. After a service restart, the no-turn re-attach recommended
+by `worker_detached` (`session resume --session <uuid>`) left `status` showing `latest_turn: null` and
+`messages` showing an empty list marked `truncated: false`, for a worker that had completed turns. Whether
+`messages` showed anything depended on whether `history` had happened to run first.
+
+- **Re-attach reloads the last turn:** re-attaching an existing worker, through `session resume` or the
+  implicit resume in `run`, now reloads the thread's turns from Codex. `status` and `messages` then reflect
+  the last turn.
+- **Docs:** `messages.latest_cursor` counts live events in the current service generation, so it stays
+  `null` after a restart until the next turn.
+- 8.6.6 was a checkride build that was never published. 8.6.7 contains everything listed under 8.6.6.
+
 # v8.6.6 — codex-worker: a vanished cwd no longer bricks the registry; `retire` (2026-10-06)
 
 Found during the codex-worker checkride (F19). A checkride worker had been given a cwd under `/tmp`, and
