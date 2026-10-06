@@ -425,3 +425,11 @@
   - **R6b8:** `retire --name research-iso6-7c2d` → exit 0, `status:"retired"` with `attach` for the kept thread.
   - R6b9: `status --name research-iso6-7c2d` → exit 3, `-32022 worker_not_found`.
 - **RUN R6c:** `retire --name research-iso5b-7c2d` (idle, detached) → exit 0, retired with attach. `daemon status` lists only `research-iso5-7c2d` (1 worker).
+- **JUDGE R6–R6c (evaluator):** OK. **F19 FIXED on live evidence:** with a worker's cwd removed, `daemon restart` reloads all workers and reaches ready (on 8.6.5 the load failed).
+  - The healthy worker is unaffected.
+  - `run` on the broken worker gives typed `-32044` with the `retire` remedy and no turn.
+  - `retire` works on cwd-missing and on idle-detached workers, keeping the thread's `attach`.
+  - R6: search works in the session that `session resume` re-attached.
+  - **F23** (blocks-milestone, labelling): `daemon status` and the impact report show a cwd-missing worker as plain idle. Fix direction: a separate `cwd_missing_names` with the `retire` remedy.
+  - **F24** (RESIDUAL): retire is the only remedy for a missing cwd; the docs should say the thread stays readable through the returned `resume_command`.
+  - GO for R7a (ps baseline), R7, R7b (F21 probe), R8, R8b, R8c and R8d.
