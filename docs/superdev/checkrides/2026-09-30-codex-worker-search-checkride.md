@@ -346,3 +346,16 @@
   - **R8d:** retire the idle attached iso5 before the final stop (0 workers; the stop impact must not count the retired thread).
   - End state: an empty isolated registry.
 - `/private/tmp/cw-ride-5d2b8e` was touched on 10-06 (several times). Its permanent fix (`retire --name research-5d2b8e`, global) belongs inside the human-gated install window.
+- **RUN R0 (executor, ISO `/private/tmp/cw-iso-7c2d`, wrapper `$ISO/iso-env`):**
+  - **R0a1:** global ready, 8.6.5, pid 98477 / app-server 98478, 42 workers (2 active: `c1-1461-4f8a`, `final-review-d817`), research-5d2b8e listed.
+  - **R0a2:** 8.6.5.
+  - **R0a3:** codex-cli 0.160.0.
+  - **R0a4:** both started Fri Oct 2 16:08:43; the service runs on the macOS CommandLineTools Python 3.9.
+  - **R0b0:** `FORCE_COLOR=3`.
+  - **R0b1:** HEAD cc21fa2; `skills/` clean.
+  - **R0b2 = R0b7:** the global symlink is unchanged (`diff` exit 0).
+  - **R0b3:** `$ISO/iso-env …/install-codex-worker` → **exit 1**, stderr `codex-worker preflight: uv tool dir --bin returned a missing directory: /private/tmp/cw-iso-7c2d/home/.local/bin`. The preflight requires uv's bin directory to exist BEFORE installing, so on a fresh home it can't make the first install.
+  - **R0b4:** exit 127 (not installed).
+  - **R0b5:** only `codex` (0.160.0) is on the isolated PATH.
+  - **R0b8:** global still 8.6.5.
+  - The executor stopped and asked for a ruling on creating `$ISO/home/.local/bin` (omitted from the setup).
