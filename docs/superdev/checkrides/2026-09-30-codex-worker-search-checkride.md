@@ -515,3 +515,11 @@ The residuals and scenario refresh are recorded in the RESIDUALS FILE section be
 | — | `worker_not_found` | The remedy `start --help` is weak. | Harmless. |
 | — | Coverage | A cold-start `run` on a stopped service was not observed separately. | The same `ensure_running` path. |
 | — | Codex `.lock` files | They accumulate in `/private/tmp/codex-daemon-<uid>/`, one per listen path. | Codex owns them; codex-worker correctly never deletes them. |
+
+### Resumption at R5 on 8.6.7 (F22 fix lane)
+- **FIX LANE (ROOM SESSION):**
+  - Root cause: a restarted runtime holds no turn snapshot; re-attach loaded none; only `history` reconciled.
+  - a29e5f0: the broker re-attach path reconciles from Codex (`thread/read` with turns) right after attach. Docs scope `latest_cursor` to the current service generation.
+  - d63075a: 8.6.7.
+  - 666 tests green on 3.9 and 3.12 except the 7 known pins.
+- **RULE (evaluator):** GO for G0, G0b (stored listener 4612 and `$ISO/work` exists), G1, G2, **G3 (decides F22: session resume → status latest_turn == G1 turn → messages includes G1's answer item_id with an honest `truncated` → only then history)**, G4 (regression via `run`), and G5 (retire, stop and post-reads). The `latest_cursor` docs scope is accepted as honest.
