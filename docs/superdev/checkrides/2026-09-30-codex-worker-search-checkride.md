@@ -662,3 +662,9 @@ these files and codex-worker correctly never touches them. It is the same "`/tmp
   - The first W1 poll (09:44:53Z) got exit 3 with `-32020 codex_failure` and `"active inventory turn identity is ambiguous"`, `retryable:false`, `next_actions:[]`.
   - **Cause:** a race with a turn transition. c2-1461-8b1e finished and c3-1461-2d7c started. The inventory listed a thread active while `thread/read` had no in-progress turn.
   - The gate fails closed (safe), but a transient state is labelled not retryable, with no remedy (the F14 class). The next polls were normal (3 active).
+- **Window 1 (09:44:48–11:04:49Z): NOTQUIET, nothing installed.**
+  - 188 read-only polls; the active count never reached 0 (minimum 1 on 7 polls, mostly 2–4). 8 polls hit the F26-candidate race.
+  - The rotating rooms: the 1461 arc, rf6-fix, final-review, audit-dev, gate-pub, recheck, and the ride-exec/ride-eval pair.
+  - The CLI is still 8.6.5. The orchestrator was told (an event).
+  - Window 2 launched at 11:05Z with the same script and gates.
+- **Residual (test hygiene):** two `fake-codex app-server -` processes (81880, 81883; ppid 1; CLT Python 3.9; their temp dirs are gone) have survived since Oct 2 10:45. They come from `tests/codex-worker/fake_codex.py`, so some test run let its fake app-server outlive it. Which run is not established. They were not touched (not ours to kill).
