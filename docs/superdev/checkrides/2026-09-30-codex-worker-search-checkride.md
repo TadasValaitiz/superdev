@@ -608,3 +608,12 @@ That one window discharges J5 and removes F19's live trigger.
 **Residual added:** `/private/tmp/codex-daemon-501`: the `.lock` for the live global socket (present at step16) has
 been missing since at least rr-R1c. The cause is not established; macOS `/tmp` cleanup is likely. Codex owns
 these files and codex-worker correctly never touches them. It is the same "`/tmp` is not durable" lesson.
+
+## J5: the supervised install window (HUMAN ruling D368, 2026-10-06, relayed verbatim by supplements-orchestrator)
+
+> RULED by the HUMAN (via supplements-orchestrator, 2026-10-06, AskUserQuestion; D368):
+> 1. **Install window: "Supervised, auto-GO."** Run your steps 1–6 as written. **The HUMAN waives the step-2 worker-list review:** proceed yourself the first time `daemon status` shows `active_turn_count.value` = 0. Re-check it immediately before the install, and again immediately before the restart. **Restart only, never a global `daemon stop`** (your recommendation, adopted). Never `--force`. If a turn starts between checks, the restart refuses; wait for 0 and re-run. Record the worker list from step 1 in your ledger for the record. Treat the window as J5 (ridden as the install window, per the evaluator), so the verdict can be a full PASS.
+> 2. **Publish: "Yes, after install passes."** FF-CAS 8.6.7 to superdev main only after the step-5 post-reads and step-6 retire all pass. The HUMAN approved carrying their own 8.6.4/8.6.5 commits from fix/codex-worker-private-websocket.
+> 3. If any post-read fails: STOP. Don't publish. Send HIL-NEEDED with the evidence; the HUMAN rules.
+
+- **Room note (install under a live service):** `uv tool install --reinstall` rebuilds the tool environment that the running 8.6.5 service was loaded from. Every module its restart path imports inside a function (`.models`, `.projection`, `.service_domain`, `.migration`, `.registry`) was already imported when the service started, so those imports come from `sys.modules`, not the replaced files. The post-reads judge the outcome.
