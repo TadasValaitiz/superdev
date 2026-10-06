@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"cli","result":{"action":"stop","status":"completed","forced":false,"listener":null,"inventory":{"items":[]},"workers":{"active_names":[],"idle_names":["research-iso5-7c2d","research-iso5c-7c2d"],"active_count":0,"idle_count":2,"total_count":2},"durable_state":"preserved","worker_attachment":"detached_until_next_run"}}

@@ -433,3 +433,21 @@
   - **F23** (blocks-milestone, labelling): `daemon status` and the impact report show a cwd-missing worker as plain idle. Fix direction: a separate `cwd_missing_names` with the `retire` remedy.
   - **F24** (RESIDUAL): retire is the only remedy for a missing cwd; the docs should say the thread stays readable through the returned `resume_command`.
   - GO for R7a (ps baseline), R7, R7b (F21 probe), R8, R8b, R8c and R8d.
+- **RUN R7a:** isolated chain 76385 → 76386 → 76388 (no code-mode-host at that moment).
+- **RUN R7m:** `messages --name research-iso5-7c2d --tail 2` → exit 0, **`messages: []`, `returned` 0**, `latest_cursor` null. The worker has two completed turns; after the second restart and re-attach, `messages` returns nothing.
+- **RUN R7h:** `history --tail 2` → both turns with their final answers.
+- **RUN R7b (F21 probe):**
+  - Re-read: 1 idle, 0 active. Background `start research-iso5c-7c2d` (PID 83659, never signalled); after 1 s, `daemon stop` → **exit 3 `service_busy`** naming iso5c's ACTIVE turn `01a11082-1e15…` (the turn had already started; the pre-turn window was not hit). No `--force`.
+  - `wait` → exit 0, completed (65.0 s, webSearch 11). Status: iso5c attached, latest turn completed. Status: 2 idle.
+- **RUN R8:**
+  - Pre-read 0 active; chain 76385/76386/76388 plus code-mode-host 84189.
+  - `daemon stop` → exit 0: `{action stop, completed, forced false, listener null, inventory [], 2 idle, durable_state preserved, worker_attachment detached_until_next_run}`.
+  - Post-reads: 76385/76386/76388 and **84189 GONE** (only the global code-mode-host 111 remains); target `de4d481c…` gone (its `.lock` remains); `c` and `s` gone; 4612 free; global 8.6.5/98477/98478/4500 unchanged.
+- **RUN R8b:** `status` and `messages --name research-iso5-7c2d` on the stopped service → exit 3 `worker_detached` (typed, no exit 1). **Both reads AUTO-STARTED the isolated service** (new chain 88596/88597/88598 appeared).
+- **RUN R8c:** `run --name research-iso5-7c2d` (novel-food follow-up) → exit 0, the same thread, webSearch 3, config live (the service had already been started by R8b).
+- **RUN R8d:**
+  - `retire` iso5 → retired with attach; `retire` iso5c → retired; `daemon status` → **0 workers**.
+  - Final `daemon stop` → exit 0, impact 0 workers, inventory [], worker_attachment detached_until_next_run.
+  - Final post-reads: 88596/88597/88598 and code-mode-host **89446 GONE**; the target gone; `c` and `s` gone; 4612 free; global unchanged (8.6.5/98477/98478/4500).
+  - Leftovers: zero-byte `$ISO/rt/scw-501-global/l` and `s.lock`, and Codex's `de4d481c….lock`.
+- **End state:** an empty isolated registry; nothing running.
