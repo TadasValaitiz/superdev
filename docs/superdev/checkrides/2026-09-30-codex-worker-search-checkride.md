@@ -335,3 +335,14 @@
 - **FIX LANE (ROOM SESSION):** 951046a (tolerant load; `worker_cwd_missing` -32044; `codex-worker retire --name`; docs) and c2392ad (8.6.6 bump and notes). Test-first; 665 tests green on 3.9 and 3.12 except the 7 known unrelated pins. Branch pushed; not published.
 
 ### Fix re-ride (8.6.6, codex-cli 0.160, fresh isolated environment)
+- **RULE (evaluator), re-ride plan:** GO with amendments.
+  - **Wrapper discipline is the main safety gate:** every 8.6.6 command line begins with `$ISO/iso-env`, otherwise STOP before it runs.
+  - R0b also captures `rev-parse HEAD`, a clean `skills/` tree, and the global symlink before and after (identical).
+  - R2c: after the refused retire, `status` shows the record and turn intact; the refused stop carries `worker_attachment:"unchanged"`; no `--force` offered.
+  - R5: plus `messages --tail 1`.
+  - R6 reuses `step29.question.md`.
+  - **R6b: an isolated `daemon restart` while the cwd is missing** (the real F19 failure is the load at generation start); then iso5 unaffected, iso6 run → `worker_cwd_missing`, retire, then not_found.
+  - **R6c:** retire the idle detached iso5b.
+  - **R8d:** retire the idle attached iso5 before the final stop (0 workers; the stop impact must not count the retired thread).
+  - End state: an empty isolated registry.
+- `/private/tmp/cw-ride-5d2b8e` was touched on 10-06 (several times). Its permanent fix (`retire --name research-5d2b8e`, global) belongs inside the human-gated install window.
