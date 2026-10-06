@@ -277,7 +277,7 @@ class PublicHelpLimitsTests(unittest.TestCase):
             ["session", "start"], ["session", "resume"], ["session", "list"],
             ["session", "show"], ["turn", "start"], ["turn", "status"],
             ["turn", "wait"], ["turn", "events"], ["turn", "steer"],
-            ["turn", "interrupt"],
+            ["turn", "interrupt"], ["retire"],
         ]
         parser = cli.build_parser()
         for path in leaves:
@@ -936,7 +936,7 @@ class RpcServerTests(unittest.TestCase):
             -32038: "tool_version_mismatch",
             -32039: "address_in_use", -32040: "service_busy",
             -32041: "legacy_name_conflict", -32042: "service_config_conflict",
-            -32043: "worker_detached",
+            -32043: "worker_detached", -32044: "worker_cwd_missing",
         }
         self.assertEqual({code.value: kind for code, kind in FACADE_FAULT_KINDS.items()},
                          expected)
@@ -1609,6 +1609,7 @@ class CliTests(unittest.TestCase):
              {'name': 'build-1', 'objective': 'finish', 'status': None, 'token_budget': None}),
             (['goal', 'show', '--name', 'build-1'], 'worker/goal/show', {'name': 'build-1'}),
             (['limits'], 'account/limits', {}),
+            (['retire', '--name', 'build-1'], 'worker/retire', {'name': 'build-1'}),
         ]
         for argv, method, params in cases:
             with self.subTest(argv=argv):

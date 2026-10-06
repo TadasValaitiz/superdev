@@ -366,6 +366,84 @@ class MaintenanceWorkerAttachmentTests(unittest.TestCase):
             MaintenanceResult.from_dict(wire)
 
 
+class MissingCwdRegistryTests(unittest.TestCase):
+    """A worker whose cwd vanished (e.g. macOS /tmp cleanup) must not brick the registry."""
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tempdir.name).resolve()
+        self.state_path = self.root / "state" / "sessions.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def write_registry(self, cwds):
+        self.state_path.parent.mkdir(exist_ok=True)
+        sessions = []
+        for index, cwd in enumerate(cwds):
+            sessions.append({
+                "session_id": "12345678-1234-5678-1234-56781234567%d" % index,
+                "thread_id": "thr-%d" % index, "cwd": cwd,
+                "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+                "name": "worker-%d" % index, "model": "m", "effort": "medium",
+                "tier": "medium", "access": "full", "config": None})
+        self.state_path.write_text(json.dumps({"schema_version": 3, "sessions": sessions}))
+        os.chmod(self.state_path, 0o600)
+
+    def test_registry_with_a_vanished_cwd_still_loads_every_record(self):
+        live = str(self.root)
+        gone = str(self.root / "vanished")
+        self.write_registry([live, gone])
+        for loaded in (SessionRegistry(self.state_path), SessionRegistry.read_existing(self.state_path)):
+            records = {record.name: record for record in loaded.list()}
+            self.assertEqual(set(records), {"worker-0", "worker-1"})
+            self.assertEqual(records["worker-1"].cwd, gone)
+
+    def test_registry_with_a_vanished_cwd_still_accepts_writes(self):
+        self.write_registry([str(self.root / "vanished")])
+        registry = SessionRegistry(self.state_path)
+        registry.create_worker("thr-new", str(self.root), "fresh-a1b2", "medium", "m", "medium", "full")
+        self.assertEqual({record.name for record in SessionRegistry(self.state_path).list()},
+                         {"worker-0", "fresh-a1b2"})
+
+    def test_relative_cwd_is_still_refused_on_load(self):
+        self.write_registry(["relative/path"])
+        with self.assertRaises(RegistryError):
+            SessionRegistry(self.state_path)
+
+    def test_new_workers_still_require_an_existing_cwd(self):
+        registry = SessionRegistry(self.state_path)
+        with self.assertRaises(RegistryError):
+            registry.create_worker("thr-x", str(self.root / "missing"), "new-a1b2", "medium",
+                                   "m", "medium", "full")
+
+
+class RetireRegistryTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.cwd = str(Path(self.tempdir.name).resolve())
+        self.state_path = Path(self.cwd) / "state" / "sessions.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_remove_forgets_one_worker_durably_and_frees_its_name(self):
+        registry = SessionRegistry(self.state_path)
+        gone = registry.create_worker("thr-a", self.cwd, "done-a1b2", "medium", "m", "medium", "full")
+        kept = registry.create_worker("thr-b", self.cwd, "kept-c3d4", "medium", "m", "medium", "full")
+        removed = registry.remove(gone.session_id)
+        self.assertEqual(removed, gone)
+        self.assertEqual(SessionRegistry(self.state_path).list(), [kept])
+        registry.create_worker("thr-c", self.cwd, "done-a1b2", "medium", "m", "medium", "full")
+
+    def test_remove_unknown_session_is_refused_without_writing(self):
+        registry = SessionRegistry(self.state_path)
+        before = self.state_path.read_bytes()
+        with self.assertRaises(RegistryError):
+            registry.remove("12345678-1234-5678-1234-567812345678")
+        self.assertEqual(self.state_path.read_bytes(), before)
+
+
 class WorkerConfigRegistryTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()

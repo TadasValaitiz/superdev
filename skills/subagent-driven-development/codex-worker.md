@@ -50,7 +50,10 @@ example `review-a91c`; a random suffix avoids global clashes. `start` atomically
 the name and sends the first message. `run` continues that exact durable worker.
 
 Creation always names an explicit absolute cwd; ambient shell or Claude cwd is context,
-not an implicit creation choice:
+not an implicit creation choice. A durable worker's cwd must outlive the worker: never
+put it under `/tmp`, `/private/tmp` or `$TMPDIR`, because macOS deletes those after a few
+idle days. When a worker is finished, `codex-worker retire --name <name>` forgets it and
+keeps its Codex thread:
 
 ```sh
 codex-worker start --name implement-a31f --cwd /absolute/project --prompt-file task.md
@@ -211,6 +214,11 @@ Use the harness's normal join/wait mechanism. Each worker needs an appropriate
 worktree and distinct named conversation. No implementer is its own reviewer.
 
 ## Goals, limits, and recovery
+
+If a worker's cwd has vanished, using it returns the typed `worker_cwd_missing` fault.
+Only that worker is affected; the rest of the registry keeps loading. A cwd is fixed at
+creation, so the remedy is `codex-worker retire --name <name>`, which refuses while a
+turn is active. Its result returns the kept thread's `attach.resume_command`.
 
 `goal set`/`goal show` proxy Codex's native objective and budget state. `limits`
 returns authoritative provider capacity or an explicit unavailable result; never infer

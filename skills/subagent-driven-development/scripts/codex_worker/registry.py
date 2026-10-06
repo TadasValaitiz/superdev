@@ -75,9 +75,11 @@ def _record(data, schema_version=3):
     try:
         canonical_cwd = str(Path(data["cwd"]).resolve(strict=True))
     except (OSError, RuntimeError):
-        raise RegistryError("cwd must be an existing directory")
-    if not os.path.isdir(canonical_cwd):
-        raise RegistryError("cwd must be absolute")
+        canonical_cwd = None
+    if canonical_cwd is None or not os.path.isdir(canonical_cwd):
+        # A vanished cwd (e.g. macOS /tmp cleanup) quarantines this one worker; it must
+        # never fail the whole registry. Using the worker yields worker_cwd_missing.
+        canonical_cwd = os.path.normpath(data["cwd"])
     try:
         validate_thread_config(data.get("config"))
     except ValueError as exc:
@@ -310,6 +312,15 @@ class SessionRegistry:
             self._save_locked(records)
             self._records = records
             return updated
+
+    def remove(self, session_id: str) -> SessionRecord:
+        """Forget one worker durably; its Codex thread is not touched."""
+        with self._lock:
+            current = self.resolve(IdentifierSelector(session_id=session_id))
+            records = [r for r in self._records if r.session_id != session_id]
+            self._save_locked(records)
+            self._records = records
+            return current
 
     def resolve_name(self, name: str) -> SessionRecord:
         if not isinstance(name, str) or not name:

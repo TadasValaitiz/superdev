@@ -93,6 +93,7 @@ class FacadeFaultCode(int, Enum):
     LEGACY_NAME_CONFLICT = -32041
     SERVICE_CONFIG_CONFLICT = -32042
     WORKER_DETACHED = -32043
+    WORKER_CWD_MISSING = -32044
 
 
 FACADE_FAULT_KINDS = {
@@ -125,6 +126,7 @@ FACADE_FAULT_KINDS = {
     FacadeFaultCode.LEGACY_NAME_CONFLICT: "legacy_name_conflict",
     FacadeFaultCode.SERVICE_CONFIG_CONFLICT: "service_config_conflict",
     FacadeFaultCode.WORKER_DETACHED: "worker_detached",
+    FacadeFaultCode.WORKER_CWD_MISSING: "worker_cwd_missing",
 }
 
 
@@ -452,6 +454,11 @@ class InterruptWorkerRequest(WorkerStatusRequest):
 
 
 @dataclass(frozen=True)
+class RetireWorkerRequest(WorkerStatusRequest):
+    pass
+
+
+@dataclass(frozen=True)
 class GoalSetRequest(WorkerStatusRequest):
     objective: Optional[str] = None; status: Optional[str] = None; token_budget: Optional[int] = None
     def __post_init__(self) -> None:
@@ -604,6 +611,18 @@ class HistoryTurnView(StrictModel): turn_id: str; status: str; started_at: Optio
 class WorkerHistoryResponse(StrictModel): worker: WorkerView; turns: List[HistoryTurnView]; requested_tail: int; returned: int; older_available: bool
 @dataclass(frozen=True)
 class ControlResponse(StrictModel): worker: WorkerView; action: str; accepted: bool; turn_id: str; status: str
+@dataclass(frozen=True)
+class RetireWorkerResponse(StrictModel):
+    """A forgotten worker's identity; its Codex thread stays resumable through `attach`."""
+    name: str; session_id: str; thread_id: str; cwd: str; status: str; attach: JsonObject
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_worker_name(self.name)
+        uuid.UUID(self.session_id)
+        if self.status != "retired" or not self.thread_id or not Path(self.cwd).is_absolute():
+            raise ValueError("invalid retired worker")
+        from .service_domain import AttachView
+        AttachView.from_dict(self.attach)
 @dataclass(frozen=True)
 class GoalView(StrictModel): thread_id: str; objective: str; status: str; token_budget: Optional[int]; tokens_used: int; time_used_seconds: int; created_at: int; updated_at: int
 @dataclass(frozen=True)

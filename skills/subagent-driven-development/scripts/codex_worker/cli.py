@@ -24,7 +24,7 @@ from .rpc import (FacadeRpcFault, RpcServer, SocketInUse, SocketPathUnsafe,
                   daemon_unavailable_fault, rpc_call, validate_raw_params)
 from .runtime import RuntimeStore
 from .commands import (FacadeFault, FacadeFaultCode, GoalSetRequest, GoalShowRequest,
-                       InterruptWorkerRequest, LimitsRequest, RunWorkerRequest,
+                       InterruptWorkerRequest, LimitsRequest, RetireWorkerRequest, RunWorkerRequest,
                        MessageWorkerRequest, StartWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest,
                        WorkerMessagesRequest, WorkerStatusRequest,
                        ResolveLegacyConflictRequest)
@@ -361,6 +361,10 @@ def _add_common_commands(families) -> None:
         command.set_defaults(method=method, common=True)
         command.add_argument("--name", required=True)
         if name in ("messages", "history"): command.add_argument("--tail", type=_positive_int, default=1)
+    retire = families.add_parser(
+        "retire", help="forget a finished worker; its Codex thread is kept")
+    retire.set_defaults(method="worker/retire", common=True)
+    retire.add_argument("--name", required=True)
     steer = families.add_parser("steer"); steer.set_defaults(method="worker/steer", common=True); _add_name_prompt(steer)
     goal = families.add_parser("goal"); goal_sub = goal.add_subparsers(dest="action", required=True, parser_class=CodexWorkerArgumentParser)
     goal_set = goal_sub.add_parser("set"); goal_set.set_defaults(method="worker/goal/set", common=True)
@@ -658,7 +662,7 @@ def _params_for(args: argparse.Namespace) -> JsonObject:
         message = _message(args)
         return {"name": args.name, "message": message, "priority": args.priority,
                 "cc_agent_name": args.cc_agent_name}
-    if method in ("worker/status", "worker/interrupt", "worker/goal/show"):
+    if method in ("worker/status", "worker/interrupt", "worker/retire", "worker/goal/show"):
         return {"name": args.name}
     if method in ("worker/messages", "worker/history"):
         return {"name": args.name, "tail": args.tail}
@@ -785,7 +789,8 @@ _COMMON_REQUESTS = {
     "worker/start": StartWorkerRequest, "worker/run": RunWorkerRequest, "worker/message": MessageWorkerRequest,
     "worker/status": WorkerStatusRequest, "worker/messages": WorkerMessagesRequest,
     "worker/history": WorkerHistoryRequest, "worker/steer": SteerWorkerRequest,
-    "worker/interrupt": InterruptWorkerRequest, "worker/goal/set": GoalSetRequest,
+    "worker/interrupt": InterruptWorkerRequest, "worker/retire": RetireWorkerRequest,
+    "worker/goal/set": GoalSetRequest,
     "worker/goal/show": GoalShowRequest, "account/limits": LimitsRequest,
 }
 

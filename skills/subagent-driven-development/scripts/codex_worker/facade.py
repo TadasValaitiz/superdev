@@ -15,7 +15,8 @@ from .commands import (AccessMode, CallbackCapture, CallbackState, CallbackStatu
                        CompletionResponse, ControlResponse, FacadeFault,
                        FacadeFaultCode, GoalResponse, GoalSetRequest, GoalShowRequest,
                        GoalView, InterruptWorkerRequest, LimitsRequest, LimitsResponse,
-                       MessageWorkerRequest, CallbackSendResponse, Ok, Err, RecoveryView, Result, RunWorkerRequest, StartWorkerRequest,
+                       MessageWorkerRequest, CallbackSendResponse, Ok, Err, RecoveryView, Result, RetireWorkerRequest,
+                       RetireWorkerResponse, RunWorkerRequest, StartWorkerRequest,
                        SteerWorkerRequest, Tier, TurnView, WorkerHistoryRequest,
                        WorkerHistoryResponse, WorkerMessagesRequest, WorkerMessagesResponse,
                        WorkerStatusRequest, WorkerStatusResponse, WorkerView,
@@ -59,6 +60,7 @@ class BrokerPort(Protocol):
                    expected_turn_id: Optional[str] = None) -> dict: ...
     def turn_interrupt(self, selector: IdentifierSelector,
                        expected_turn_id: Optional[str] = None) -> dict: ...
+    def retire_worker(self, session_id: str) -> SessionRecord: ...
 
 @runtime_checkable
 class RuntimePort(Protocol):
@@ -271,6 +273,28 @@ class WorkerFacade:
     def interrupt(self, request: InterruptWorkerRequest) -> Result[ControlResponse, FacadeFault]:
         return self._control(request, "interrupt")
 
+    def retire(self, request: RetireWorkerRequest) -> Result[RetireWorkerResponse, FacadeFault]:
+        record = None
+        try:
+            try:
+                record = self.deps.registry.resolve_name(request.name)
+            except LegacyNameConflict as exc:
+                return Err(FacadeFault(
+                    FacadeFaultCode.LEGACY_NAME_CONFLICT,
+                    "Legacy worker name has multiple preserved threads",
+                    "legacy_name_conflict", details={"candidates": exc.candidates},
+                    known_ids=self._known(name=request.name), next_actions=exc.next_actions))
+            except RegistryError as exc:
+                if str(exc) == "unknown worker name": return Err(self._not_found_fault(request.name))
+                return Err(self._registry_fault(exc, request.name))
+            retired = self.deps.broker.retire_worker(record.session_id)
+            from .projection import build_attach_view
+            return Ok(RetireWorkerResponse(
+                retired.name, retired.session_id, retired.thread_id, retired.cwd, "retired",
+                build_attach_view(self.deps.listener, retired.thread_id).to_dict()))
+        except BaseException as exc:
+            return Err(self._effect_fault(exc, record, request.name))
+
     def goal_set(self, request: GoalSetRequest) -> Result[GoalResponse, FacadeFault]:
         try:
             record = self._resolve_policy(request.name)
@@ -423,7 +447,18 @@ class WorkerFacade:
             return self._registry_fault(exc, name)
         if not record.common_policy_complete:
             return self._legacy_fault(record)
+        if not os.path.isdir(record.cwd):
+            return self._cwd_missing_fault(record)
         return record
+
+    def _cwd_missing_fault(self, record):
+        return FacadeFault(FacadeFaultCode.WORKER_CWD_MISSING,
+                           "Worker cwd no longer exists: %s" % record.cwd, "worker_cwd_missing",
+                           details=self._details({"cwd": record.cwd}, record),
+                           known_ids=self._known(record), next_actions=[
+                               {"command": self._command("retire --name %s" % shlex.quote(record.name)),
+                                "reason": "Forget this worker (its Codex thread is kept); "
+                                          "a worker's cwd is fixed at creation"}])
 
     def _control(self, request, action):
         record = None

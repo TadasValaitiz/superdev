@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, Optional, Union
 
 from .models import IdentifierSelector, JsonObject, RpcFault, rpc_response
 from .commands import (FacadeFault, GoalSetRequest, GoalShowRequest, InterruptWorkerRequest,
+                       RetireWorkerRequest,
                        LimitsRequest, Ok, RunWorkerRequest, StartWorkerRequest,
                        MessageWorkerRequest, SteerWorkerRequest, WorkerHistoryRequest, WorkerMessagesRequest,
                        WorkerStatusRequest, MigrationStatusRequest,
@@ -192,6 +193,7 @@ COMMON_METHODS = {
     "worker/history": ("history", WorkerHistoryRequest),
     "worker/steer": ("steer", SteerWorkerRequest),
     "worker/interrupt": ("interrupt", InterruptWorkerRequest),
+    "worker/retire": ("retire", RetireWorkerRequest),
     "worker/goal/set": ("goal_set", GoalSetRequest),
     "worker/goal/show": ("goal_show", GoalShowRequest),
     "account/limits": ("limits", LimitsRequest),

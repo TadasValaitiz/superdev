@@ -659,6 +659,29 @@ class WorkerBrokerTests(unittest.TestCase):
                                    "itemsView": "full", "limit": 10}),
         ])
 
+    def test_retire_refuses_an_active_turn_then_forgets_the_idle_worker(self):
+        from codex_worker.broker import TurnStartSpec
+        from codex_worker.commands import AccessMode
+        record = self.registry.create_worker("thr-retire", self.cwd, "retire", "medium",
+                                             "fake-model-a", "medium", "full")
+        self.runtime.attach(record)
+        self.broker.start_turn(TurnStartSpec(record.session_id, "work", "fake-model-a", "medium",
+                                             AccessMode.FULL))
+        with self.assertRaises(RpcFault) as caught:
+            self.broker.retire_worker(record.session_id)
+        self.assertEqual(caught.exception.kind, "turn_active")
+        self.assertEqual(self.registry.list(), [record])
+        self.codex.complete_active_turn()
+        retired = self.broker.retire_worker(record.session_id)
+        self.assertEqual(retired.session_id, record.session_id)
+        self.assertEqual(self.registry.list(), [])
+
+    def test_retire_forgets_a_worker_the_runtime_never_attached(self):
+        record = self.registry.create_worker("thr-unattached", self.cwd, "never", "medium",
+                                             "fake-model-a", "medium", "full")
+        self.broker.retire_worker(record.session_id)
+        self.assertEqual(self.registry.list(), [])
+
     def test_preserved_common_start_persists_policy_in_one_registry_record(self):
         from codex_worker.broker import AnnotationPolicy, SessionStartSpec
         from codex_worker.commands import AccessMode

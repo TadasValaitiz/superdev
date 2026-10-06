@@ -17,7 +17,7 @@ from codex_worker.commands import (AccessMode, CallbackAttemptState, CallbackAtt
                                    GoalShowRequest, InterruptWorkerRequest, LimitsRequest,
                                    MessagePriority, MessageWorkerRequest, Ok, RunWorkerRequest, StartWorkerRequest, SteerWorkerRequest,
                                    WorkerHistoryRequest, WorkerMessagesRequest,
-                                   WorkerStatusRequest)
+                                   WorkerStatusRequest, RetireWorkerRequest)
 from codex_worker.broker import ModelSelectionError, TurnStartSpec
 from codex_worker.facade import BrokerPort, ProjectorPort, RegistryPort, RuntimePort
 from codex_worker.instance import InstanceIdentity
@@ -75,6 +75,7 @@ class _Broker:
         self.last_turn_spec = None
         self.turn_specs = []
         self.start_specs = []
+        self.retire_fault = None
         self.control_fault = None
         self.response_text = "done"
 
@@ -118,6 +119,12 @@ class _Broker:
     def session_resume(self, selector):
         record = self.registry.resolve(selector)
         self.runtime.attach(record)
+
+    def retire_worker(self, session_id):
+        self.calls.append("retire")
+        if self.retire_fault is not None:
+            raise self.retire_fault
+        return self.registry.remove(session_id)
 
     def turn_history(self, selector, cursor=None, limit=None):
         record = self.registry.resolve(selector)
@@ -1375,6 +1382,68 @@ class FacadeTests(unittest.TestCase):
         self.assertIn("without starting a turn", fault.next_actions[0]["reason"])
         self.assertIn("runs a turn", fault.next_actions[1]["reason"])
         self.assertNotIn("<", json.dumps(fault.next_actions))
+
+    def test_retire_forgets_the_worker_and_reports_the_kept_codex_thread(self):
+        record = self._record("retire-a1b2")
+        result = self._facade().retire(RetireWorkerRequest(record.name))
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(result.value.to_dict(), {
+            "name": record.name, "session_id": record.session_id,
+            "thread_id": record.thread_id, "cwd": record.cwd, "status": "retired",
+            "attach": {
+                "listener": "ws://127.0.0.1:4500", "thread_id": record.thread_id,
+                "attach_command": "codex --remote ws://127.0.0.1:4500",
+                "resume_command": "codex --remote ws://127.0.0.1:4500 resume %s" % record.thread_id,
+            },
+        })
+        status = self._facade().status(WorkerStatusRequest(record.name))
+        self.assertEqual(status.error.code, FacadeFaultCode.WORKER_NOT_FOUND)
+
+    def test_retire_forgets_a_worker_whose_cwd_vanished(self):
+        gone = Path(self.cwd) / "retire-gone"
+        gone.mkdir()
+        record = self.registry.create_worker("thread-retire-gone", str(gone), "gone-c3d4", "medium",
+                                             "gpt-5.6-terra", "medium", "full")
+        gone.rmdir()
+        result = self._facade().retire(RetireWorkerRequest(record.name))
+        self.assertIsInstance(result, Ok)
+        self.assertEqual(result.value.cwd, str(gone))
+        self.assertEqual(self.registry.list(), [])
+
+    def test_retire_unknown_worker_is_not_found_without_broker_call(self):
+        result = self._facade().retire(RetireWorkerRequest("never-a1b2"))
+        self.assertEqual(result.error.code, FacadeFaultCode.WORKER_NOT_FOUND)
+        self.assertNotIn("retire", self.broker.calls)
+
+    def test_retire_with_active_turn_is_a_typed_refusal_that_keeps_the_worker(self):
+        record = self._record("busy-retire")
+        self.broker.retire_fault = RpcFault(-32004, "Turn is active", "turn_active",
+                                            details={"turn_id": "turn-9"})
+        result = self._facade().retire(RetireWorkerRequest(record.name))
+        self.assertEqual(result.error.code, FacadeFaultCode.TURN_ACTIVE)
+        self.assertEqual(self.registry.resolve_name(record.name), record)
+
+    def test_worker_whose_cwd_vanished_gets_a_typed_fault_with_retire_remedy(self):
+        gone = Path(self.cwd) / "vanished-cwd"
+        gone.mkdir()
+        record = self.registry.create_worker("thread-gone", str(gone), "gone-a1b2", "medium",
+                                             "gpt-5.6-terra", "medium", "read_only")
+        self.runtime.attach(record)
+        gone.rmdir()
+        facade = self._facade()
+        for label, result in (("run", facade.run(RunWorkerRequest(record.name, "continue"))),
+                              ("status", facade.status(WorkerStatusRequest(record.name)))):
+            with self.subTest(label):
+                self.assertIsInstance(result, Err)
+                fault = result.error
+                self.assertEqual((fault.code, fault.kind),
+                                 (FacadeFaultCode.WORKER_CWD_MISSING, "worker_cwd_missing"))
+                self.assertIn(record.cwd, fault.message)
+                self.assertEqual(fault.details["cwd"], record.cwd)
+                self.assertEqual(fault.known_ids["thread_id"], record.thread_id)
+                self.assertEqual([shlex.split(action["command"]) for action in fault.next_actions],
+                                 [["codex-worker", "retire", "--name", record.name]])
+        self.assertEqual(self.broker.turn_specs, [])
 
     def test_worker_detached_from_this_generation_is_reported_truthfully_with_run_remedy(self):
         from codex_worker.models import ErrorDetail

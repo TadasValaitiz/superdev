@@ -323,6 +323,27 @@ class WorkerBroker:
                 "turn_id": turn_id, "status": "in_progress",
                 "attach": self.attach_view(record.thread_id).to_dict()}
 
+    def retire_worker(self, session_id: str) -> SessionRecord:
+        """Remove a worker's record; refuse while it has an active or pending turn."""
+        with self._gate.mutation("worker/retire"):
+            record = self._resolve(IdentifierSelector(session_id=session_id), require_attached=False)
+            reserved = False
+            try:
+                self.runtime.reserve_start(session_id)
+                reserved = True
+            except (UnknownSession, SessionDetached):
+                pass
+            except TurnActive as exc:
+                raise self._from_lower(exc, record) from exc
+            try:
+                return self.registry.remove(session_id)
+            except (RegistryError, OSError) as exc:
+                raise _fault(-32011, "could not update session registry", "registry_error",
+                             details={"reason": str(exc)}) from exc
+            finally:
+                if reserved:
+                    self.runtime.cancel_start(session_id)
+
     def model_list(self) -> JsonObject:
         return {"models": self._models()}
 
