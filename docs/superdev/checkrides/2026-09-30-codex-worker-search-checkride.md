@@ -362,3 +362,24 @@
 - **JUDGE R0 (evaluator):** R0a and the global baselines OK. Positive CWS-3 evidence: under `FORCE_COLOR=3` the preflight's message printed a clean path, with no ANSI.
   - **F20** (blocks-milestone, DESIGN-DOC, pre-existing since 8.1.x): the trusted preflight can't make a first install on a home without `~/.local/bin`. It checks `[ -d ]` before `uv tool install`, which would create the directory. Fix direction: validate the path's shape (absolute, no control characters), then create the directory or check after the install, with a runnable remedy. The gate itself must stay.
   - **Fixture RULING:** GO for `mkdir -p $ISO/home/.local/bin`, as fixture parity with the operator's real `~/.local/bin` (exists, `drwxr-xr-x … Oct 6 11:55`). Re-run to new ids `rr-R0b3r…R0b8r`; keep the failed evidence.
+- **RUN R0b*r** (after `mkdir -p $ISO/home/.local/bin`, fixture parity):
+  - R0b3r: the preflight → exit 0, `codex-worker ready: /private/tmp/cw-iso-7c2d/home/.local/share/uv/tools/codex-worker/bin/codex-worker (8.6.6)`
+  - R0b4r: 8.6.6
+  - R0b5r: the isolated codex-worker on PATH; codex 0.160.0
+  - R0b6r: interpreter `#!…/cw-iso-7c2d/home/.local/share/uv/tools/codex-worker/bin/python` (Homebrew 3.14)
+  - R0b7r: the global symlink identical to R0b2
+  - R0b8r: global 8.6.5
+- **RUN R1:** isolated status stopped, 8.6.6, 0 workers; no `cw-iso-7c2d` process; daemon dir baseline (global target `6c89…` inode 94656460); 4612 free; `rt` empty.
+- **RUN R2:** `$ISO/iso-env codex-worker start --name research-iso5-7c2d … --read-only --search --no-callback --app-server-listen ws://127.0.0.1:4612` → exit 0.
+  - Listener 4612; `config {"web_search":"live"}`; model `gpt-6.1-sol`; webSearch 3, commandExecution 2; the answer cites the EU Register PDF (p. 353).
+  - The service started under codex-cli 0.160's symlinked socket.
+- **RUN R2b:**
+  - Isolated chain 50818 (Python 3.14, pgid 50818) → 50819 node (pgid 50819) → 50820 codex → **51435 code-mode-host (own pgid)**.
+  - New target `de4d481c…` (96462386) plus its `.lock`; the global target unchanged.
+  - `rt/scw-501-global/c → …/de4d481c…`.
+- **RUN R2c:** iso5b in the background (PID 54301, never signalled).
+  - R2c1 (+3 s): status shows 0 active (registered and idle; its turn had not begun).
+  - **R2c2:** `retire --name research-iso5b-7c2d` → exit 3, `-32004 turn_active`, `known_ids.turn_id 01a11078-c7d6…`; next_actions status/messages/interrupt ("Cancel only if deliberate"); no `--force`.
+  - R2c3: status → `active_turn_id 01a11078-c7d6…`, record intact.
+  - **R2c4:** `daemon stop` → exit 3, `-32040 service_busy` naming the iso5b active turn; no `--force`. The details carry no `worker_attachment` field.
+  - `wait` → exit 0; the turn completed unaffected (58.8 s, webSearch 14).
