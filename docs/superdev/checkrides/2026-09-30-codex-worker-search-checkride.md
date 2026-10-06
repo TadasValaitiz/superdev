@@ -383,3 +383,11 @@
   - R2c3: status → `active_turn_id 01a11078-c7d6…`, record intact.
   - **R2c4:** `daemon stop` → exit 3, `-32040 service_busy` naming the iso5b active turn; no `--force`. The details carry no `worker_attachment` field.
   - `wait` → exit 0; the turn completed unaffected (58.8 s, webSearch 14).
+- **JUDGE R0b*r–R2c (evaluator):** all OK.
+  - **CWS-3 DISCHARGED** (the preflight works under `FORCE_COLOR=3`).
+  - **CWS-2 DISCHARGED live** (the isolated service runs on Python 3.14; typed faults render clean).
+  - CWS-1 readiness holds on codex 0.160 with 8.6.6.
+  - The active-work gates hold on 0.160 (retire → `turn_active`, stop → `service_busy`, no `--force`; the turn completed unaffected).
+  - Procedural note: re-read the status before a gate probe.
+  - The `worker_attachment` expectation on a refusal is withdrawn (the contract puts it on completed results only).
+  - **F21** (open): an in-flight `start` (registered, turn not yet begun) shows as idle with 0 active turns in `daemon status`, which is J5's impact report. To be settled by **R7b** (a background `start` then an immediate stop, before R8).
