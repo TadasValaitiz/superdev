@@ -668,3 +668,30 @@ these files and codex-worker correctly never touches them. It is the same "`/tmp
   - The CLI is still 8.6.5. The orchestrator was told (an event).
   - Window 2 launched at 11:05Z with the same script and gates.
 - **Residual (test hygiene):** two `fake-codex app-server -` processes (81880, 81883; ppid 1; CLT Python 3.9; their temp dirs are gone) have survived since Oct 2 10:45. They come from `tests/codex-worker/fake_codex.py`, so some test run let its fake app-server outlive it. Which run is not established. They were not touched (not ours to kill).
+
+### J5 W1–W5 (window 2, launched 11:05:09Z): RUN
+- **W1** (poll 163, 12:11:08Z): 0 active, ready, 8.6.5, 98477/98478, :4500, 51 workers, all idle. The step-1 worker record is the 51 idle names in `j5-W1.stdout`, including research-5d2b8e. The poll before it (12:10:44Z) showed 1 active (r1461-d399).
+- **W2** (12:11:11Z): 0 active.
+- **W3** (logged 12:11:14Z): the preflight exited 0 with `… (8.6.7)`.
+  - W3v: 8.6.7.
+  - W3r: the symlink was re-created, same target.
+  - W3i: uv-tool Python 3.12.13 (the old service ran on CLT 3.9).
+- **W4a** attempt 1 (12:11:22 and 12:11:27Z): 0 active, 8.6.5/98477 ready in both reads, 51 names equal. No automatic replacement happened before our restart.
+- **W4b** attempt 1 (12:11:40Z): exit 0.
+  - completed, forced false, :4500, empty inventory, 51 idle.
+  - durable_state preserved, `worker_attachment: detached_until_next_run`.
+  - Service: ready, 8.6.7, 33765/33766.
+- **W5** (3 s settle):
+  - **e1:**
+    - 98477/98478/98479/111 are gone, with no survivors in the old pgids.
+    - The new chain is 33765 (ppid 1) > 33766 > 33767.
+    - The managed daemon (17915, 51463), VS Code (23549, 24223) and the ChatGPT app (95401, 81500) are present with the same start time.
+    - The attached TUI 58032/58033 is still alive.
+  - **e2:**
+    - The global `6c89…` socket has a new inode, 97199345 (was 94656460).
+    - Managed `a02c…` 95951440 unchanged.
+    - A new `6c89….lock`, created by Codex at the bind.
+  - **e3:** new `c` → `6c89…`; new `s` and `s.lock`; `l` unchanged.
+  - **e4:** 33765 LISTENs on :4500.
+  - **e5:** ready, 8.6.7, 51 workers, 0 active, preserved. No W1 name is missing.
+  - **e6:** `status --name research-5d2b8e` → -32043 worker_detached with `session resume --session 0da93a3d-…` first.

@@ -1,0 +1,10 @@
+total 0
+88798438 drwx------@   9 tadas  wheel    288 Oct  6 15:11 .
+88618457 drwxrwxrwt  643 root   wheel  20576 Oct  6 15:11 ..
+97199345 srw-------@   1 tadas  wheel      0 Oct  6 15:11 6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc
+97199344 -rw-r--r--@   1 tadas  wheel      0 Oct  6 15:11 6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc.lock
+94529940 -rw-r--r--@   1 tadas  wheel      0 Oct  2 15:22 8143c3565fa70b0062fb6b224ce31980ba6a634f90e14cb56f8a9686c059fe7a.lock
+95754429 -rw-r--r--@   1 tadas  wheel      0 Oct  6 10:34 87aec721e52b4f7044645bf1e0f91d1d857658204735a5cd8dab61f091b9954c.lock
+95951440 srw-------@   1 tadas  wheel      0 Oct  6 10:40 a02c5d4d3c202a9bec2c758e3cc24115de170c6439dc77d9bdfee87226cd93c4
+95951439 -rw-r--r--@   1 tadas  wheel      0 Oct  6 10:40 a02c5d4d3c202a9bec2c758e3cc24115de170c6439dc77d9bdfee87226cd93c4.lock
+96462385 -rw-r--r--@   1 tadas  wheel      0 Oct  6 12:07 de4d481c2be031fa3c4bd9697bdeff96fbe8aa43517028a932ae6880b82e6589.lock

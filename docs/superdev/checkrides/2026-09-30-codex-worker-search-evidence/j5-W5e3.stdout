@@ -1,0 +1,8 @@
+total 0
+89867107 drwx------@    6 tadas  staff     192 Oct  6 15:11 .
+  378322 drwx------@ 8358 tadas  staff  267456 Oct  6 15:11 ..
+97199346 lrwxr-xr-x@    1 tadas  staff      94 Oct  6 15:11 c -> /private/tmp/codex-daemon-501/6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc
+95747164 -rw-------@    1 tadas  staff       0 Oct  6 10:29 l
+97199355 srw-------@    1 tadas  staff       0 Oct  6 15:11 s
+97199354 -rw-------@    1 tadas  staff       0 Oct  6 15:11 s.lock
+/private/tmp/codex-daemon-501/6c891589d4b5689736109c86d057151902efb300065aea0ef4a2755b1fa050bc
