@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"cli","result":{"action":"stop","status":"completed","forced":false,"listener":null,"inventory":{"items":[]},"workers":{"active_names":[],"idle_names":[],"active_count":0,"idle_count":0,"total_count":0},"durable_state":"preserved","worker_attachment":"detached_until_next_run"}}

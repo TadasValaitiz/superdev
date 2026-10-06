@@ -1,0 +1,3 @@
+0abc1f0 checkride: F22 fix lane and resumption rulings
+d63075a chore: 8.6.7 bump and notes (F22); 8.6.6 stays the unpublished checkride build
+a29e5f0 fix(codex-worker): re-attach reloads the worker's last turn (checkride F22)

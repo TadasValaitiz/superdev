@@ -523,3 +523,88 @@ The residuals and scenario refresh are recorded in the RESIDUALS FILE section be
   - d63075a: 8.6.7.
   - 666 tests green on 3.9 and 3.12 except the 7 known pins.
 - **RULE (evaluator):** GO for G0, G0b (stored listener 4612 and `$ISO/work` exists), G1, G2, **G3 (decides F22: session resume → status latest_turn == G1 turn → messages includes G1's answer item_id with an honest `truncated` → only then history)**, G4 (regression via `run`), and G5 (retire, stop and post-reads). The `latest_cursor` docs scope is accepted as honest.
+
+#### G0–G5 (8.6.7, codex-cli 0.160, ISO=/private/tmp/cw-iso-7c2d; captures `rr2-*`)
+
+- **PROPOSE (room → executor):** G0–G5 as ruled.
+- **RULE:** GO (above).
+- **RUN (executor; stderr empty throughout):**
+  - **G0, the build:**
+    - G0a: HEAD 0abc1f0 ⊃ a29e5f0, d63075a; `skills/` clean.
+    - G0b: the isolated preflight printed `codex-worker ready: … (8.6.7)`.
+    - G0c: 8.6.7.
+    - G0d: the global symlink is identical to rr-R0b2.
+    - G0e: global 8.6.5.
+  - **G0b, the read checks:**
+    - G0f: stopped, 0 workers, listener 4612. The stopped service shows `service_version:"8.6.6"` while the CLI is 8.6.7 (the F2 class).
+    - G0g: `$ISO/work` exists.
+  - **G1, start:** exit 0.
+    - session 0496b740-f795-4c8d-9b68-cf69ad3f2d0b
+    - turn 01a1108d-b4d8-7b32-9726-78c02caf67bf
+    - final answer msg_0213946bfd85ab20016ac4c0033f6087d2ac6fd9bceffda5ef
+    - agentMessage 2, webSearch 2 (DERIVED)
+    - config {web_search: live}
+  - **G2, restart:**
+    - G2pre: 0 active.
+    - Restart: `worker_attachment: detached_until_next_run`, new pids 23171/23172.
+  - **G3, re-attach and reads (no history before 3d):**
+    - 3a: `session resume`, attached.
+    - **3b:** `status` latest_turn = 01a1108d-b4d8… completed. It was null on 8.6.6 (rr-R5b).
+    - **3c:** `messages --tail 2` returned the commentary and the G1 final answer, msg_0213…5ef. `returned 2, truncated:false` is honest, since agentMessage = 2. On 8.6.6 rr-R7m returned `[]`.
+    - 3d: `history` shows the G1 turn.
+  - **G4, second restart and run:**
+    - Restart: detached_until_next_run.
+    - `status`: -32043 worker_detached, with the `session resume` and `run` remedies.
+    - `run`: same thread, new turn 01a1108e-e20b…, config live, webSearch 2.
+    - `messages`: the new turn's 2 messages.
+    - `status`: latest_turn = 01a1108e-e20b….
+  - **G5, retire and stop:**
+    - `retire`: status retired.
+    - `daemon status`: 0 workers.
+    - `daemon stop`: completed, forced false, inventory empty, total 0, detached_until_next_run.
+    - Post-reads:
+      - 24934/24952/24975 and code-mode-host 26410 are gone.
+      - The isolated daemon-dir target is gone, with the Codex `.lock` remaining.
+      - rt `c`/`s` are gone.
+      - 4612 is free.
+      - Global 98477/98478/8.6.5/4500 are unchanged, with 43 workers and 3 active turns from other rooms.
+- **JUDGE (evaluator):** G0, G0b, G1, G2, G4 and G5 are OK.
+  - **G3 is OK, and F22 is DISCHARGED.** `latest_turn` is G1's turn. `messages` returns G1's final answer, and `truncated:false` is true (agentMessage = 2). `latest_cursor:null` is within the documented scope.
+  - G1 closes R8c's cold-start coverage gap: a cold start by `start` on the stored listener.
+  - G5 teardown is complete: every isolated pid is gone, including code-mode-host 26410 outside the owned group. Global identity is unchanged from R0a.
+  - G0f's stopped `service_version:"8.6.6"` is filed under F2.
+
+## FINAL VERDICT (evaluator, 2026-10-06, 8.6.7 @ 0abc1f0, codex-cli 0.160): FINDINGS
+
+**Blocks publishing:** J5 has not been ridden. The D197 acceptance on the global service has not been observed
+under supervision on any build. If the human excepts J5 in their own words, the verdict becomes
+PASS-WITH-EXCEPTIONS for 8.6.7.
+
+**Blocks the milestone:** F21, F25, F23, F6, F2 (now including G0f), F9, F20.
+
+**Discharged on live evidence:**
+- CWS-1 (0.158/8.6.2; 0.160/8.6.6 and 8.6.7), CWS-2, CWS-3
+- F15, F16, F19, F18, **F22**, F11, F5
+- the active-work gates on 0.160
+- config fixed at creation and re-applied on resume
+
+| Journey | Status |
+|---|---|
+| J1–J3 | DISCHARGED |
+| J4 | DISCHARGED on 8.6.7/0.160 (F22 now closed; F21/F23/F25 carried) |
+| J5 | NOT RIDDEN (HOLD; HUMAN GREEN-LIGHT) |
+
+**Evaluator's recommendation for the HIL:** ride J5 *as* the supervised install window. Once the CLI is 8.6.7,
+any room's next command, reads included (F25), replaces the 8.6.5 generation unsupervised. So the steps are:
+1. A quiet-window check (0 active turns).
+2. The trusted preflight for 8.6.7.
+3. **Immediately**, a supervised global `daemon restart` after the human reviews its impact.
+4. Teardown post-reads by inode and PID, including the global code-mode-host and the foreign Codex processes.
+5. Sample `status` reads, expecting `worker_detached`.
+6. `retire --name research-5d2b8e`.
+
+That one window discharges J5 and removes F19's live trigger.
+
+**Residual added:** `/private/tmp/codex-daemon-501`: the `.lock` for the live global socket (present at step16) has
+been missing since at least rr-R1c. The cause is not established; macOS `/tmp` cleanup is likely. Codex owns
+these files and codex-worker correctly never touches them. It is the same "`/tmp` is not durable" lesson.

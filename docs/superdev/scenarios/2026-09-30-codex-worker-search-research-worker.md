@@ -60,3 +60,15 @@ directory vanished must not take the service down with it (F19). Throwaway isola
 - The trusted install works on a home that has never had a uv tool (F20).
 - Asking a follow-up on the same worker is about continuity, not cheaper turns. The worker re-reads its
   context, and input tokens rise per turn.
+
+**Added after the 8.6.7 verdict (evaluator):**
+- A stop lasts. Either reads don't start a stopped service, or every machine-wide window accounts for other
+  rooms' reads (F25).
+- Installing a new build and changing the machine-wide service generation are one supervised window: a
+  quiet-window check, the install, an immediate supervised restart, then post-reads.
+- A worker is never lost in its creation window; a deterministic test proves the stop gate covers it (F21).
+- Teardown is judged by process and socket identity, including processes outside the owned group. The
+  active-work gates are re-ridden whenever the Codex version changes.
+- `retire` works on every path: attached and idle, detached and idle, cwd missing, and refused during an
+  active turn.
+- An isolated test home mirrors the operator's real home. A first install on a fresh home is its own journey (F20).
