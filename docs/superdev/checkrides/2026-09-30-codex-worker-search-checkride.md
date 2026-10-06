@@ -410,3 +410,18 @@
   - The no-turn re-attach works (no turn run).
   - **F22** (blocks-milestone, honesty/labelling, introduced with the no-turn re-attach path): after the re-attach, `status.latest_turn` and `messages.latest_cursor` are bare `null` although history has a completed turn. Fix direction: fill from durable history, or label as unavailable and point to `history`.
   - R6: GO.
+- **RUN R6:** `run --name research-iso5-7c2d --prompt-file step29.question.md` → exit 0.
+  - The same session and thread, new turn `01a1107e-ad6c…`; config live.
+  - **webSearch 2**; commandExecution 0 (no skill re-read).
+  - Cites the EU Register p. 353 and EUR-Lex 432/2012.
+  - R6s: `latest_turn` is now the new turn.
+- **RUN R6b (F19 live):**
+  - `start research-iso6-7c2d --cwd …/work-gone` → exit 0 (search 3); then `rmdir …/work-gone` (`ls` confirms it gone).
+  - R6b3pre: 0 active.
+  - **R6b3 `daemon restart` → exit 0, ready (new pids 76385/76386), lists all 3 workers including iso6 with the missing cwd. The registry reload no longer fails.**
+  - R6b4: ready, 3 idle.
+  - R6b5: iso5 `worker_detached`. R6b6: `session resume` iso5 → attached (unaffected).
+  - **R6b7:** `run --name research-iso6-7c2d` → exit 3, `-32044 worker_cwd_missing` "Worker cwd no longer exists: /private/tmp/cw-iso-7c2d/work-gone"; `details.cwd`; next_action `codex-worker retire --name research-iso6-7c2d`; no turn.
+  - **R6b8:** `retire --name research-iso6-7c2d` → exit 0, `status:"retired"` with `attach` for the kept thread.
+  - R6b9: `status --name research-iso6-7c2d` → exit 3, `-32022 worker_not_found`.
+- **RUN R6c:** `retire --name research-iso5b-7c2d` (idle, detached) → exit 0, retired with attach. `daemon status` lists only `research-iso5-7c2d` (1 worker).
