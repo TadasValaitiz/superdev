@@ -49,3 +49,17 @@ question in their own words. No worker exists for this question.
 
 **Deliberately not ridden here:** callback delivery (`--no-callback` is used so the worker can be handed to
 another room); `goal`/`limits`; legacy migration; non-loopback listeners.
+
+## Amendment 2026-10-06 (from the ride)
+
+- **The starting point is corrected.** A durable worker's scratch directory lives under the project or home,
+  never under `/private/tmp` (F19). The ride's own J1 worker `research-5d2b8e` was created in
+  `/private/tmp/cw-ride-5d2b8e`, which put the strict-loading 8.6.5 global service one macOS `/tmp` cleanup
+  away from refusing to load its registry. Isolated throwaway services (J4) may stay under `/private/tmp`.
+- **The re-ride scope (8.6.6 → 8.6.7, codex-cli 0.160) adds:**
+  - `retire` (F18)
+  - the tolerant registry load (F19)
+  - `worker_attachment` on stop/restart (F15)
+  - the re-attach reads (F22): `session resume` must be followed by `status`/`messages` before any `history`
+- **J5 is unchanged:** it stays on HOLD until the human's GREEN-LIGHT. The machine-wide install of the fixed
+  build is HUMAN-gated (D362, D367).

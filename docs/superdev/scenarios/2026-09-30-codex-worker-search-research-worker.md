@@ -39,3 +39,24 @@ global service is stopped. There is an empty scratch directory and a research qu
 
 Real Codex (ChatGPT login), the live web, and the real global service and registry (steps 1–4, 6). Step 5
 uses a disposable isolated service home with the same real Codex and web.
+
+## Refresh 2026-10-06 (criteria born from the ride's findings)
+
+**Starting point, corrected.** The scratch directory for a worker the operator means to keep lives under the
+project or home, never under `/tmp` or `/private/tmp`. macOS deletes idle `/tmp` entries, and a worker whose
+directory vanished must not take the service down with it (F19). Throwaway isolated services may still use `/tmp`.
+
+**What good looks like, added:**
+- A worker whose directory vanished is shown as unusable, with one runnable way to let it go. Every other
+  worker keeps working (F19, F18, F23).
+- After a service restart, re-attaching the worker without starting a turn makes `status` and `messages` show
+  its real last turn and answer. An empty or partial read never presents itself as the whole conversation (F22).
+- The result of `daemon stop`/`restart` says what happens to the workers on it, and the next command for a
+  detached worker re-attaches it without forcing a new turn (F15, F16).
+- A read on a stopped service doesn't silently start it again (F25).
+- Token usage is either Codex's own count for this turn or labelled unavailable (F6).
+- A stopped service doesn't show stored or default values as if they were live (F2).
+- Every `run` refusal says why it refused and what to run next (F9).
+- The trusted install works on a home that has never had a uv tool (F20).
+- Asking a follow-up on the same worker is about continuity, not cheaper turns. The worker re-reads its
+  context, and input tokens rise per turn.
