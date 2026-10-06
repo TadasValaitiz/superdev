@@ -766,6 +766,22 @@ class WorkerBrokerTests(unittest.TestCase):
         self.broker.session_start(self.cwd)
         self.assertIsNone(self.codex.start_calls[-1]["config"])
 
+    def test_reattach_reconciles_the_last_turn_and_messages_from_codex(self):
+        record = self.registry.create_worker("thr-reattach", self.cwd, "reattach", "medium",
+                                             "fake-model-a", "medium", "read_only")
+        self.codex.resume_result = {"thread": {"id": "thr-reattach", "cwd": self.cwd}}
+        self.codex.thread_reads["thr-reattach"] = {"thread": {
+            "id": "thr-reattach", "status": {"type": "idle"},
+            "turns": [{"id": "turn-before-restart", "status": "completed", "items": [
+                {"id": "answer-1", "type": "agentMessage", "text": "kept answer", "phase": "final_answer"},
+            ]}],
+        }}
+        self.broker.session_resume(IdentifierSelector(session_id=record.session_id))
+        status = self.runtime.status(record.session_id)
+        self.assertEqual(status.latest_turn.turn_id, "turn-before-restart")
+        messages, _, _ = self.runtime.agent_messages(record.session_id, 2)
+        self.assertEqual([item.data.get("text") for item in messages], ["kept answer"])
+
     def test_existing_worker_resume_reapplies_creation_config(self):
         record = self.registry.create_worker("thr-search", self.cwd, "search", "medium", "fake-model-a",
                                              "medium", "read_only", config={"web_search": "live"})

@@ -197,7 +197,10 @@ codex-worker interrupt --name implement-a31f
 ```
 
 `status` reports identity, authoritative state, and attach metadata. `messages` is the
-bounded live view; `history` is durable read-back. `steer` and `interrupt` bind the
+bounded live view; `history` is durable read-back. Re-attaching after a restart reloads
+the worker's last turn, so `status` and `messages` reflect it. `messages.latest_cursor`
+counts live events in the current service generation, so it stays `null` after a
+restart until the next turn. `steer` and `interrupt` bind the
 observed active turn and may return an honest already-finished race. A caller exit and
 a local timeout never cancel a turn or stop infrastructure.
 

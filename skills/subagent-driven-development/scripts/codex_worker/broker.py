@@ -383,6 +383,9 @@ class WorkerBroker:
                         details={"expected_cwd": existing.cwd, "returned_cwd": returned_cwd},
                     )
                 self.runtime.attach(existing)
+                # A fresh service generation holds no turn snapshot; load the thread's
+                # authoritative turns so status/messages never report an empty worker.
+                self._reconcile_from_upstream(existing)
                 result = session_result(existing, attached=True)
                 result["attach"] = self.attach_view(existing.thread_id).to_dict()
                 return result
