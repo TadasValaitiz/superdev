@@ -324,3 +324,5 @@
   - The machine-wide tool is **8.6.5** (installed 2026-10-02 15:33), and the global service runs 8.6.5. So the machine-wide install and global generation replacement happened outside this ride.
   - This branch's unpublished 8.6.3 is superseded, and origin/main is still 8.6.1.
   - The re-ride is PAUSED pending orchestrator direction on what to ride and publish.
+- **Ledger correction:** the "Resume" entry's "global service is now pid 11784 (8.6.2, 8 workers)" was a STALE observation from the ROOM SESSION's 2026-10-02 morning status read. The current fact (2026-10-06): 8.6.5, pid 98477, started 2026-10-02 16:08, 40 workers, 2 active.
+- **Evaluator:** F19 recorded (safety, HIL-NEEDED, blocks-milestone, blocks any global generation action until fixed or excepted). Draft verdict structure issued; final verdict only at RIDE END. Process finding for the orchestrator: machine-wide HOLDs are invisible to other sessions (another session installed 8.6.5 and replaced the global generation while J5 was on HOLD).
