@@ -326,3 +326,12 @@
   - The re-ride is PAUSED pending orchestrator direction on what to ride and publish.
 - **Ledger correction:** the "Resume" entry's "global service is now pid 11784 (8.6.2, 8 workers)" was a STALE observation from the ROOM SESSION's 2026-10-02 morning status read. The current fact (2026-10-06): 8.6.5, pid 98477, started 2026-10-02 16:08, 40 workers, 2 active.
 - **Evaluator:** F19 recorded (safety, HIL-NEEDED, blocks-milestone, blocks any global generation action until fixed or excepted). Draft verdict structure issued; final verdict only at RIDE END. Process finding for the orchestrator: machine-wide HOLDs are invisible to other sessions (another session installed 8.6.5 and replaced the global generation while J5 was on HOLD).
+- **DECIDE (supplements-orchestrator D367, provisional; the human informed of the deadline):**
+  - Implement (a) the tolerant registry load, then (b) `retire`, test-first, on a NEW branch `fix/codex-worker-registry-tolerant` cut from c2e26b1 (the 8.6.5 tip of the human's `fix/codex-worker-private-websocket`).
+  - Re-ride (i) in isolation against codex-cli 0.160, which also covers the paused F15/F16 re-ride.
+  - The machine-wide install stays HUMAN-gated (a HIL-NEEDED with the exact step and a quiet-window check).
+  - Keep `/private/tmp/cw-ride-5d2b8e` alive (touch it).
+  - (c) the docs rule goes in with (a).
+- **FIX LANE (ROOM SESSION):** 951046a (tolerant load; `worker_cwd_missing` -32044; `codex-worker retire --name`; docs) and c2392ad (8.6.6 bump and notes). Test-first; 665 tests green on 3.9 and 3.12 except the 7 known unrelated pins. Branch pushed; not published.
+
+### Fix re-ride (8.6.6, codex-cli 0.160, fresh isolated environment)
