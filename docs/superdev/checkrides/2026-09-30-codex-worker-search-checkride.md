@@ -391,3 +391,15 @@
   - Procedural note: re-read the status before a gate probe.
   - The `worker_attachment` expectation on a refusal is withdrawn (the contract puts it on completed results only).
   - **F21** (open): an in-flight `start` (registered, turn not yet begun) shows as idle with 0 active turns in `daemon status`, which is J5's impact report. To be settled by **R7b** (a background `start` then an immediate stop, before R8).
+- **RUN R3** (pre-read rr-R3pre: 2 idle, 0 active):
+  - `daemon restart` → exit 0. maintenance `{action restart, completed, forced false, 2 idle, durable_state preserved, **worker_attachment "detached_until_next_run"**}`; new service pid 63854 / app-server 63860 on 4612.
+  - R3b: 50818/50819/50820 and **51435 ABSENT**; no isolated code-mode-host left (the only one is global pid 111, child of 98479); new chain 63854 → 63860 → 63861; global chain present.
+  - R3c: target `de4d481c…` has a NEW inode 96488063 (was 96462386); global 94656460 and managed 95951440 unchanged.
+  - R3d: link `c` recreated (96488064).
+  - R3e: global ready 8.6.5, 98477/98478, 4500 (42 workers, 2 active; other rooms).
+- **RUN R4:** `status`, `messages` and `history` on iso5 AND iso5b → all six exit 3, `-32043 worker_detached` "Worker is detached from this service generation". next_actions[0] `codex-worker session resume --session <that worker's uuid>`; [1] `run --name … --prompt 'Report your status; do not start new work.'` ("this runs a turn…"). No `daemon start`, no exit 1.
+- **RUN R5:**
+  - `session resume --session 91358e56…` (the exact next_action) → exit 0, attached true, config live.
+  - `status` → attached true, `active_turn_id` null, **`latest_turn` null** (the restarted runtime holds no turn history).
+  - `history --tail 5` → only the R2 turn, `returned` 1 (no new turn).
+  - `messages --tail 1` → R2's answer, **`latest_cursor` null**.
