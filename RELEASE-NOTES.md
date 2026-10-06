@@ -1,3 +1,24 @@
+# v8.6.6 — codex-worker: a vanished cwd no longer bricks the registry; `retire` (2026-10-06)
+
+Found during the codex-worker checkride (F19). A checkride worker had been given a cwd under `/tmp`, and
+macOS cleanup deleted that directory. From then on, a read-only load of the live global registry failed
+with "cwd must be an existing directory". One bad record failed the whole registry, so the next service
+start would have failed for every room. The running service was unaffected only because it had loaded the
+registry before the deletion.
+
+- **Tolerant registry load:** a record whose cwd has vanished now loads with its stored path and is
+  quarantined; it no longer fails the load. Registry writes keep working. New workers still need an
+  existing cwd, and relative cwds are still refused.
+- **`worker_cwd_missing` (-32044):** using a worker whose cwd has vanished returns this typed fault. It
+  names the cwd, and its remedy is `codex-worker retire --name <w>`. A cwd is fixed at creation.
+- **`codex-worker retire --name <w>`:** forgets a finished worker's record. The Codex thread is kept, and
+  the result returns its `attach.resume_command`.
+  - It refuses while a turn is active or pending: it reserves the start slot for the duration of the
+    removal.
+  - It works for a worker whose cwd has vanished.
+- **Docs:** never give a durable worker a cwd under `/tmp`, `/private/tmp` or `$TMPDIR`. Retire workers
+  you have finished with.
+
 # v8.6.5 — codex-worker: model default and native worker titles (2026-10-02)
 
 - New workers default to `gpt-6.1-sol` with `medium` reasoning effort. The
